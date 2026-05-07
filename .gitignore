@@ -1,0 +1,29 @@
+# Secrets — ne JAMAIS commiter
+.env
+.env.local
+.env.*.local
+
+# Base de données locale (recréée par seed_data.py)
+*.db
+*.db-journal
+
+# Virtualenv (recréé via setup.sh ou requirements.txt)
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
+
+# Backups
+*.bak
+*.log

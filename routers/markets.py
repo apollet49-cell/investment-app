@@ -1,0 +1,70 @@
+from __future__ import annotations
+
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Query
+
+from data.asset_universe import TOP_CRYPTOS, TOP_ETFS, TOP_STOCKS
+from services.market_universe import market_universe
+from services.news import get_news
+
+router = APIRouter(prefix="/markets", tags=["markets"])
+
+
+@router.get("/stocks")
+async def stocks() -> dict:
+    data = await market_universe.get_stocks()
+    return {"count": len(data), "items": data}
+
+
+@router.get("/etfs")
+async def etfs() -> dict:
+    data = await market_universe.get_etfs()
+    return {"count": len(data), "items": data}
+
+
+@router.get("/crypto")
+async def crypto() -> dict:
+    data = await market_universe.get_crypto()
+    return {"count": len(data), "items": data}
+
+
+@router.get("/movers/{asset_type}")
+async def movers(asset_type: str, n: int = Query(10, ge=1, le=50)) -> dict:
+    if asset_type not in {"stock", "etf", "crypto"}:
+        raise HTTPException(status_code=400, detail="asset_type must be stock, etf, or crypto")
+    return await market_universe.get_top_movers(asset_type, n)
+
+
+@router.get("/search")
+async def search(q: str = Query(..., min_length=1), limit: int = Query(10, ge=1, le=25)) -> dict:
+    return {"results": await market_universe.search(q, limit)}
+
+
+@router.get("/asset/{symbol}")
+async def asset_detail(
+    symbol: str,
+    asset_type: str = Query("stock"),
+    period: str = Query("1y"),
+) -> dict:
+    if asset_type not in {"stock", "etf", "crypto"}:
+        raise HTTPException(status_code=400, detail="asset_type must be stock, etf, or crypto")
+    detail = await market_universe.get_asset_detail(symbol, asset_type, period)
+    if not detail:
+        raise HTTPException(status_code=404, detail=f"no data for {symbol}")
+    return detail
+
+
+@router.get("/asset/{symbol}/news")
+async def asset_news(symbol: str, limit: int = Query(8, ge=1, le=25)) -> dict:
+    return {"items": await get_news(symbol, limit)}
+
+
+@router.get("/universe")
+async def universe() -> dict:
+    return {
+        "stocks": len(TOP_STOCKS),
+        "etfs": len(TOP_ETFS),
+        "cryptos": len(TOP_CRYPTOS),
+        "total": len(TOP_STOCKS) + len(TOP_ETFS) + len(TOP_CRYPTOS),
+    }

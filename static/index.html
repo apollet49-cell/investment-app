@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Investment App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap" />
+  <link rel="stylesheet" href="/static/style.css?v=4" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='none' stroke='%238a7558' stroke-width='4'/><path d='M30 60 L45 45 L55 55 L70 35' stroke='%238a7558' stroke-width='4' fill='none' stroke-linecap='round'/></svg>" />
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script defer src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+  <div id="toast-host" aria-live="polite"></div>
+
+  <main id="auth-screen" class="auth-screen hidden">
+    <div id="auth-container"></div>
+  </main>
+
+  <div id="app-shell" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">📈</span>
+        <span class="brand-name">InvestApp</span>
+      </div>
+      <nav id="sidebar-nav" class="sidebar-nav"></nav>
+      <div class="sidebar-footer">
+        <div class="lang-switch" id="lang-switch"></div>
+        <button id="theme-toggle" class="icon-btn" title="Toggle dark mode">🌓</button>
+        <button id="logout-btn" class="icon-btn" title="Logout">⎋</button>
+      </div>
+    </aside>
+    <section class="main">
+      <header class="topbar">
+        <h1 id="page-title">Dashboard</h1>
+        <div class="topbar-right">
+          <span id="user-chip" class="user-chip"></span>
+        </div>
+      </header>
+      <div id="view-root" class="view-root"></div>
+    </section>
+  </div>
+
+  <button id="chat-fab" class="chat-fab hidden" title="Open AI advisor">💬</button>
+  <div id="chat-panel" class="chat-panel hidden" role="dialog">
+    <div class="chat-panel-header">
+      <strong id="chat-panel-title">InvestAI</strong>
+      <div>
+        <button id="chat-clear" class="icon-btn" title="Clear chat">🗑</button>
+        <button id="chat-close" class="icon-btn" title="Close">✕</button>
+      </div>
+    </div>
+    <div id="chat-panel-messages" class="chat-messages"></div>
+    <form id="chat-panel-form" class="chat-form">
+      <textarea id="chat-panel-input" rows="2" placeholder="Ask InvestAI…"></textarea>
+      <button type="submit" class="btn btn-primary">Send</button>
+    </form>
+  </div>
+
+  <script type="module" src="/static/app.js?v=4"></script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+# Render.com Blueprint — déploie l'app en un clic via le repo GitHub.
+# Doc : https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: investment-app
+    runtime: docker
+    plan: free                # passer à "starter" ($7/mo) pour éviter le sleep après 15 min d'inactivité
+    region: frankfurt          # ou "oregon" / "singapore" — le plus proche de tes utilisateurs
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      # JWT secret — Render génère une valeur aléatoire sécurisée la première fois
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_EXPIRE_DAYS
+        value: "7"
+      # APP_ENCRYPTION_KEY doit être une clé Fernet valide (base64, 32 bytes).
+      # Génère-la localement avec :
+      #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      # Puis colle la valeur dans le dashboard Render → Environment.
+      - key: APP_ENCRYPTION_KEY
+        sync: false
+      # Clés API tierces — récupère-les sur les sites listés dans le README.
+      - key: ALPHA_VANTAGE_KEY
+        sync: false
+      - key: OPEN_EXCHANGE_RATES_KEY
+        sync: false
+      - key: FRED_KEY
+        sync: false
+      # Optionnel : clé Anthropic globale (les utilisateurs peuvent aussi mettre la leur dans Settings).
+      - key: ANTHROPIC_API_KEY
+        sync: false
+    # Disque persistant pour SQLite — survit aux redéploiements.
+    disk:
+      name: investment-data
+      mountPath: /data
+      sizeGB: 1
