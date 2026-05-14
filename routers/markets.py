@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -58,6 +59,28 @@ async def asset_detail(
 @router.get("/asset/{symbol}/news")
 async def asset_news(symbol: str, limit: int = Query(8, ge=1, le=25)) -> dict:
     return {"items": await get_news(symbol, limit)}
+
+
+@router.get("/price-on/{symbol}")
+async def price_on(
+    symbol: str,
+    date: str = Query(..., description="YYYY-MM-DD"),
+    asset_type: str = Query("stock"),
+) -> dict:
+    """Close price of the asset on (or just before) the given date.
+    Falls back to the nearest prior trading day for weekends / holidays."""
+    try:
+        target = datetime.strptime(date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    if target > datetime.now().date():
+        raise HTTPException(status_code=400, detail="date is in the future")
+    if asset_type not in {"stock", "etf", "crypto"}:
+        raise HTTPException(status_code=400, detail="asset_type must be stock, etf, or crypto")
+    result = await market_universe.get_price_on_date(symbol, target, asset_type)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"no price data for {symbol} on {date}")
+    return result
 
 
 @router.get("/universe")

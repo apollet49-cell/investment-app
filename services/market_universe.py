@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
 import aiohttp
@@ -37,6 +37,38 @@ COINGECKO_MARKETS_URL = "https://api.coingecko.com/api/v3/coins/markets"
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _yf_price_on_date_sync(symbol: str, target_date: date) -> Optional[dict]:
+    """Get the close price for a symbol on a specific date (or nearest prior
+    trading day for weekends / holidays). Returns None on failure."""
+    try:
+        t = yf.Ticker(symbol)
+        # Fetch a small window around target so we catch the nearest trading day.
+        start = target_date - timedelta(days=10)
+        end = target_date + timedelta(days=1)
+        h = t.history(start=start.isoformat(), end=end.isoformat())
+        if h is None or h.empty:
+            return None
+        # Filter to rows on or before the target date.
+        valid = h[h.index.date <= target_date]
+        if valid.empty:
+            # target_date might be older than the symbol's first trading day;
+            # try the very first available row in the window as a fallback.
+            valid = h
+        last = valid.iloc[-1]
+        actual_date = valid.index[-1].date().isoformat()
+        return {
+            "symbol": symbol,
+            "price": float(last["Close"]),
+            "currency": "USD",
+            "date_requested": target_date.isoformat(),
+            "date_actual": actual_date,
+            "source": "yfinance",
+        }
+    except Exception as e:
+        log.warning("price_on %s/%s failed: %s", symbol, target_date, e)
+        return None
 
 
 def _yf_single_sync(symbol: str) -> Optional[dict]:
@@ -329,6 +361,44 @@ class MarketUniverseService:
             if len(deduped) >= limit:
                 break
         return deduped
+
+    # ---------- Historical point-in-time price ----------
+    async def get_price_on_date(self, symbol: str, target_date: date, asset_type: str = "stock") -> Optional[dict]:
+        """Resolve the price of an asset on a specific date.
+
+        - Crypto (CoinGecko id like 'bitcoin'): /coins/{id}/history?date=DD-MM-YYYY
+        - Anything else (yfinance ticker, includes BTC-USD style): yfinance history
+        """
+        if asset_type == "crypto" and "-" not in symbol:
+            return await self._coingecko_price_on(symbol.lower(), target_date)
+        return await asyncio.to_thread(_yf_price_on_date_sync, symbol, target_date)
+
+    async def _coingecko_price_on(self, coin_id: str, target_date: date) -> Optional[dict]:
+        cg_date = target_date.strftime("%d-%m-%Y")
+        url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/history"
+        params = {"date": cg_date, "localization": "false"}
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as sess:
+                async with sess.get(url, params=params) as resp:
+                    if resp.status != 200:
+                        return None
+                    data = await resp.json()
+        except Exception as e:
+            log.warning("coingecko price_on %s/%s failed: %s", coin_id, target_date, e)
+            return None
+        md = data.get("market_data") or {}
+        price = (md.get("current_price") or {}).get("usd")
+        if price is None:
+            return None
+        return {
+            "symbol": (data.get("symbol") or coin_id).upper(),
+            "id": coin_id,
+            "price": float(price),
+            "currency": "USD",
+            "date_requested": target_date.isoformat(),
+            "date_actual": target_date.isoformat(),
+            "source": "coingecko",
+        }
 
     # ---------- Asset detail (historical OHLC + technicals + meta) ----------
     async def get_asset_detail(self, symbol: str, asset_type: str, period: str = "1y") -> Optional[dict]:

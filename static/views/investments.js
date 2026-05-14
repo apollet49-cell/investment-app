@@ -8,6 +8,10 @@ let cache = [];
 let filterText = "";
 let sortKey = "created_at";
 let sortDir = -1;
+// The asset most recently picked from the catalogue, used to refresh the
+// historical purchase price when the user changes the purchase date.
+let pickedAsset = null;   // { id, symbol, type }
+let histPriceTimer = null;
 
 export async function render(root) {
   root.innerHTML = `<div style="text-align:center;padding:40px">${spinner(true)}</div>`;
@@ -173,13 +177,18 @@ function openForm(id) {
             </div>
 
             <!-- Units mode fields -->
-            <div id="units-fields" class="row" style="display:none">
-              <div class="col field"><label>${t("investments.quantity")}</label>
-                <input name="quantity" type="number" step="any" min="0" value="${inv && inv.quantity ? inv.quantity : ""}"/></div>
-              <div class="col field"><label>${t("investments.price_per_unit")}</label>
-                <input name="price_per_unit" type="number" step="any" min="0" placeholder="—"/></div>
-              <div class="col field"><label>${t("investments.current")} (USD)</label>
-                <input name="current_value_units" type="number" step="0.01" min="0" value="${inv ? inv.current_value : ""}"/></div>
+            <div id="units-fields" style="display:none">
+              <div class="row">
+                <div class="col field"><label>${t("investments.quantity")}</label>
+                  <input name="quantity" type="number" step="any" min="0" value="${inv && inv.quantity ? inv.quantity : ""}"/></div>
+                <div class="col field"><label id="ppu-label">${t("investments.price_per_unit")}</label>
+                  <input name="price_per_unit" type="number" step="any" min="0" placeholder="—"/>
+                  <div id="ppu-hint" class="hint"></div>
+                </div>
+                <div class="col field"><label>${t("investments.current")} (USD)</label>
+                  <input name="current_value_units" type="number" step="0.01" min="0" value="${inv ? inv.current_value : ""}"/></div>
+              </div>
+              <div id="units-total-preview" class="hint" style="margin-top:-6px"></div>
             </div>
 
             <div class="field"><label>${t("investments.notes")}</label>
@@ -197,6 +206,7 @@ function openForm(id) {
   injectModalStyles();
   setupAssetPicker();
   setupInputModeToggle();
+  setupHistoricalPriceTracking();
 
   document.getElementById("form-close").onclick = closeModal;
   document.getElementById("form-cancel").onclick = closeModal;
@@ -253,9 +263,78 @@ function setupInputModeToggle() {
     const mode = document.querySelector('input[name="input_mode"]:checked').value;
     usd.style.display = mode === "usd" ? "" : "none";
     units.style.display = mode === "units" ? "" : "none";
+    // If we switched to units, refresh the historical price for the current date.
+    if (mode === "units") fetchHistoricalPrice();
+    updateUnitsTotalPreview();
   };
   radios.forEach(r => r.addEventListener("change", apply));
   apply();
+}
+
+// ---------- Historical price tracking ----------
+function setupHistoricalPriceTracking() {
+  const dateInput = document.querySelector('input[name="purchase_date"]');
+  const qtyInput = document.querySelector('input[name="quantity"]');
+  const ppuInput = document.querySelector('input[name="price_per_unit"]');
+
+  if (dateInput) {
+    dateInput.addEventListener("change", () => {
+      // Small debounce in case multiple events fire.
+      clearTimeout(histPriceTimer);
+      histPriceTimer = setTimeout(fetchHistoricalPrice, 150);
+    });
+  }
+  if (qtyInput) qtyInput.addEventListener("input", updateUnitsTotalPreview);
+  if (ppuInput) ppuInput.addEventListener("input", updateUnitsTotalPreview);
+}
+
+async function fetchHistoricalPrice() {
+  if (!pickedAsset) return;
+  const mode = document.querySelector('input[name="input_mode"]:checked')?.value;
+  if (mode !== "units") return;     // historical price only matters in units mode
+  const dateInput = document.querySelector('input[name="purchase_date"]');
+  const ppuInput = document.querySelector('input[name="price_per_unit"]');
+  const hint = document.getElementById("ppu-hint");
+  if (!dateInput || !ppuInput) return;
+  const date = dateInput.value;
+  if (!date) return;
+
+  const isCryptoId = !!pickedAsset.id;
+  const sym = isCryptoId ? pickedAsset.id : pickedAsset.symbol;
+  const at = isCryptoId ? "crypto" : (pickedAsset.type === "etf" ? "etf" : "stock");
+
+  if (hint) hint.innerHTML = `<span style="opacity:0.7">fetching price on ${date}…</span>`;
+  try {
+    const data = await API.request(
+      `/markets/price-on/${encodeURIComponent(sym)}?date=${date}&asset_type=${at}`
+    );
+    if (data?.price != null) {
+      const formatted = data.price >= 1
+        ? data.price.toFixed(2)
+        : (data.price >= 0.01 ? data.price.toFixed(4) : data.price.toFixed(8));
+      ppuInput.value = formatted;
+      const note = data.date_actual && data.date_actual !== data.date_requested
+        ? `Nearest trading day: ${data.date_actual}`
+        : `Price on ${data.date_actual}`;
+      if (hint) hint.innerHTML = `<span style="color:var(--success)">✓ ${note} — $${formatted}</span>`;
+      updateUnitsTotalPreview();
+    }
+  } catch (e) {
+    if (hint) hint.innerHTML = `<span style="color:var(--danger)">${escapeHtml(e.message || "couldn't fetch")} — enter manually</span>`;
+  }
+}
+
+function updateUnitsTotalPreview() {
+  const qty = parseFloat(document.querySelector('input[name="quantity"]')?.value);
+  const ppu = parseFloat(document.querySelector('input[name="price_per_unit"]')?.value);
+  const out = document.getElementById("units-total-preview");
+  if (!out) return;
+  if (isFinite(qty) && qty > 0 && isFinite(ppu) && ppu > 0) {
+    const total = qty * ppu;
+    out.innerHTML = `<span style="color:var(--text-muted)">Total invested: <strong style="color:var(--text)">$${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong></span>`;
+  } else {
+    out.innerHTML = "";
+  }
 }
 
 // ---------- Asset picker (search + dropdown) ----------
@@ -302,7 +381,6 @@ async function pickAsset(row) {
   const id = row.dataset.id;
   const name = row.dataset.name;
   const type = (row.dataset.type || "stock").toLowerCase();
-  // Map yahoo's "equity" → "stock", "cryptocurrency" → "crypto", etc.
   const typeMap = { equity: "stock", cryptocurrency: "crypto", crypto: "crypto", etf: "etf" };
   const normType = typeMap[type] || (TYPES.includes(type) ? type : "stock");
 
@@ -312,15 +390,16 @@ async function pickAsset(row) {
   document.getElementById("asset-search").value = `${sym} — ${name}`;
   document.getElementById("asset-results").innerHTML = `<div class="asset-loading">${spinner()} fetching live price…</div>`;
 
-  // Auto-fill the current price from the live market data.
+  // Remember the picked asset so the date input can refresh the historical price.
+  pickedAsset = { id: id || null, symbol: sym, type: normType };
+
+  // Auto-fill the *current* price (for the "Current (USD)" field in both modes).
   try {
     let price = null;
     if (id) {
-      // CoinGecko id from local crypto catalog
       const data = await API.request(`/market/crypto/${encodeURIComponent(id)}`);
       price = data?.price_usd;
     } else {
-      // yfinance ticker (stock / ETF / yahoo crypto)
       const data = await API.request(`/market/price/${encodeURIComponent(sym)}`);
       price = data?.price;
     }
@@ -328,10 +407,8 @@ async function pickAsset(row) {
       const formatted = price >= 1 ? price.toFixed(2) : (price >= 0.01 ? price.toFixed(4) : price.toFixed(8));
       const usdCurrent = document.querySelector('input[name="current_value"]');
       const unitsCurrent = document.querySelector('input[name="current_value_units"]');
-      const pricePerUnit = document.querySelector('input[name="price_per_unit"]');
       if (usdCurrent && !usdCurrent.value) usdCurrent.value = formatted;
       if (unitsCurrent && !unitsCurrent.value) unitsCurrent.value = formatted;
-      if (pricePerUnit && !pricePerUnit.value) pricePerUnit.value = formatted;
       document.getElementById("asset-results").innerHTML =
         `<div class="asset-empty">✓ live price: $${formatted}</div>`;
     } else {
@@ -339,9 +416,12 @@ async function pickAsset(row) {
         `<div class="asset-empty">No live price found — enter manually</div>`;
     }
   } catch (e) {
-    console.warn("pickAsset price fetch failed:", e);
+    console.warn("pickAsset live price fetch failed:", e);
     document.getElementById("asset-results").innerHTML = "";
   }
+
+  // Then fetch the historical price for the purchase date (units mode only).
+  fetchHistoricalPrice();
 }
 
 // ---------- Connect Wallet modal ----------
@@ -523,6 +603,7 @@ function injectModalStyles() {
       flex-shrink: 0;
       accent-color: var(--primary);
     }
+    .hint { font-size: 12px; margin-top: 4px; min-height: 16px; }
   `;
   const s = document.createElement("style");
   s.id = "inv-modal-styles";

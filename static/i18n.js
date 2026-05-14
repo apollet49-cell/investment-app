@@ -91,7 +91,7 @@ const en = {
     input_usd: "USD amount",
     input_units: "Number of units",
     quantity: "Quantity",
-    price_per_unit: "Price per unit (USD)",
+    price_per_unit: "Price at purchase date (USD)",
     wallet: {
       title: "Connect a wallet",
       subtitle: "Read-only sync from a public blockchain address. No private keys are ever requested.",
@@ -272,7 +272,7 @@ const fr = {
     input_usd: "Montant USD",
     input_units: "Nombre d'unités",
     quantity: "Quantité",
-    price_per_unit: "Prix unitaire (USD)",
+    price_per_unit: "Prix à la date d'achat (USD)",
     wallet: {
       title: "Connecter un wallet",
       subtitle: "Lecture seule depuis une adresse blockchain publique. Aucune clé privée n'est jamais demandée.",
@@ -453,7 +453,7 @@ const zh = {
     input_usd: "美元金额",
     input_units: "单位数量",
     quantity: "数量",
-    price_per_unit: "单价（美元）",
+    price_per_unit: "购买日价格（美元）",
     wallet: {
       title: "连接钱包",
       subtitle: "仅从公共区块链地址只读同步。不会要求任何私钥。",
