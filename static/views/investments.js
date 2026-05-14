@@ -215,6 +215,13 @@ function openForm(id) {
   setupInputModeToggle();
   setupHistoricalPriceTracking();
 
+  // In edit mode, kick off a re-pick of the saved asset so the live price and
+  // the historical price get fetched and the "current value" recomputes
+  // automatically — saves the user from having to re-search the catalogue.
+  if (inv && inv.symbol && UNIT_CAPABLE_TYPES.has(inv.type)) {
+    autoPickFromExisting(inv);
+  }
+
   document.getElementById("form-close").onclick = closeModal;
   document.getElementById("form-cancel").onclick = closeModal;
   document.getElementById("form-overlay").onclick = (ev) => { if (ev.target.id === "form-overlay") closeModal(); };
@@ -433,6 +440,29 @@ async function searchAsset(q) {
   } catch (e) {
     results.innerHTML = `<div class="asset-empty">${escapeHtml(e.message)}</div>`;
   }
+}
+
+// Build a synthetic "asset row" from an existing Investment and feed it to
+// pickAsset(), so opening the edit modal re-fetches current + historical
+// prices and refreshes the calculation without the user re-typing anything.
+async function autoPickFromExisting(inv) {
+  if (!inv || !inv.symbol) return;
+  let coingeckoId = "";
+  // Heuristic: a crypto whose symbol has no dash (e.g. "bitcoin") is likely a
+  // CoinGecko id from the local catalogue. Symbols like "BTC-USD" are yfinance
+  // tickers and should hit the yfinance path.
+  if (inv.type === "crypto" && !inv.symbol.includes("-")) {
+    coingeckoId = inv.symbol.toLowerCase();
+  }
+  const fakeRow = {
+    dataset: {
+      symbol: inv.symbol,
+      name: inv.name,
+      type: inv.type,
+      id: coingeckoId,
+    },
+  };
+  await pickAsset(fakeRow);
 }
 
 async function pickAsset(row) {
