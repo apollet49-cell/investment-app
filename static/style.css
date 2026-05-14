@@ -54,15 +54,10 @@
 
 html, body { height: 100%; margin: 0; }
 
-/* Reserve scrollbar space always — otherwise opening the markets-detail modal
-   (which sets body.overflow=hidden) removes the scrollbar and shifts every
-   layout (incl. the sidebar) by ~15px. Closing the modal then snaps things
-   back. With scrollbar-gutter:stable the gutter is always reserved.
-   Fallback for older Safari (<16): overflow-y:scroll on html. */
-html {
-  overflow-y: scroll;
-  scrollbar-gutter: stable;
-}
+/* Main pane scrolls internally (see .main below) so html itself never needs a
+   scrollbar. Hide overflow at the document level to avoid a dead scrollbar
+   track next to .main's scrollbar. */
+html { overflow: hidden; }
 
 body {
   font-family: var(--font-sans);
