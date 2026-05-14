@@ -73,11 +73,22 @@ class MarketDataService:
         self._cache_hits = 0
         self._cache_misses = 0
 
-        self._watched_symbols: set[str] = set()
+        # Cap watched symbols so a long-running process doesn't accumulate
+        # them forever. 2000 is well above any plausible single-user portfolio
+        # + watchlist size; when full we drop the oldest entry FIFO-style.
+        self._watched_symbols: dict[str, None] = {}
+        self._watched_max = 2000
 
     def watch(self, symbols: list[str]) -> None:
         for s in symbols:
-            self._watched_symbols.add(s.upper())
+            key = s.upper()
+            # Touch (re-insert) to make this the newest entry
+            self._watched_symbols.pop(key, None)
+            self._watched_symbols[key] = None
+            while len(self._watched_symbols) > self._watched_max:
+                # Drop oldest insertion (Python 3.7+ dicts preserve order)
+                oldest = next(iter(self._watched_symbols))
+                self._watched_symbols.pop(oldest, None)
 
     # ---------- Stocks ----------
     async def get_stock_price(self, symbol: str) -> Optional[dict[str, Any]]:

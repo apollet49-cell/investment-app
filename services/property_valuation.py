@@ -60,7 +60,7 @@ FALLBACK_PRICE_PER_SQM_EUR: dict[str, float] = {
     "34": 4100, "37": 2900, "45": 2700, "21": 3000, "76": 2700,
     "38": 3200, "42": 1800, "63": 2200, "57": 2400, "54": 2700,
     "68": 2300, "29": 2100, "49": 3000, "72": 2200, "86": 2300,
-    "87": 1900, "73": 3300, "74": 4800, "33": 4500,
+    "87": 1900, "73": 3300, "74": 4800,
 }
 
 SUBTYPE_FACTOR = {"apartment": 1.0, "house": 0.85, "office": 1.1}
@@ -90,7 +90,6 @@ def _fallback_estimate(postal_code: str, surface_sqm: float, subtype: str, reaso
     adjusted_ppsqm = price_per_sqm * factor
     estimated_eur = adjusted_ppsqm * surface_sqm
     return {
-        "_pending_usd_conversion": True,
         "status": "ok",
         "estimated_value_local": round(estimated_eur, 0),
         "local_currency": "EUR",
@@ -127,7 +126,6 @@ async def _estimate_france(postal_code: str, surface_sqm: float, subtype: str) -
         result = _fallback_estimate(postal_code, surface_sqm, subtype, dvf_error or "no response")
         eur_to_usd = await _eur_to_usd_rate()
         result["estimated_value_usd"] = round(result["estimated_value_local"] * eur_to_usd, 2)
-        result.pop("_pending_usd_conversion", None)
         return result
 
     # Different DVF wrappers return slightly different shapes; handle both.
@@ -141,7 +139,6 @@ async def _estimate_france(postal_code: str, surface_sqm: float, subtype: str) -
         result = _fallback_estimate(postal_code, surface_sqm, subtype, "no transactions returned")
         eur_to_usd = await _eur_to_usd_rate()
         result["estimated_value_usd"] = round(result["estimated_value_local"] * eur_to_usd, 2)
-        result.pop("_pending_usd_conversion", None)
         return result
 
     # Filter rows by similar surface (±25% with a minimum band of ±15 m²).
@@ -189,7 +186,6 @@ async def _estimate_france(postal_code: str, surface_sqm: float, subtype: str) -
         result = _fallback_estimate(postal_code, surface_sqm, subtype, "no surface match")
         eur_to_usd = await _eur_to_usd_rate()
         result["estimated_value_usd"] = round(result["estimated_value_local"] * eur_to_usd, 2)
-        result.pop("_pending_usd_conversion", None)
         return result
 
     # Trim extreme outliers — keep the middle 90% of price/m² distribution.

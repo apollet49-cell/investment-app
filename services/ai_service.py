@@ -20,7 +20,7 @@ from settings import settings
 
 log = logging.getLogger("ai_service")
 
-MODEL = "claude-sonnet-4-20250514"
+MODEL = settings.ANTHROPIC_MODEL
 SYSTEM_BASE = (
     "You are InvestAI, an expert financial advisor. You help users analyze investments, "
     "calculate returns, plan scenarios, and give actionable advice. Always be specific with "

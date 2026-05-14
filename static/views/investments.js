@@ -94,7 +94,17 @@ function renderTable(rows) {
   const filtered = rows
     .filter(r => filterType === "all" || r.type === filterType)
     .filter(r => !filterText || `${r.name} ${r.symbol || ""} ${r.city || ""}`.toLowerCase().includes(filterText));
-  filtered.sort((a, b) => (a[sortKey] > b[sortKey] ? 1 : -1) * sortDir);
+  // Sort: numeric fields compared numerically (so 9 < 100), strings
+  // case-insensitively, nulls always sort to the end regardless of direction.
+  filtered.sort((a, b) => {
+    const av = a[sortKey];
+    const bv = b[sortKey];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (typeof av === "number" && typeof bv === "number") return (av - bv) * sortDir;
+    return String(av).localeCompare(String(bv), undefined, { numeric: true }) * sortDir;
+  });
   const tdir = (k) => sortKey === k ? (sortDir === 1 ? " ↑" : " ↓") : "";
   if (filtered.length === 0) {
     return `<div class="empty-state" style="padding:30px 14px"><p>${t("investments.no_match")}</p></div>`;
@@ -1276,13 +1286,13 @@ async function renderRealEstateDetail(body, inv) {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px">
         <div><span style="color:var(--text-muted)">${t("investments.real_estate.address") || "Address"}:</span> <strong>${escapeHtml(inv.address || "—")}</strong></div>
         <div><span style="color:var(--text-muted)">${t("investments.real_estate.city") || "City"}:</span> <strong>${escapeHtml(cityLabel)}</strong></div>
-        <div><span style="color:var(--text-muted)">${t("investments.real_estate.surface") || "Surface"}:</span> <strong>${inv.surface_sqm ? inv.surface_sqm + " m²" : "—"}</strong></div>
-        <div><span style="color:var(--text-muted)">${t("investments.real_estate.subtype") || "Type"}:</span> <strong>${escapeHtml(inv.property_subtype || "—")}</strong></div>
+        <div><span style="color:var(--text-muted)">${t("investments.real_estate.surface_sqm")}:</span> <strong>${inv.surface_sqm ? inv.surface_sqm + " m²" : "—"}</strong></div>
+        <div><span style="color:var(--text-muted)">${t("investments.real_estate.property_subtype")}:</span> <strong>${escapeHtml(inv.property_subtype || "—")}</strong></div>
       </div>
       <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:12px;font-size:13px">
-        <div><span style="color:var(--text-muted)">${t("investments.real_estate.rent") || "Rent"}:</span> <strong>${money(rent)}/mo</strong></div>
-        <div><span style="color:var(--text-muted)">${t("investments.real_estate.charges") || "Charges"}:</span> <strong>${money(charges)}/mo</strong></div>
-        ${mort > 0 ? `<div><span style="color:var(--text-muted)">${t("investments.real_estate.mortgage") || "Mortgage"}:</span> <strong>${money(mort)}/mo</strong></div>` : ""}
+        <div><span style="color:var(--text-muted)">${t("investments.real_estate.monthly_income")}:</span> <strong>${money(rent)}/mo</strong></div>
+        <div><span style="color:var(--text-muted)">${t("investments.real_estate.monthly_charges")}:</span> <strong>${money(charges)}/mo</strong></div>
+        ${mort > 0 ? `<div><span style="color:var(--text-muted)">${t("investments.real_estate.monthly_mortgage")}:</span> <strong>${money(mort)}/mo</strong></div>` : ""}
         <div style="margin-top:6px"><span style="color:var(--text-muted)">${t("investments.real_estate.net_monthly")}:</span> <strong style="color:${netColor}">${money(net)}</strong> · <span style="color:var(--text-muted)">${t("investments.real_estate.net_annual")}:</span> <strong style="color:${netColor}">${money(net * 12)}</strong></div>
       </div>
       <div id="dvf-host" style="margin-top:8px;color:var(--text-muted);font-size:13px">${spinner()} ${t("investments.detail_loading_comparables")}</div>

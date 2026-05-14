@@ -307,7 +307,15 @@ async def estimate_value_endpoint(
 
 
 REQUIRED_CSV_COLS = {"name", "type", "amount_invested", "current_value", "purchase_date"}
-OPTIONAL_CSV_COLS = {"symbol", "notes"}
+OPTIONAL_CSV_COLS = {
+    "symbol", "notes", "quantity", "account_type",
+    "monthly_rental_income", "monthly_rental_charges",
+    "loan_amount", "loan_interest_rate_pct", "monthly_mortgage_payment",
+    "annual_yield_pct", "address", "postal_code", "city", "country",
+    "surface_sqm", "property_subtype", "garden_sqm",
+    # Accepted but ignored on re-import — exported for human reference.
+    "id", "roi_pct",
+}
 
 
 @router.post("/import", response_model=CSVImportResult)
@@ -340,15 +348,38 @@ async def import_csv(
             inv_type = row["type"].strip().lower()
             if inv_type not in INVESTMENT_TYPES:
                 raise ValueError(f"invalid type '{inv_type}'")
+            def _opt_float(key: str) -> Optional[float]:
+                v = (row.get(key) or "").strip()
+                return float(v) if v else None
+
+            def _opt_str(key: str) -> Optional[str]:
+                v = (row.get(key) or "").strip()
+                return v or None
+
             inv = Investment(
                 user_id=current.id,
                 name=row["name"].strip(),
                 type=inv_type,
-                symbol=(row.get("symbol") or "").strip() or None,
+                symbol=_opt_str("symbol"),
                 amount_invested=float(row["amount_invested"]),
                 current_value=float(row["current_value"]),
                 purchase_date=_parse_date(row["purchase_date"]),
-                notes=(row.get("notes") or "").strip() or None,
+                notes=_opt_str("notes"),
+                quantity=_opt_float("quantity"),
+                account_type=_opt_str("account_type"),
+                monthly_rental_income=_opt_float("monthly_rental_income"),
+                monthly_rental_charges=_opt_float("monthly_rental_charges"),
+                loan_amount=_opt_float("loan_amount"),
+                loan_interest_rate_pct=_opt_float("loan_interest_rate_pct"),
+                monthly_mortgage_payment=_opt_float("monthly_mortgage_payment"),
+                annual_yield_pct=_opt_float("annual_yield_pct"),
+                address=_opt_str("address"),
+                postal_code=_opt_str("postal_code"),
+                city=_opt_str("city"),
+                country=_opt_str("country"),
+                surface_sqm=_opt_float("surface_sqm"),
+                property_subtype=_opt_str("property_subtype"),
+                garden_sqm=_opt_float("garden_sqm"),
             )
             db.add(inv)
             imported += 1

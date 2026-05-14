@@ -100,22 +100,27 @@ export function pct(value, signed = true) {
 }
 
 // ---------- Routing ----------
+// Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
+// stale tab pick up the new module on next route change. Match the value
+// to ?v=N on app.js / style.css in index.html.
+const VIEW_VERSION = "35";
+const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
-  { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import("/static/views/dashboard.js") },
-  { hash: "#/markets", titleKey: "markets.title", load: () => import("/static/views/markets.js") },
-  { hash: "#/compare", titleKey: "compare.title", load: () => import("/static/views/compare.js") },
-  { hash: "#/watchlist", titleKey: "watchlist.title", load: () => import("/static/views/watchlist.js") },
-  { hash: "#/investments", titleKey: "investments.title", load: () => import("/static/views/investments.js") },
-  { hash: "#/calculator", titleKey: "calculator.title", load: () => import("/static/views/calculator.js") },
-  { hash: "#/scenarios", titleKey: "scenarios.title", load: () => import("/static/views/scenarios.js") },
-  { hash: "#/transactions", titleKey: "transactions.title", load: () => import("/static/views/transactions.js") },
-  { hash: "#/plans", titleKey: "plans.title", load: () => import("/static/views/plans.js") },
-  { hash: "#/rebalance", titleKey: "rebalance.title", load: () => import("/static/views/rebalance.js") },
-  { hash: "#/chat", titleKey: "chat.title", load: () => import("/static/views/chat.js") },
-  { hash: "#/reports", titleKey: "reports.title", load: () => import("/static/views/reports.js") },
-  { hash: "#/tax", titleKey: "tax.title", load: () => import("/static/views/tax.js") },
-  { hash: "#/fire", titleKey: "fire.title", load: () => import("/static/views/fire.js") },
-  { hash: "#/settings", titleKey: "settings.title", load: () => import("/static/views/settings.js") },
+  { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
+  { hash: "#/markets", titleKey: "markets.title", load: () => import(v("/static/views/markets.js")) },
+  { hash: "#/compare", titleKey: "compare.title", load: () => import(v("/static/views/compare.js")) },
+  { hash: "#/watchlist", titleKey: "watchlist.title", load: () => import(v("/static/views/watchlist.js")) },
+  { hash: "#/investments", titleKey: "investments.title", load: () => import(v("/static/views/investments.js")) },
+  { hash: "#/calculator", titleKey: "calculator.title", load: () => import(v("/static/views/calculator.js")) },
+  { hash: "#/scenarios", titleKey: "scenarios.title", load: () => import(v("/static/views/scenarios.js")) },
+  { hash: "#/transactions", titleKey: "transactions.title", load: () => import(v("/static/views/transactions.js")) },
+  { hash: "#/plans", titleKey: "plans.title", load: () => import(v("/static/views/plans.js")) },
+  { hash: "#/rebalance", titleKey: "rebalance.title", load: () => import(v("/static/views/rebalance.js")) },
+  { hash: "#/chat", titleKey: "chat.title", load: () => import(v("/static/views/chat.js")) },
+  { hash: "#/reports", titleKey: "reports.title", load: () => import(v("/static/views/reports.js")) },
+  { hash: "#/tax", titleKey: "tax.title", load: () => import(v("/static/views/tax.js")) },
+  { hash: "#/fire", titleKey: "fire.title", load: () => import(v("/static/views/fire.js")) },
+  { hash: "#/settings", titleKey: "settings.title", load: () => import(v("/static/views/settings.js")) },
 ];
 
 // Inline SVG icons (Feather/Lucide style, 1.5px stroke, currentColor so they

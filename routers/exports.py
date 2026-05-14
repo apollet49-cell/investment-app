@@ -21,10 +21,37 @@ async def export_portfolio_csv(current: User = Depends(get_current_user), db: Se
     rows = db.query(Investment).filter(Investment.user_id == current.id).all()
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(["id", "name", "type", "symbol", "amount_invested", "current_value", "purchase_date", "notes", "roi_pct"])
+    # Columns aligned with the importer's REQUIRED_CSV_COLS + OPTIONAL_CSV_COLS
+    # so the file round-trips cleanly (export → re-import without loss).
+    cols = [
+        "name", "type", "symbol", "amount_invested", "current_value",
+        "purchase_date", "notes", "quantity", "account_type",
+        "monthly_rental_income", "monthly_rental_charges",
+        "loan_amount", "loan_interest_rate_pct", "monthly_mortgage_payment",
+        "annual_yield_pct", "address", "postal_code", "city", "country",
+        "surface_sqm", "property_subtype", "garden_sqm",
+        "id", "roi_pct",
+    ]
+    writer.writerow(cols)
     for r in rows:
         roi = ((r.current_value - r.amount_invested) / r.amount_invested * 100.0) if r.amount_invested > 0 else 0.0
-        writer.writerow([r.id, r.name, r.type, r.symbol or "", r.amount_invested, r.current_value, r.purchase_date.isoformat(), r.notes or "", round(roi, 2)])
+        writer.writerow([
+            r.name, r.type, r.symbol or "", r.amount_invested, r.current_value,
+            r.purchase_date.isoformat(), r.notes or "",
+            r.quantity if r.quantity is not None else "",
+            r.account_type or "",
+            r.monthly_rental_income if r.monthly_rental_income is not None else "",
+            r.monthly_rental_charges if r.monthly_rental_charges is not None else "",
+            r.loan_amount if r.loan_amount is not None else "",
+            r.loan_interest_rate_pct if r.loan_interest_rate_pct is not None else "",
+            r.monthly_mortgage_payment if r.monthly_mortgage_payment is not None else "",
+            r.annual_yield_pct if r.annual_yield_pct is not None else "",
+            r.address or "", r.postal_code or "", r.city or "", r.country or "",
+            r.surface_sqm if r.surface_sqm is not None else "",
+            r.property_subtype or "",
+            r.garden_sqm if r.garden_sqm is not None else "",
+            r.id, round(roi, 2),
+        ])
     buf.seek(0)
     filename = f"portfolio-{date.today().isoformat()}.csv"
     return StreamingResponse(

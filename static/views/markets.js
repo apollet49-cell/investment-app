@@ -625,6 +625,11 @@ function addToPortfolio(d, assetType) {
     name: d.name || d.symbol,
     type: typeMap[assetType] || "stock",
     symbol: d.symbol,
+    // quantity=1 is required for live-value refresh to keep this row's
+    // current_value in sync — otherwise it's locked to its initial price
+    // forever. The user can edit both amount and quantity from the
+    // Investments tab afterwards.
+    quantity: 1,
     amount_invested: d.price || 1,
     current_value: d.price || 1,
     purchase_date: today,

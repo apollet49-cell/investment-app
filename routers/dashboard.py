@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from datetime import date, timedelta
 
@@ -26,22 +27,16 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
 def _to_out(inv: Investment) -> InvestmentOut:
+    """Convert SQLAlchemy → Pydantic using model_validate so every column on
+    Investment (quantity, account_type, real-estate fields, etc.) flows
+    through automatically — avoids silently dropping fields when the model
+    gains new ones."""
     roi = 0.0
     if inv.amount_invested > 0:
         roi = (inv.current_value - inv.amount_invested) / inv.amount_invested * 100.0
-    return InvestmentOut(
-        id=inv.id,
-        user_id=inv.user_id,
-        name=inv.name,
-        type=inv.type,
-        symbol=inv.symbol,
-        amount_invested=inv.amount_invested,
-        current_value=inv.current_value,
-        purchase_date=inv.purchase_date,
-        notes=inv.notes,
-        created_at=inv.created_at,
-        roi_pct=round(roi, 2),
-    )
+    out = InvestmentOut.model_validate(inv)
+    out.roi_pct = round(roi, 2)
+    return out
 
 
 @router.get("/summary", response_model=DashboardSummary)
@@ -77,10 +72,23 @@ async def summary(current: User = Depends(get_current_user), db: Session = Depen
 
     # Naive value-over-time: linearly interpolate from purchase to today per investment, then sum monthly.
     today = date.today()
+    # Real month boundaries (subtract 1 month at a time) rather than crude
+    # `today - 30*i` which drifts on long horizons and breaks for February.
+    def _months_ago(d: date, n: int) -> date:
+        m = d.month - n
+        y = d.year
+        while m <= 0:
+            m += 12
+            y -= 1
+        # Clamp day to the last day of the target month to avoid Feb 30 etc.
+        from calendar import monthrange
+        day = min(d.day, monthrange(y, m)[1])
+        return date(y, m, day)
+
     months_back = 12
     portfolio_over_time: list[dict[str, float | str]] = []
     for i in range(months_back, -1, -1):
-        month_date = today - timedelta(days=30 * i)
+        month_date = _months_ago(today, i)
         total = 0.0
         for r in rows:
             if r.purchase_date > month_date:
@@ -190,8 +198,10 @@ async def history(
     cutoff = date.today() - timedelta(days=days)
 
     # Ensure we have at least today's snapshot — useful for fresh users who
-    # haven't waited for the nightly job to run yet.
-    take_snapshot(db, current)
+    # haven't waited for the nightly job to run yet. Off-loaded to a worker
+    # thread because SQLAlchemy is sync — running it inline would block the
+    # async event loop for tens to hundreds of ms per request.
+    await asyncio.to_thread(take_snapshot, db, current)
 
     snaps = (
         db.query(PortfolioSnapshot)

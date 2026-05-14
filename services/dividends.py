@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional
 
 import yfinance as yf
@@ -80,8 +80,9 @@ def _fetch_metadata_sync(symbol: str) -> dict:
         divs = t.dividends
         history: list[dict] = []
         ttm = 0.0
+        ttm_payments = 0
         if divs is not None and not divs.empty:
-            today = datetime.utcnow().date()
+            today = datetime.now(timezone.utc).date()
             for idx, val in divs.items():
                 try:
                     d = idx.date() if hasattr(idx, "date") else date.fromisoformat(str(idx)[:10])
@@ -89,10 +90,24 @@ def _fetch_metadata_sync(symbol: str) -> dict:
                     history.append({"date": d.isoformat(), "amount": amount})
                     if (today - d).days <= 365:
                         ttm += amount
+                        ttm_payments += 1
                 except Exception:
                     continue
             history.sort(key=lambda h: h["date"], reverse=True)
             history = history[:24]
+
+        # Infer payment frequency from how many distinct dividends landed in
+        # the last 365 days. Default 4 (quarterly) when we have no data.
+        if ttm_payments >= 10:
+            payments_per_year = 12  # monthly
+        elif ttm_payments >= 3:
+            payments_per_year = 4   # quarterly
+        elif ttm_payments == 2:
+            payments_per_year = 2   # semi-annual
+        elif ttm_payments == 1:
+            payments_per_year = 1   # annual
+        else:
+            payments_per_year = 4   # unknown → conservative default
 
         # Next ex-dividend date — yfinance shape varies by version.
         next_ex_div = None
@@ -134,12 +149,14 @@ def _fetch_metadata_sync(symbol: str) -> dict:
             "ttm_dividend": round(ttm, 4) if ttm else None,
             "annual_yield_pct": annual_yield_pct,
             "current_price": current_price,
+            "payments_per_year": payments_per_year,
         }
     except Exception as e:
         log.warning("dividend metadata fetch failed for %s: %s", symbol, e)
         return {
             "symbol": symbol, "history": [], "next_ex_div": None,
-            "ttm_dividend": None, "annual_yield_pct": None, "error": str(e),
+            "ttm_dividend": None, "annual_yield_pct": None,
+            "payments_per_year": 4, "error": str(e),
         }
 
 
@@ -169,8 +186,9 @@ async def upcoming_calendar(investments: list, limit: int = 25) -> list[dict]:
         next_ex = data.get("next_ex_div")
         ttm = data.get("ttm_dividend") or 0
         annual_yield = data.get("annual_yield_pct")
+        per_year = data.get("payments_per_year") or 4
         qty = inv.quantity or 0
-        next_payment = round(qty * ttm / 4, 2) if qty and ttm else None
+        next_payment = round(qty * ttm / per_year, 2) if qty and ttm else None
         return {
             "investment_id": inv.id,
             "name": inv.name,

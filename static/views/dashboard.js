@@ -18,11 +18,16 @@ export async function render(root) {
     try { state.charts[k]?.destroy?.(); } catch (_) {}
     delete state.charts[k];
   }
-  // Guard against the user navigating away mid-fetch. Without this, the
-  // /dashboard/summary response can arrive after the new view has rendered,
-  // and we'd splat dashboard content into the wrong view-root.
+  // Guard against the user navigating away mid-fetch. Single cleanup
+  // closure that captures both `cancelled` and `refreshTimer` — register
+  // it once so the second onViewCleanup() call below doesn't clobber the
+  // earlier one (the runtime keeps only the most recently registered fn).
   let cancelled = false;
-  onViewCleanup(() => { cancelled = true; });
+  let refreshTimer = null;
+  onViewCleanup(() => {
+    cancelled = true;
+    if (refreshTimer) clearTimeout(refreshTimer);
+  });
 
   root.innerHTML = `<div style="text-align:center;padding:40px">${spinner(true)}</div>`;
   let data;
@@ -35,9 +40,8 @@ export async function render(root) {
   }
   if (cancelled) return;
 
-  // Schedule the next live refresh (cleared on view change via onViewCleanup).
-  const refreshTimer = setTimeout(() => { if (!cancelled) render(root); }, 60000);
-  onViewCleanup(() => { cancelled = true; clearTimeout(refreshTimer); });
+  // Schedule the next live refresh — cleanup above clears it.
+  refreshTimer = setTimeout(() => { if (!cancelled) render(root); }, 60000);
   if (!data.total_invested && !data.current_value) {
     root.innerHTML = emptyState();
     document.getElementById("dash-empty-add")?.addEventListener("click", () => location.hash = "#/investments");
