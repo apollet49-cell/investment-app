@@ -11,6 +11,7 @@ from database import get_db
 from models import Investment, User
 from schemas import DashboardSummary, InvestmentOut
 from services.alerts_engine import evaluate_alerts
+from services.carbon import compute as compute_carbon
 from services.diversification import compute_score as compute_diversification
 from services.live_value import refresh_current_values
 
@@ -93,6 +94,7 @@ async def summary(current: User = Depends(get_current_user), db: Session = Depen
 
     triggered = evaluate_alerts(db, current)
     diversification = compute_diversification(rows)
+    carbon = compute_carbon(rows)
 
     return DashboardSummary(
         total_invested=round(total_invested, 2),
@@ -104,4 +106,5 @@ async def summary(current: User = Depends(get_current_user), db: Session = Depen
         monthly_returns=monthly_returns,
         triggered_alerts=triggered,
         diversification=diversification,
+        carbon=carbon,
     )

@@ -55,6 +55,7 @@ class InvestmentBase(BaseModel):
     surface_sqm: Optional[float] = Field(default=None, ge=0)
     property_subtype: Optional[str] = None
     garden_sqm: Optional[float] = Field(default=None, ge=0)
+    account_type: Optional[str] = None
     purchase_date: date
     notes: Optional[str] = None
 
@@ -83,6 +84,7 @@ class InvestmentUpdate(BaseModel):
     surface_sqm: Optional[float] = Field(default=None, ge=0)
     property_subtype: Optional[str] = None
     garden_sqm: Optional[float] = Field(default=None, ge=0)
+    account_type: Optional[str] = None
     purchase_date: Optional[date] = None
     notes: Optional[str] = None
 
@@ -228,11 +230,26 @@ class AlertOut(BaseModel):
 # ---------- Dashboard ----------
 class DiversificationScore(BaseModel):
     score: Optional[float] = None
+    risk_score: Optional[float] = None
     position_score: Optional[float] = None
     type_score: Optional[float] = None
+    sector_score: Optional[float] = None
+    country_score: Optional[float] = None
     positions: int = 0
     top_positions: list[dict[str, Any]] = []
     type_distribution: dict[str, float] = {}
+    sector_distribution: dict[str, float] = {}
+    country_distribution: dict[str, float] = {}
+    risk_factors: list[str] = []
+    message: Optional[str] = None
+
+
+class CarbonFootprint(BaseModel):
+    total_tco2e_year: float = 0.0
+    tracked_positions: int = 0
+    skipped_positions: int = 0
+    breakdown: list[dict[str, Any]] = []
+    equivalents: dict[str, Any] = {}
     message: Optional[str] = None
 
 
@@ -246,6 +263,7 @@ class DashboardSummary(BaseModel):
     monthly_returns: list[dict[str, Any]]  # [{month, return_pct}]
     triggered_alerts: list[AlertOut] = []
     diversification: Optional[DiversificationScore] = None
+    carbon: Optional[CarbonFootprint] = None
 
 
 # ---------- Market data ----------

@@ -171,6 +171,15 @@ function openForm(id) {
               <div class="col field"><label>${t("investments.type")}</label>
                 <select name="type">${TYPES.map(t2 => `<option value="${t2}" ${inv && inv.type === t2 ? "selected" : ""}>${t(`investments.types.${t2}`)}</option>`).join("")}</select>
               </div>
+              <div class="col field"><label>${t("investments.account_type")}</label>
+                <select name="account_type">
+                  <option value="" ${!inv?.account_type ? "selected" : ""}>—</option>
+                  <option value="cto" ${inv?.account_type === "cto" ? "selected" : ""}>${t("investments.account_cto")}</option>
+                  <option value="pea" ${inv?.account_type === "pea" ? "selected" : ""}>${t("investments.account_pea")}</option>
+                  <option value="av"  ${inv?.account_type === "av"  ? "selected" : ""}>${t("investments.account_av")}</option>
+                  <option value="per" ${inv?.account_type === "per" ? "selected" : ""}>${t("investments.account_per")}</option>
+                  <option value="other" ${inv?.account_type === "other" ? "selected" : ""}>${t("investments.account_other")}</option>
+                </select></div>
               <div class="col field"><label>${t("investments.purchase_date")}</label>
                 <input name="purchase_date" type="date" required value="${inv ? inv.purchase_date : today}"/></div>
             </div>
@@ -349,6 +358,9 @@ function openForm(id) {
     // Startup yield
     const ay = parseFloat(fd.get("annual_yield_pct"));
     if (isFinite(ay)) payload.annual_yield_pct = ay;
+    // Tax wrapper
+    const acct = (fd.get("account_type") || "").toString().trim();
+    if (acct) payload.account_type = acct;
     // Real-estate property details (all optional — used by DVF auto-valuation)
     const addr = (fd.get("address") || "").toString().trim();
     const pc = (fd.get("postal_code") || "").toString().trim();

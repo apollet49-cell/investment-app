@@ -57,6 +57,7 @@ export async function render(root) {
         ? bestPerformerCard(t("dashboard.best_performer"), bp.name, pct(bp.roi_pct), bpRoiClass)
         : summaryCard(t("dashboard.best_performer"), "—")}
       ${diversificationCard(div)}
+      ${carbonCard(data.carbon)}
     </div>
     <div class="chart-grid">
       <div class="card chart-card">
@@ -120,9 +121,10 @@ function diversificationCard(div) {
     return summaryCard(label, "—");
   }
   const score = div.score;
+  const risk = div.risk_score;
   const color = score >= 75 ? "var(--success)" : score >= 50 ? "var(--warning)" : "var(--danger)";
+  const riskColor = risk == null ? "var(--text-muted)" : (risk <= 25 ? "var(--success)" : risk <= 50 ? "var(--warning)" : "var(--danger)");
   const id = `div-card-${Math.random().toString(36).slice(2, 8)}`;
-  // Render the breakdown collapsed; expanded via click.
   const topRows = (div.top_positions || []).slice(0, 5).map(p => `
     <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
       <span style="color:var(--text-muted)">${escapeHtml(p.name)}</span>
@@ -133,6 +135,18 @@ function diversificationCard(div) {
       <span style="color:var(--text-muted)">${escapeHtml(t(`investments.types.${k}`) || k)}</span>
       <strong>${v.toFixed(1)}%</strong>
     </div>`).join("");
+  const sectorRows = Object.entries(div.sector_distribution || {}).map(([k, v]) => `
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+      <span style="color:var(--text-muted)">${escapeHtml(k)}</span>
+      <strong>${v.toFixed(1)}%</strong>
+    </div>`).join("");
+  const countryRows = Object.entries(div.country_distribution || {}).map(([k, v]) => `
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+      <span style="color:var(--text-muted)">${escapeHtml(k)}</span>
+      <strong>${v.toFixed(1)}%</strong>
+    </div>`).join("");
+  const riskFactors = (div.risk_factors || []).map(rf => `
+    <div style="font-size:12px;padding:3px 0;color:var(--danger)">• ${escapeHtml(rf)}</div>`).join("");
   return `
   <div class="summary-card div-card" id="${id}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start">
@@ -141,11 +155,47 @@ function diversificationCard(div) {
     </div>
     <div class="value" style="color:${color}">${score.toFixed(0)}<span style="font-size:14px;color:var(--text-muted);font-family:var(--font-sans)"> / 100</span></div>
     <div class="sub" style="font-size:11px;margin-top:6px">${escapeHtml(div.message || "")}</div>
+    ${risk != null ? `<div class="sub" style="font-size:11px;margin-top:4px"><span style="color:var(--text-muted)">${t("dashboard.risk_score")}:</span> <strong style="color:${riskColor}">${risk.toFixed(0)} / 100</strong></div>` : ""}
     <div class="div-breakdown" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+      ${riskFactors ? `<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px">${t("dashboard.risk_factors")}</div>${riskFactors}<div style="height:8px"></div>` : ""}
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px">Top positions</div>
       ${topRows || '<div style="color:var(--text-muted);font-size:12px">—</div>'}
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin:10px 0 6px">By asset type</div>
       ${typeRows || '<div style="color:var(--text-muted);font-size:12px">—</div>'}
+      ${sectorRows ? `<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin:10px 0 6px">By sector (stocks)</div>${sectorRows}` : ""}
+      ${countryRows ? `<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin:10px 0 6px">By country</div>${countryRows}` : ""}
+    </div>
+  </div>`;
+}
+
+function carbonCard(carbon) {
+  const label = t("dashboard.carbon");
+  if (!carbon || carbon.total_tco2e_year == null) {
+    return summaryCard(label, "—");
+  }
+  const total = carbon.total_tco2e_year;
+  const eq = carbon.equivalents || {};
+  const color = total < 1 ? "var(--success)" : total < 5 ? "var(--warning)" : "var(--danger)";
+  const id = `carbon-card-${Math.random().toString(36).slice(2, 8)}`;
+  const breakdownRows = (carbon.breakdown || []).slice(0, 8).map(b => `
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+      <span style="color:var(--text-muted)">${escapeHtml(b.name)} <span style="opacity:0.6">${escapeHtml(b.basis)}</span></span>
+      <strong>${b.emissions_tco2e_year.toFixed(2)} t</strong>
+    </div>`).join("");
+  return `
+  <div class="summary-card div-card" id="${id}">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div class="label">${label}</div>
+      <button class="div-toggle" data-target="${id}" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:11px">⌄</button>
+    </div>
+    <div class="value" style="color:${color}">${total.toFixed(1)}<span style="font-size:14px;color:var(--text-muted);font-family:var(--font-sans)"> tCO₂e/yr</span></div>
+    <div class="sub" style="font-size:11px;margin-top:6px">${escapeHtml(carbon.message || "")}</div>
+    <div class="div-breakdown" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:8px">${t("dashboard.carbon_equivalents")}</div>
+      <div style="font-size:12px;padding:3px 0">🚗 ≈ ${(eq.car_km || 0).toLocaleString()} ${t("dashboard.carbon_car_km")}</div>
+      <div style="font-size:12px;padding:3px 0">✈️ ≈ ${eq.transatlantic_flights || 0} ${t("dashboard.carbon_flights")}</div>
+      <div style="font-size:12px;padding:3px 0">🇫🇷 ${eq.french_avg_pct || 0}% ${t("dashboard.carbon_french_avg")}</div>
+      ${breakdownRows ? `<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin:12px 0 6px">${t("dashboard.carbon_top_emitters")}</div>${breakdownRows}` : ""}
     </div>
   </div>`;
 }

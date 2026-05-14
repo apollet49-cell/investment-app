@@ -75,6 +75,8 @@ class Investment(Base):
     garden_sqm: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     # Startup-only: expected annual yield as a percentage (e.g. 12.5 for 12.5%/yr).
     annual_yield_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # Tax wrapper (French context): cto | pea | av | per | other
+    account_type: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     purchase_date: Mapped[date] = mapped_column(Date, nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
