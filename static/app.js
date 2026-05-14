@@ -85,6 +85,30 @@ export async function loadFxRate() {
   return 1.0;
 }
 
+// ---------- Authenticated download ----------
+// Browsers don't add the Authorization header on a plain `<a href>` click,
+// so any export endpoint behind get_current_user 401s on a vanilla link.
+// This fetches with the bearer token, builds a blob, and triggers a click
+// on a transient anchor so the browser presents the standard save dialog.
+export async function downloadAuth(path) {
+  try {
+    const res = await fetch(path, { headers: { Authorization: `Bearer ${state.token}` } });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || res.statusText);
+    }
+    const blob = await res.blob();
+    const dispo = res.headers.get("Content-Disposition") || "";
+    const m = dispo.match(/filename="([^"]+)"/);
+    const filename = m ? m[1] : path.split("/").pop();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) { toast(e.message, "error"); }
+}
+
 // ---------- Formatting ----------
 export function money(value, currency) {
   const ccy = currency || state.user?.currency || "USD";
@@ -106,7 +130,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "43";
+const VIEW_VERSION = "44";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -444,11 +468,19 @@ export async function sendChatMessage(text, messagesEl, onDone) {
 
   let accumulated = "";
   try {
+    // Streaming SSE response — can't use API.request (which parses JSON).
+    // We mimic API.request's 401-→-logout behaviour manually so an expired
+    // token mid-chat redirects to login instead of just showing "Error 401".
     const res = await fetch("/chat/message", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${state.token}` },
       body: JSON.stringify({ message: text }),
     });
+    if (res.status === 401) {
+      logout();
+      assistantBubble.remove();
+      return;
+    }
     if (!res.ok || !res.body) {
       assistantBubble.classList.remove("assistant");
       assistantBubble.classList.add("error");

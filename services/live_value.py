@@ -138,7 +138,7 @@ async def refresh_current_values(investments: Iterable) -> dict[int, float]:
         return {}
 
     keys = list({(inv.symbol, inv.type) for inv in work})
-    # Per-call deadline is 4s (in _fetch_price_in_usd). The batch deadline
+    # Per-call deadline is 6s (in _fetch_price_in_usd). The batch deadline
     # is 12s so a slow yfinance + 5s Alpha Vantage fallback can still
     # finish within the parent window for a single ticker, while the
     # whole gather doesn't drag GET /investments/ past 12s in the worst

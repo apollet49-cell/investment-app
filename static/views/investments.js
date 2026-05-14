@@ -1,4 +1,4 @@
-import { API, money, pct, spinner, toast, escapeHtml, onViewCleanup } from "/static/app.js";
+import { API, money, pct, spinner, toast, escapeHtml, onViewCleanup, downloadAuth } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 const TYPES = ["stock", "real_estate", "crypto", "bond", "etf", "startup"];
@@ -34,7 +34,7 @@ export async function render(root) {
       <button class="btn btn-ghost" id="btn-wallet">${t("investments.connect_wallet")}</button>
       <label class="btn btn-ghost" for="csv-input">${t("investments.import_csv")}</label>
       <input id="csv-input" type="file" accept=".csv" hidden />
-      <a class="btn btn-ghost" href="/exports/csv" target="_blank">${t("investments.export_csv")}</a>
+      <button class="btn btn-ghost" id="btn-export-csv" type="button">${t("investments.export_csv")}</button>
     </div>
     <div class="card">
       ${cache.length ? renderTable(cache) : emptyState()}
@@ -48,6 +48,7 @@ export async function render(root) {
   document.getElementById("csv-input").onchange = onCsvUpload;
   document.getElementById("inv-search").oninput = (e) => { filterText = e.target.value.toLowerCase(); refresh(root); };
   document.getElementById("inv-type-filter").onchange = (e) => { filterType = e.target.value; refresh(root); };
+  document.getElementById("btn-export-csv").onclick = () => downloadAuth("/exports/csv");
   attachRowHandlers(root);
 
   // Auto-refresh every 60s so live market prices flow into the table without

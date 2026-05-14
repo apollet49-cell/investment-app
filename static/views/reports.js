@@ -1,4 +1,4 @@
-import { API, state, toast } from "/static/app.js";
+import { API, state, toast, downloadAuth } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 export async function render(root) {
@@ -18,28 +18,6 @@ export async function render(root) {
   document.getElementById("dl-csv-scenarios").onclick = () => downloadAuth("/exports/scenarios.csv");
   document.getElementById("dl-xlsx").onclick = () => downloadAuth("/exports/xlsx");
   document.getElementById("dl-pdf").onclick = downloadPdf;
-}
-
-async function downloadAuth(path) {
-  // Browsers won't add the Authorization header on a plain <a href> click, so
-  // we fetch with auth ourselves and trigger the download from the blob.
-  try {
-    const res = await fetch(path, { headers: { Authorization: `Bearer ${state.token}` } });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || res.statusText);
-    }
-    const blob = await res.blob();
-    const dispo = res.headers.get("Content-Disposition") || "";
-    const m = dispo.match(/filename="([^"]+)"/);
-    const filename = m ? m[1] : path.split("/").pop();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(url);
-  } catch (e) { toast(e.message, "error"); }
 }
 
 async function downloadPdf() {
