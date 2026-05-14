@@ -372,46 +372,52 @@ function openForm(id) {
     const fd = new FormData(ev.target);
     const mode = fd.get("input_mode") || "usd";
 
+    const invType = fd.get("type");
     const payload = {
       name: fd.get("name").trim(),
-      type: fd.get("type"),
+      type: invType,
       symbol: (fd.get("symbol") || "").trim() || undefined,
       purchase_date: fd.get("purchase_date"),
       notes: (fd.get("notes") || "").trim() || undefined,
     };
-    // Real-estate rental + loan fields (only meaningful when type === "real_estate"
-    // but we send them whenever filled — the backend stores nullable values).
-    const ri = parseFloat(fd.get("monthly_rental_income"));
-    const rc = parseFloat(fd.get("monthly_rental_charges"));
-    if (isFinite(ri) && ri >= 0) payload.monthly_rental_income = ri;
-    if (isFinite(rc) && rc >= 0) payload.monthly_rental_charges = rc;
-    const la = parseFloat(fd.get("loan_amount"));
-    const lr = parseFloat(fd.get("loan_interest_rate_pct"));
-    const mp = parseFloat(fd.get("monthly_mortgage_payment"));
-    if (isFinite(la) && la >= 0) payload.loan_amount = la;
-    if (isFinite(lr) && lr >= 0) payload.loan_interest_rate_pct = lr;
-    if (isFinite(mp) && mp >= 0) payload.monthly_mortgage_payment = mp;
-    // Startup yield
-    const ay = parseFloat(fd.get("annual_yield_pct"));
-    if (isFinite(ay)) payload.annual_yield_pct = ay;
-    // Tax wrapper
+    // Tax wrapper is type-agnostic.
     const acct = (fd.get("account_type") || "").toString().trim();
     if (acct) payload.account_type = acct;
-    // Real-estate property details (all optional — used by DVF auto-valuation)
-    const addr = (fd.get("address") || "").toString().trim();
-    const pc = (fd.get("postal_code") || "").toString().trim();
-    const city = (fd.get("city") || "").toString().trim();
-    const ctry = (fd.get("country") || "").toString().trim();
-    const surface = parseFloat(fd.get("surface_sqm"));
-    const pst = (fd.get("property_subtype") || "").toString().trim();
-    const gs = parseFloat(fd.get("garden_sqm"));
-    if (addr) payload.address = addr;
-    if (pc) payload.postal_code = pc;
-    if (city) payload.city = city;
-    if (ctry) payload.country = ctry;
-    if (isFinite(surface) && surface > 0) payload.surface_sqm = surface;
-    if (pst) payload.property_subtype = pst;
-    if (isFinite(gs) && gs >= 0) payload.garden_sqm = gs;
+
+    // Type-gated fields: only send what's meaningful for the current type so
+    // a user who switched type=real_estate→stock doesn't carry over a phantom
+    // €1100/mo rent into a stock row (the hidden inputs still exist in the
+    // form DOM and would otherwise leak via FormData).
+    if (invType === "real_estate") {
+      const ri = parseFloat(fd.get("monthly_rental_income"));
+      const rc = parseFloat(fd.get("monthly_rental_charges"));
+      if (isFinite(ri) && ri >= 0) payload.monthly_rental_income = ri;
+      if (isFinite(rc) && rc >= 0) payload.monthly_rental_charges = rc;
+      const la = parseFloat(fd.get("loan_amount"));
+      const lr = parseFloat(fd.get("loan_interest_rate_pct"));
+      const mp = parseFloat(fd.get("monthly_mortgage_payment"));
+      if (isFinite(la) && la >= 0) payload.loan_amount = la;
+      if (isFinite(lr) && lr >= 0) payload.loan_interest_rate_pct = lr;
+      if (isFinite(mp) && mp >= 0) payload.monthly_mortgage_payment = mp;
+      const addr = (fd.get("address") || "").toString().trim();
+      const pc = (fd.get("postal_code") || "").toString().trim();
+      const city = (fd.get("city") || "").toString().trim();
+      const ctry = (fd.get("country") || "").toString().trim();
+      const surface = parseFloat(fd.get("surface_sqm"));
+      const pst = (fd.get("property_subtype") || "").toString().trim();
+      const gs = parseFloat(fd.get("garden_sqm"));
+      if (addr) payload.address = addr;
+      if (pc) payload.postal_code = pc;
+      if (city) payload.city = city;
+      if (ctry) payload.country = ctry;
+      if (isFinite(surface) && surface > 0) payload.surface_sqm = surface;
+      if (pst) payload.property_subtype = pst;
+      if (isFinite(gs) && gs >= 0) payload.garden_sqm = gs;
+    }
+    if (invType === "startup") {
+      const ay = parseFloat(fd.get("annual_yield_pct"));
+      if (isFinite(ay)) payload.annual_yield_pct = ay;
+    }
 
     if (mode === "usd") {
       const inv = parseFloat(fd.get("amount_invested"));

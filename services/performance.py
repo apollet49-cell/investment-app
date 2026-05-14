@@ -110,7 +110,19 @@ def compute_xirr_from_transactions(
 def compute_twr_from_snapshots(snapshots: list, contributions_by_date: dict[date, float]) -> Optional[float]:
     """Daily time-weighted return — links sub-period returns and removes the
     effect of cashflow timing. `snapshots` is sorted ascending by date.
-    Returns the annualised rate, or None if there's not enough data."""
+    Returns the annualised rate, or None if there's not enough data.
+
+    Convention: snapshots are taken at end-of-day, so `cur.total_value`
+    already INCLUDES any contribution that happened that day. To get the
+    market-only sub-return, we subtract the contribution from cur's end
+    value (the part of cur that came from external money rather than
+    market growth):
+
+        sub_return = (cur.total_value - contribution) / prev.total_value
+
+    The previous formulation `cur.total_value / (prev.total_value + contribution)`
+    was wrong: it both added the contribution to the period start AND left
+    it inside the period end, double-counting the cash inflow."""
     if len(snapshots) < 2:
         return None
     factor = 1.0
@@ -118,18 +130,19 @@ def compute_twr_from_snapshots(snapshots: list, contributions_by_date: dict[date
     for i in range(1, len(snapshots)):
         prev = snapshots[i - 1]
         cur = snapshots[i]
-        # Cash injected/withdrawn during the day: assume mid-day, so the start
-        # value for the period is prev.total_value + contribution.
         contribution = contributions_by_date.get(cur.snapshot_date, 0.0)
-        start = prev.total_value + contribution
-        if start <= 0:
+        if prev.total_value <= 0:
             continue
-        sub_return = cur.total_value / start
+        # Strip the external cashflow out of cur's end value so the ratio
+        # is pure market performance.
+        market_end = cur.total_value - contribution
+        if market_end <= 0:
+            continue
+        sub_return = market_end / prev.total_value
         factor *= sub_return
         days += (cur.snapshot_date - prev.snapshot_date).days
     if days <= 0 or factor <= 0:
         return None
-    # Annualise: (factor) ^ (365 / days) − 1
     return factor ** (365.0 / days) - 1.0
 
 

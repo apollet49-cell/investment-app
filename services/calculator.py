@@ -127,8 +127,18 @@ def calc_cagr(beginning: float, ending: float, years: float) -> dict[str, Any]:
     _ensure_positive("beginning", beginning)
     if years <= 0:
         raise ValueError("years must be > 0")
+    # ending=0 → total loss = -100%. ending<0 is only meaningful for derivatives
+    # / shorts and CAGR is undefined for them; we clamp at -100% rather than
+    # raise so the calculator UI degrades gracefully.
     if ending <= 0:
-        raise ValueError("ending must be > 0")
+        return {
+            "formula": "CAGR = (ending / beginning)^(1/years) − 1",
+            "inputs": {"beginning": beginning, "ending": ending, "years": years},
+            "steps": [
+                "ending ≤ 0 — position wiped out; CAGR floored at −100%.",
+            ],
+            "result": -100.0,
+        }
     ratio = ending / beginning
     cagr = ratio ** (1.0 / years) - 1.0
     cagr_pct = cagr * 100.0
@@ -154,7 +164,17 @@ def calc_sharpe(returns: list[float], risk_free_rate: float = 0.02) -> dict[str,
     variance = sum((r - mean) ** 2 for r in returns) / (n - 1)
     std = math.sqrt(variance)
     if std == 0:
-        raise ValueError("std deviation is zero, Sharpe undefined")
+        # All returns equal → no volatility → Sharpe is undefined. Return
+        # None so the calculator UI can show "undefined" rather than 500ing.
+        return {
+            "formula": "Sharpe = (mean(returns) − risk_free_rate) / std(returns)",
+            "inputs": {"returns": returns, "risk_free_rate": risk_free_rate},
+            "steps": [
+                f"mean = {mean:.6f}",
+                "std = 0 (all returns equal) — Sharpe is undefined.",
+            ],
+            "result": None,
+        }
     sharpe = (mean - risk_free_rate) / std
     return {
         "formula": "Sharpe = (mean(returns) − risk_free_rate) / std(returns)",

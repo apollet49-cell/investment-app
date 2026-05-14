@@ -77,15 +77,19 @@ def compute(
             })
         mode = "full_rebalance"
 
-    # Side-by-side comparison
+    # Side-by-side comparison — skip rows where both current AND target are
+    # zero (lingering empty entries that pollute the table).
     comparison = []
     all_types = set(target_norm.keys()) | set(by_type.keys())
     for t in sorted(all_types):
-        cur_w = (by_type.get(t, 0.0) / current_total * 100) if current_total > 0 else 0.0
+        cur_value = by_type.get(t, 0.0)
+        cur_w = (cur_value / current_total * 100) if current_total > 0 else 0.0
         tgt_w = target_norm.get(t, 0.0) * 100
+        if cur_value == 0 and tgt_w == 0:
+            continue
         comparison.append({
             "type": t,
-            "current_value": round(by_type.get(t, 0.0), 2),
+            "current_value": round(cur_value, 2),
             "current_pct": round(cur_w, 1),
             "target_pct": round(tgt_w, 1),
             "drift_pct": round(cur_w - tgt_w, 1),

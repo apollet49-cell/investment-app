@@ -46,8 +46,24 @@ export async function render(root) {
   }
   if (cancelled) return;
 
-  // Schedule the next live refresh — cleanup above clears it.
-  refreshTimer = setTimeout(() => { if (!cancelled) render(root); }, 60000);
+  // Schedule the next live refresh — cleanup above clears it. We skip the
+  // refresh entirely when the tab is hidden (mobile / background tab), so a
+  // user with the dashboard tab parked overnight doesn't fire 1440 useless
+  // network requests. The interval resumes naturally on the next render
+  // after the user comes back to the tab and the visibilitychange listener
+  // fires it.
+  if (document.visibilityState === "visible") {
+    refreshTimer = setTimeout(() => { if (!cancelled) render(root); }, 60000);
+  } else {
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && !cancelled) {
+        document.removeEventListener("visibilitychange", onVisible);
+        render(root);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    onViewCleanup(() => document.removeEventListener("visibilitychange", onVisible));
+  }
   if (!data.total_invested && !data.current_value) {
     root.innerHTML = emptyState();
     document.getElementById("dash-empty-add")?.addEventListener("click", () => location.hash = "#/investments");
@@ -97,22 +113,22 @@ export async function render(root) {
         <h3>${t("dashboard.portfolio_over_time")}</h3>
         <span class="live-badge"><span class="live-dot"></span>${t("dashboard.live")}</span>
       </div>
-      <div class="chart-canvas-wrap"><canvas id="chart-portfolio"></canvas></div>
+      <div class="chart-canvas-wrap"><canvas id="chart-portfolio" role="img" aria-label="${t("dashboard.portfolio_over_time")}"></canvas></div>
     </div>
 
     <div class="card" style="padding:0">
       <div class="dash-tabs" role="tablist" style="display:flex;gap:2px;border-bottom:1px solid var(--border);overflow-x:auto">
         ${["allocation","performance","risk","income"].map(tab => {
           const isActive = tab === activeTab;
-          return `<button class="dash-tab${isActive ? ' active' : ''}" data-tab="${tab}" style="padding:12px 18px;background:transparent;border:none;border-bottom:2px solid ${isActive ? 'var(--primary)' : 'transparent'};font-weight:${isActive ? '500' : '400'};color:${isActive ? 'var(--text)' : 'var(--text-muted)'};cursor:pointer;font-size:13px">${t(`dashboard.tab_${tab}`)}</button>`;
+          return `<button class="dash-tab${isActive ? ' active' : ''}" role="tab" aria-selected="${isActive}" aria-controls="dash-panel-${tab}" data-tab="${tab}" style="padding:12px 18px;background:transparent;border:none;border-bottom:2px solid ${isActive ? 'var(--primary)' : 'transparent'};font-weight:${isActive ? '500' : '400'};color:${isActive ? 'var(--text)' : 'var(--text-muted)'};cursor:pointer;font-size:13px">${t(`dashboard.tab_${tab}`)}</button>`;
         }).join("")}
       </div>
       <div style="padding:18px">
-        <div class="dash-panel" data-panel="allocation" style="display:${activeTab === 'allocation' ? '' : 'none'}">
+        <div class="dash-panel" id="dash-panel-allocation" role="tabpanel" data-panel="allocation" style="display:${activeTab === 'allocation' ? '' : 'none'}">
           <div class="chart-grid">
             <div class="chart-card" style="padding:0;border:none">
               <h4 style="margin:0 0 10px 0">${t("dashboard.asset_allocation")}</h4>
-              <div class="chart-canvas-wrap"><canvas id="chart-allocation"></canvas></div>
+              <div class="chart-canvas-wrap"><canvas id="chart-allocation" role="img" aria-label="${t("dashboard.asset_allocation")}"></canvas></div>
             </div>
             <div class="chart-card" style="padding:0;border:none">
               <h4 style="margin:0 0 10px 0">${t("dashboard.diversification")}</h4>
@@ -120,16 +136,16 @@ export async function render(root) {
             </div>
           </div>
         </div>
-        <div class="dash-panel" data-panel="performance" style="display:${activeTab === 'performance' ? '' : 'none'}">
+        <div class="dash-panel" id="dash-panel-performance" role="tabpanel" data-panel="performance" style="display:${activeTab === 'performance' ? '' : 'none'}">
           <h4 style="margin:0 0 10px 0">${t("dashboard.monthly_returns")}</h4>
-          <div class="chart-canvas-wrap compact"><canvas id="chart-monthly"></canvas></div>
+          <div class="chart-canvas-wrap compact"><canvas id="chart-monthly" role="img" aria-label="${t("dashboard.monthly_returns")}"></canvas></div>
           ${bp ? `<div style="margin-top:14px;padding:12px;background:var(--surface);border-radius:8px">
             <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px">${t("dashboard.best_performer")}</div>
             <div style="font-size:18px;font-family:var(--font-serif)">${escapeHtml(bp.name)}</div>
             <div style="color:${bp.roi_pct >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:500;margin-top:4px">${pct(bp.roi_pct)}</div>
           </div>` : ""}
         </div>
-        <div class="dash-panel" data-panel="risk" style="display:${activeTab === 'risk' ? '' : 'none'}">
+        <div class="dash-panel" id="dash-panel-risk" role="tabpanel" data-panel="risk" style="display:${activeTab === 'risk' ? '' : 'none'}">
           <div class="chart-grid">
             <div style="padding:0">
               <h4 style="margin:0 0 10px 0">${t("dashboard.stress_tests")}</h4>
@@ -140,7 +156,7 @@ export async function render(root) {
             </div>
           </div>
         </div>
-        <div class="dash-panel" data-panel="income" style="display:${activeTab === 'income' ? '' : 'none'}">
+        <div class="dash-panel" id="dash-panel-income" role="tabpanel" data-panel="income" style="display:${activeTab === 'income' ? '' : 'none'}">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
             <h4 style="margin:0">${t("dashboard.dividend_calendar")}</h4>
             <span style="color:var(--text-muted);font-size:12px" id="dividend-annual-summary"></span>
@@ -159,6 +175,7 @@ export async function render(root) {
       for (const b of root.querySelectorAll(".dash-tab")) {
         const active = b === btn;
         b.classList.toggle("active", active);
+        b.setAttribute("aria-selected", String(active));
         b.style.borderBottomColor = active ? "var(--primary)" : "transparent";
         b.style.color = active ? "var(--text)" : "var(--text-muted)";
         b.style.fontWeight = active ? "500" : "400";

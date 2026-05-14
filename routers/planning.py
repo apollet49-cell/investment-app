@@ -33,11 +33,13 @@ async def fire(
     monthly_savings: float = Query(1000, ge=0, le=100000),
     expected_return_pct: float = Query(7.0, ge=-50, le=50),
     target_multiplier: float = Query(25.0, ge=10, le=50),
+    inflation_pct: float = Query(2.0, ge=-10, le=20),
     current: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Years-to-financial-independence given current portfolio + monthly
-    savings + expected return + monthly expenses."""
+    """Years-to-financial-independence in REAL (inflation-adjusted) terms.
+    The expected_return_pct is treated as a nominal rate; we deflate by
+    inflation_pct so the FIRE answer is in today's purchasing power."""
     rows = db.query(Investment).filter(Investment.user_id == current.id).all()
     current_portfolio = sum(r.current_value or 0 for r in rows)
     return compute_fire(
@@ -46,6 +48,7 @@ async def fire(
         monthly_savings=monthly_savings,
         expected_return_pct=expected_return_pct,
         target_multiplier=target_multiplier,
+        inflation_pct=inflation_pct,
     )
 
 

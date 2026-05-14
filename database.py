@@ -113,3 +113,13 @@ def init_db() -> None:
         # Constraint may already exist or table not present — log but don't abort boot.
         import logging
         logging.getLogger("database").warning("snapshot dedupe/constraint skipped: %s", e)
+
+    # Composite index for /dashboard/performance (WHERE user_id ORDER BY date).
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_tx_user_date "
+                "ON transactions (user_id, transaction_date)"
+            ))
+    except Exception:
+        pass  # index may already exist

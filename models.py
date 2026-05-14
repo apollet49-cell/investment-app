@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     LargeBinary,
     String,
@@ -144,6 +145,11 @@ class Transaction(Base):
     transactions table is the detailed source of truth for tax accounting
     while the Investment row stays as a fast summary."""
     __tablename__ = "transactions"
+    __table_args__ = (
+        # Dashboard /performance scans WHERE user_id=? ORDER BY transaction_date.
+        # A composite index avoids a sort for the common XIRR / TWR queries.
+        Index("ix_tx_user_date", "user_id", "transaction_date"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     investment_id: Mapped[int] = mapped_column(Integer, ForeignKey("investments.id", ondelete="CASCADE"), index=True, nullable=False)

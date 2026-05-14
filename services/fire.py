@@ -16,6 +16,7 @@ def compute(
     monthly_savings: float,
     expected_return_pct: float = 7.0,
     target_multiplier: float = 25.0,
+    inflation_pct: float = 2.0,
 ) -> dict:
     if monthly_expenses < 0 or monthly_savings < 0 or current_portfolio < 0:
         return {"error": "negative inputs are not allowed"}
@@ -23,7 +24,12 @@ def compute(
     annual_expenses = monthly_expenses * 12
     annual_savings = monthly_savings * 12
     target_portfolio = target_multiplier * annual_expenses
-    r = expected_return_pct / 100.0
+    # Work in REAL returns so the FIRE answer is in today's purchasing power.
+    # Otherwise a 30-year horizon at 7% nominal + 2% inflation overstates
+    # progress by ~80%. Real return = (1+nominal)/(1+inflation) − 1.
+    nominal_r = expected_return_pct / 100.0
+    inflation_r = inflation_pct / 100.0
+    r = (1 + nominal_r) / (1 + inflation_r) - 1 if inflation_r > -1 else nominal_r
     progress_pct = round((current_portfolio / target_portfolio) * 100, 1) if target_portfolio > 0 else 0
 
     if target_portfolio <= 0:
@@ -85,6 +91,8 @@ def compute(
         "annual_expenses": annual_expenses,
         "monthly_savings": monthly_savings,
         "expected_return_pct": expected_return_pct,
+        "inflation_pct": inflation_pct,
+        "real_return_pct": round(r * 100, 2),
         "target_multiplier": target_multiplier,
         "target_portfolio": round(target_portfolio, 2),
         "years_to_fire": years_value,
