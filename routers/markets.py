@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime
 from typing import Optional
 
@@ -10,6 +11,8 @@ from pydantic import BaseModel
 from data.asset_universe import TOP_CRYPTOS, TOP_ETFS, TOP_STOCKS
 from services.market_universe import market_universe
 from services.news import get_news
+
+log = logging.getLogger("markets")
 
 router = APIRouter(prefix="/markets", tags=["markets"])
 
@@ -114,10 +117,14 @@ async def compare(body: CompareRequest) -> dict:
     if not items:
         raise HTTPException(status_code=400, detail="at least one symbol required")
 
+    from services.market_data import market_service
+
     async def _fetch(item: CompareItem):
         try:
-            return await market_universe.get_historical(item.symbol, body.period)
-        except Exception:
+            # get_historical lives on market_service, not market_universe.
+            return await market_service.get_historical(item.symbol, body.period)
+        except Exception as e:
+            log.warning("compare fetch failed for %s: %s", item.symbol, e)
             return None
 
     raw = await asyncio.gather(*(_fetch(i) for i in items))

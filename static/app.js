@@ -138,16 +138,16 @@ const ICONS = {
 
 const SIDEBAR_LINKS = [
   { hash: "#/dashboard",   icon: "dashboard",   labelKey: "nav.dashboard" },
+  { hash: "#/investments", icon: "investments", labelKey: "nav.investments" },
   { hash: "#/markets",     icon: "markets",     labelKey: "nav.markets" },
   { hash: "#/compare",     icon: "compare",     labelKey: "nav.compare" },
   { hash: "#/watchlist",   icon: "watchlist",   labelKey: "nav.watchlist" },
-  { hash: "#/investments", icon: "investments", labelKey: "nav.investments" },
   { hash: "#/calculator",  icon: "calculator",  labelKey: "nav.calculator" },
   { hash: "#/scenarios",   icon: "scenarios",   labelKey: "nav.scenarios" },
   { hash: "#/chat",        icon: "chat",        labelKey: "nav.chat" },
-  { hash: "#/reports",     icon: "reports",     labelKey: "nav.reports" },
   { hash: "#/tax",         icon: "tax",         labelKey: "nav.tax" },
   { hash: "#/fire",        icon: "fire",        labelKey: "nav.fire" },
+  { hash: "#/reports",     icon: "reports",     labelKey: "nav.reports" },
 ];
 
 // Sidebar items rendered just above the language/theme/logout footer.
