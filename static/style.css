@@ -338,6 +338,36 @@ a { color: var(--primary-strong); }
 .summary-card .sub.positive { color: var(--success); }
 .summary-card .sub.negative { color: var(--danger); }
 
+/* Risk gauge — horizontal track with a vertical marker at the score's position.
+   The track is a green→amber→red gradient so the marker's location alone
+   communicates the level even before reading the number. */
+.risk-gauge {
+  position: relative;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, var(--success) 0%, var(--warning) 50%, var(--danger) 100%);
+  margin-top: 10px;
+  overflow: visible;
+}
+.risk-gauge .marker {
+  position: absolute;
+  top: -3px;
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--text);
+  transform: translateX(-50%);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.risk-gauge-scale {
+  display: flex; justify-content: space-between;
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .chart-grid {
   display: grid;
   gap: 16px;

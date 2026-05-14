@@ -69,6 +69,7 @@ export async function render(root) {
       ${bp
         ? bestPerformerCard(t("dashboard.best_performer"), bp.name, pct(bp.roi_pct), bpRoiClass)
         : summaryCard(t("dashboard.best_performer"), "—")}
+      ${riskCard(div)}
       ${diversificationCard(div)}
       ${carbonCard(data.carbon)}
     </div>
@@ -148,15 +149,37 @@ function bestPerformerCard(label, name, roiText, roiClass) {
   </div>`;
 }
 
+function riskCard(div) {
+  const label = t("dashboard.risk_score");
+  if (!div || div.risk_score == null) return summaryCard(label, "—");
+  const risk = div.risk_score;
+  const clamped = Math.max(0, Math.min(100, risk));
+  const tone = risk <= 25 ? "var(--success)" : risk <= 60 ? "var(--warning)" : "var(--danger)";
+  const tier = risk <= 25 ? t("dashboard.risk_low")
+             : risk <= 60 ? t("dashboard.risk_medium")
+             : t("dashboard.risk_high");
+  const factors = (div.risk_factors || []).slice(0, 2)
+    .map(f => `<div style="font-size:11px;color:var(--text-muted);padding:2px 0">• ${escapeHtml(f)}</div>`)
+    .join("");
+  return `<div class="summary-card">
+    <div class="label">${label}</div>
+    <div class="value" style="color:${tone};display:flex;align-items:baseline;gap:6px">
+      ${risk.toFixed(0)}<span style="font-size:12px;color:var(--text-muted);font-family:var(--font-sans)"> / 100</span>
+      <span style="font-size:12px;color:${tone};font-family:var(--font-sans);margin-left:4px">${tier}</span>
+    </div>
+    <div class="risk-gauge"><div class="marker" style="left:${clamped}%"></div></div>
+    <div class="risk-gauge-scale"><span>${t("dashboard.risk_low")}</span><span>${t("dashboard.risk_medium")}</span><span>${t("dashboard.risk_high")}</span></div>
+    ${factors ? `<div style="margin-top:8px">${factors}</div>` : ""}
+  </div>`;
+}
+
 function diversificationCard(div) {
   const label = t("dashboard.diversification");
   if (!div || div.score == null) {
     return summaryCard(label, "—");
   }
   const score = div.score;
-  const risk = div.risk_score;
   const color = score >= 75 ? "var(--success)" : score >= 50 ? "var(--warning)" : "var(--danger)";
-  const riskColor = risk == null ? "var(--text-muted)" : (risk <= 25 ? "var(--success)" : risk <= 50 ? "var(--warning)" : "var(--danger)");
   const id = `div-card-${Math.random().toString(36).slice(2, 8)}`;
   const topRows = (div.top_positions || []).slice(0, 5).map(p => `
     <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
@@ -188,7 +211,6 @@ function diversificationCard(div) {
     </div>
     <div class="value" style="color:${color}">${score.toFixed(0)}<span style="font-size:14px;color:var(--text-muted);font-family:var(--font-sans)"> / 100</span></div>
     <div class="sub" style="font-size:11px;margin-top:6px">${escapeHtml(div.message || "")}</div>
-    ${risk != null ? `<div class="sub" style="font-size:11px;margin-top:4px"><span style="color:var(--text-muted)">${t("dashboard.risk_score")}:</span> <strong style="color:${riskColor}">${risk.toFixed(0)} / 100</strong></div>` : ""}
     <div class="div-breakdown" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
       ${riskFactors ? `<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px">${t("dashboard.risk_factors")}</div>${riskFactors}<div style="height:8px"></div>` : ""}
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px">Top positions</div>

@@ -109,7 +109,7 @@ function draw(root) {
     const sum = inputsSum(root);
     const el = document.getElementById("sum-pct");
     el.textContent = `${sum.toFixed(1)}%`;
-    el.style.color = Math.abs(sum - 100) < 0.5 ? "var(--accent-pos, #2f7a3f)" : "var(--text-muted)";
+    el.style.color = Math.abs(sum - 100) < 0.5 ? "var(--success)" : "var(--text-muted)";
   };
   const updateMode = () => {
     const c = parseFloat(document.getElementById("contribution").value || "0");
