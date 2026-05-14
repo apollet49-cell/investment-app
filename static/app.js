@@ -106,7 +106,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "39";
+const VIEW_VERSION = "40";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -150,22 +150,28 @@ const ICONS = {
   logout:      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
 };
 
+// FIRE/FR-focused navigation. Patrimoine pages first, then planning, then
+// auxiliary tools. Compare and Calculator removed from the sidebar — still
+// reachable by direct URL (#/compare, #/calculator) for power users, but
+// not surfaced to keep the menu coherent. Markets stays as the asset
+// browser (more useful than Compare for the FIRE-tracker positioning).
 const SIDEBAR_LINKS = [
   { hash: "#/dashboard",   icon: "dashboard",   labelKey: "nav.dashboard" },
   { hash: "#/investments", icon: "investments", labelKey: "nav.investments" },
-  { hash: "#/markets",     icon: "markets",     labelKey: "nav.markets" },
-  { hash: "#/compare",     icon: "compare",     labelKey: "nav.compare" },
-  { hash: "#/watchlist",   icon: "watchlist",   labelKey: "nav.watchlist" },
-  { hash: "#/calculator",  icon: "calculator",  labelKey: "nav.calculator" },
-  { hash: "#/scenarios",   icon: "scenarios",   labelKey: "nav.scenarios" },
   { hash: "#/transactions",icon: "transactions",labelKey: "nav.transactions" },
+  { hash: "#/markets",     icon: "markets",     labelKey: "nav.markets" },
+  { hash: "#/watchlist",   icon: "watchlist",   labelKey: "nav.watchlist" },
+  { hash: "#/fire",        icon: "fire",        labelKey: "nav.fire" },
+  { hash: "#/tax",         icon: "tax",         labelKey: "nav.tax" },
+  { hash: "#/scenarios",   icon: "scenarios",   labelKey: "nav.scenarios" },
   { hash: "#/plans",       icon: "plans",       labelKey: "nav.plans" },
   { hash: "#/rebalance",   icon: "rebalance",   labelKey: "nav.rebalance" },
   { hash: "#/chat",        icon: "chat",        labelKey: "nav.chat" },
-  { hash: "#/tax",         icon: "tax",         labelKey: "nav.tax" },
-  { hash: "#/fire",        icon: "fire",        labelKey: "nav.fire" },
   { hash: "#/reports",     icon: "reports",     labelKey: "nav.reports" },
 ];
+// Routes that still exist (direct URL works) but are NOT shown in the sidebar.
+// Keeping them in ROUTES means /#compare or /#calculator continues to load if
+// someone has a bookmark or hits the URL directly.
 
 // Sidebar items rendered just above the language/theme/logout footer.
 // Visually separated to give Settings its own "preferences" zone.
@@ -228,18 +234,32 @@ function renderAuthForm(mode) {
   const isLogin = mode === "login";
   const c = document.getElementById("auth-container");
   c.innerHTML = `
-    <div class="auth-card">
-      <h2>${t(isLogin ? "auth.login_title" : "auth.register_title")}</h2>
-      <p class="subtitle">${t(isLogin ? "auth.login_subtitle" : "auth.register_subtitle")}</p>
-      <form id="auth-form">
-        ${isLogin ? "" : `<div class="field"><label>${t("auth.name")}</label><input name="name" required/></div>`}
-        <div class="field"><label>${t("auth.email")}</label><input name="email" type="email" required/></div>
-        <div class="field"><label>${t("auth.password")}</label><input name="password" type="password" minlength="6" required/></div>
-        <button class="btn btn-primary btn-block" type="submit">${t(isLogin ? "auth.sign_in" : "auth.create_account")}</button>
-      </form>
-      <div class="switch-link">
-        ${isLogin ? t("auth.no_account") : t("auth.have_account")}
-        <a id="switch-mode">${isLogin ? t("auth.register_link") : t("auth.login_link")}</a>
+    <div class="landing">
+      <div class="landing-hero">
+        <div class="landing-eyebrow">${t("landing.eyebrow")}</div>
+        <h1 class="landing-title">${t("landing.title")}</h1>
+        <p class="landing-subtitle">${t("landing.subtitle")}</p>
+        <ul class="landing-bullets">
+          <li>${t("landing.bullet_fire")}</li>
+          <li>${t("landing.bullet_tax")}</li>
+          <li>${t("landing.bullet_xirr")}</li>
+          <li>${t("landing.bullet_immo")}</li>
+        </ul>
+      </div>
+      <div class="auth-card">
+        <h2>${t(isLogin ? "auth.login_title" : "auth.register_title")}</h2>
+        <p class="subtitle">${t(isLogin ? "auth.login_subtitle" : "auth.register_subtitle")}</p>
+        <form id="auth-form">
+          ${isLogin ? "" : `<div class="field"><label>${t("auth.name")}</label><input name="name" required/></div>`}
+          <div class="field"><label>${t("auth.email")}</label><input name="email" type="email" required/></div>
+          <div class="field"><label>${t("auth.password")}</label><input name="password" type="password" minlength="6" required/></div>
+          <button class="btn btn-primary btn-block" type="submit">${t(isLogin ? "auth.sign_in" : "auth.create_account")}</button>
+        </form>
+        <div class="switch-link">
+          ${isLogin ? t("auth.no_account") : t("auth.have_account")}
+          <a id="switch-mode">${isLogin ? t("auth.register_link") : t("auth.login_link")}</a>
+        </div>
+        <div class="landing-demo-hint">${t("landing.demo_hint")}</div>
       </div>
     </div>`;
   document.getElementById("switch-mode").onclick = () => renderAuthForm(isLogin ? "register" : "login");

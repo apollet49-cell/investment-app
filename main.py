@@ -11,6 +11,20 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from database import init_db
+from settings import settings as app_settings
+
+# Sentry: initialise BEFORE the FastAPI app so its middleware catches every
+# unhandled exception. If SENTRY_DSN is empty, the SDK is a no-op.
+if app_settings.SENTRY_DSN:
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=app_settings.SENTRY_DSN,
+        environment=app_settings.SENTRY_ENV,
+        traces_sample_rate=app_settings.SENTRY_TRACES_SAMPLE_RATE,
+        # Don't send PII (user emails) by default; flip on once you have
+        # a data-retention policy reviewed.
+        send_default_pii=False,
+    )
 from routers import (
     alerts as alerts_router,
     chatbot as chatbot_router,
@@ -31,7 +45,7 @@ from routers import (
 )
 from routers import calculator as calculator_router
 from auth import router as auth_router
-from settings import settings as app_settings  # noqa: F401  (forces validation)
+# app_settings imported above for Sentry; kept here as documentation.
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s | %(message)s")
 log = logging.getLogger("investment_app")
