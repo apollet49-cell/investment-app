@@ -139,6 +139,11 @@ const SIDEBAR_LINKS = [
   { hash: "#/scenarios",   icon: "scenarios",   labelKey: "nav.scenarios" },
   { hash: "#/chat",        icon: "chat",        labelKey: "nav.chat" },
   { hash: "#/reports",     icon: "reports",     labelKey: "nav.reports" },
+];
+
+// Sidebar items rendered just above the language/theme/logout footer.
+// Visually separated to give Settings its own "preferences" zone.
+const SIDEBAR_BOTTOM_LINKS = [
   { hash: "#/settings",    icon: "settings",    labelKey: "nav.settings" },
 ];
 
@@ -248,12 +253,15 @@ function logout() {
 
 // ---------- App shell ----------
 function buildSidebar() {
-  const nav = document.getElementById("sidebar-nav");
-  nav.innerHTML = SIDEBAR_LINKS.map(l => `
+  const renderLinks = (links) => links.map(l => `
     <a class="sidebar-link" data-hash="${l.hash}" href="${l.hash}">
       <span class="ico">${ICONS[l.icon]}</span><span class="lbl">${t(l.labelKey)}</span>
     </a>
   `).join("");
+  const nav = document.getElementById("sidebar-nav");
+  nav.innerHTML = renderLinks(SIDEBAR_LINKS);
+  const navBottom = document.getElementById("sidebar-nav-bottom");
+  if (navBottom) navBottom.innerHTML = renderLinks(SIDEBAR_BOTTOM_LINKS);
   // Update the theme toggle + logout button icons too (they live in the footer
   // and aren't otherwise regenerated, so set them once here on first build).
   const tt = document.getElementById("theme-toggle");

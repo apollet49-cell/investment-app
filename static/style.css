@@ -204,8 +204,16 @@ a { color: var(--primary-strong); }
 .sidebar-link .ico svg { width: 18px; height: 18px; display: block; }
 .sidebar-link.active .ico { opacity: 1; }
 .sidebar-link.active .ico svg { stroke: var(--primary); }
+/* Bottom nav (just Settings) sits between the scrolling main nav and the
+   footer, with a thin separator to mark it as a different zone. */
+.sidebar-nav-bottom {
+  padding: 6px 12px 4px;
+  display: flex; flex-direction: column; gap: 1px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
 .sidebar-footer {
-  padding: 14px 18px 4px;
+  padding: 12px 18px 4px;
   display: flex; gap: 6px; align-items: center; flex-wrap: nowrap;
   border-top: 1px solid var(--border);
 }
