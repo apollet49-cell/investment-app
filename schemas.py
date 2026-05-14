@@ -114,6 +114,12 @@ class InvestmentOut(InvestmentBase):
     user_id: int
     created_at: datetime
     roi_pct: float = 0.0
+    # Override the gt=0 constraint from InvestmentBase: when SERIALISING
+    # existing rows we tolerate edge data (e.g. inherited real-estate with
+    # amount_invested=0, or legacy rows from older schemas). Validation on
+    # NEW investments still runs through InvestmentCreate which keeps gt=0.
+    amount_invested: float
+    current_value: float
 
 
 class CSVImportResult(BaseModel):

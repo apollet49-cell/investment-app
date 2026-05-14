@@ -196,8 +196,13 @@ async function loadFireYears(isCancelled) {
   const sEl = document.getElementById("fire-sub");
   if (!yEl || !sEl) return;
   try {
-    // Conservative defaults — user can fine-tune on the FIRE page
-    const data = await API.request("/planning/fire?monthly_expenses=2500&monthly_savings=1500&expected_return_pct=7&target_multiplier=25");
+    // Defaults expressed in the user's currency (€2500/€1500 for EUR users,
+    // $2500/$1500 for USD users). We convert to USD before posting since the
+    // backend works in USD. state.fxRate is USD→user.currency, so we divide.
+    const fx = state.fxRate || 1.0;
+    const expensesUsd = Math.round(2500 / fx);
+    const savingsUsd = Math.round(1500 / fx);
+    const data = await API.request(`/planning/fire?monthly_expenses=${expensesUsd}&monthly_savings=${savingsUsd}&expected_return_pct=7&target_multiplier=25`);
     if (isCancelled()) return;
     if (data.already_fire) {
       yEl.textContent = "🎉";

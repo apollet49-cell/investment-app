@@ -4,7 +4,7 @@ Grouped under /planning since they all answer "what if?" / "how do I get
 there?" questions rather than reporting current state."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from auth import get_current_user
@@ -49,24 +49,25 @@ async def fire(
     )
 
 
+from pydantic import BaseModel as _BaseModel
+from pydantic import Field as _Field
+
+
+class RebalanceRequest(_BaseModel):
+    target_by_type: dict[str, float] = _Field(default_factory=dict)
+    new_contribution: float = _Field(default=0, ge=0)
+
+
 @router.post("/rebalance")
 async def rebalance(
-    payload: dict = Body(...),
+    payload: RebalanceRequest,
     current: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
     """Body: `{target_by_type: {type: pct}, new_contribution: number?}`.
     Returns drift per type + buy/sell actions to converge."""
-    target = payload.get("target_by_type", {}) or {}
-    # Coerce values to float, ignore zero/empty weights
-    target_clean: dict[str, float] = {}
-    for k, v in target.items():
-        try:
-            f = float(v)
-        except (TypeError, ValueError):
-            continue
-        if f > 0:
-            target_clean[k] = f
-    new_contribution = float(payload.get("new_contribution") or 0)
+    # Drop non-positive weights so the service's normalisation only divides
+    # by a sensible target_sum.
+    target_clean = {k: v for k, v in payload.target_by_type.items() if v > 0}
     rows = db.query(Investment).filter(Investment.user_id == current.id).all()
-    return compute_rebalancing(rows, target_by_type=target_clean, new_contribution=new_contribution)
+    return compute_rebalancing(rows, target_by_type=target_clean, new_contribution=payload.new_contribution)

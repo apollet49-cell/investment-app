@@ -356,13 +356,19 @@ async def import_csv(
                 v = (row.get(key) or "").strip()
                 return v or None
 
+            amt = float(row["amount_invested"])
+            cur = float(row["current_value"])
+            if amt <= 0:
+                raise ValueError(f"amount_invested must be > 0 (got {amt})")
+            if cur < 0:
+                raise ValueError(f"current_value cannot be negative (got {cur})")
             inv = Investment(
                 user_id=current.id,
                 name=row["name"].strip(),
                 type=inv_type,
                 symbol=_opt_str("symbol"),
-                amount_invested=float(row["amount_invested"]),
-                current_value=float(row["current_value"]),
+                amount_invested=amt,
+                current_value=cur,
                 purchase_date=_parse_date(row["purchase_date"]),
                 notes=_opt_str("notes"),
                 quantity=_opt_float("quantity"),
@@ -391,13 +397,21 @@ async def import_csv(
 
 
 def _parse_date(s: str) -> date:
+    """Accept ISO and unambiguous date formats. We avoid the dd/mm vs mm/dd
+    ambiguity by NOT supporting either with separator '/' — users should
+    re-format to ISO (YYYY-MM-DD) or use '.' / '-' which we treat as
+    European (day-first). This is intentional: a CSV with '01/02/2024'
+    silently parsed as 1-Feb in one locale and 2-Jan in another is a worse
+    failure mode than rejecting the import."""
     s = s.strip()
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"):
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d.%m.%Y", "%d-%m-%Y"):
         try:
             return datetime.strptime(s, fmt).date()
         except ValueError:
             continue
-    raise ValueError(f"unrecognised date format: {s}")
+    raise ValueError(
+        f"unrecognised date format: {s!r} (use YYYY-MM-DD, or DD.MM.YYYY / DD-MM-YYYY)"
+    )
 
 
 @router.post("/seed-demo")

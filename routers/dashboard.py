@@ -100,11 +100,15 @@ async def summary(current: User = Depends(get_current_user), db: Session = Depen
             total += value_at_month
         portfolio_over_time.append({"date": month_date.isoformat(), "value": round(total, 2)})
 
+    # Skip months where prev value was 0 (e.g. before the user's first
+    # purchase) — those would show as misleading flat "0.0%" bars.
     monthly_returns: list[dict[str, float | str]] = []
     for i in range(1, len(portfolio_over_time)):
         prev = portfolio_over_time[i - 1]["value"]
         curr = portfolio_over_time[i]["value"]
-        ret = ((curr - prev) / prev * 100.0) if prev > 0 else 0.0
+        if prev <= 0:
+            continue
+        ret = (curr - prev) / prev * 100.0
         monthly_returns.append({"month": portfolio_over_time[i]["date"], "return_pct": round(ret, 2)})
 
     triggered = evaluate_alerts(db, current)

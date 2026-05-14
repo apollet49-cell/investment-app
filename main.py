@@ -121,8 +121,16 @@ app = FastAPI(
 )
 
 # CORS — explicit allowlist (wildcard with credentials is invalid per spec).
-# Configure via the CORS_ALLOWED_ORIGINS env var on Render.
+# Configure via the CORS_ALLOWED_ORIGINS env var on Render. An empty env value
+# falls back to localhost + the deployed origin so misconfig doesn't block
+# every cross-origin request.
+_DEFAULT_ORIGINS = [
+    "http://localhost:8000", "http://127.0.0.1:8000",
+    "https://investment-app-kud9.onrender.com",
+]
 _allowed_origins = [o.strip() for o in app_settings.CORS_ALLOWED_ORIGINS.split(",") if o.strip()]
+if not _allowed_origins:
+    _allowed_origins = _DEFAULT_ORIGINS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
