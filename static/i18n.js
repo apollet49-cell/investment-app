@@ -4,8 +4,16 @@
 const en = {
   app: { title: "Investment App", logout: "Logout" },
   nav: {
-    dashboard: "Dashboard", markets: "Markets", watchlist: "Watchlist", investments: "Investments", calculator: "Calculator",
+    dashboard: "Dashboard", markets: "Markets", compare: "Compare", watchlist: "Watchlist", investments: "Investments", calculator: "Calculator",
     scenarios: "Scenarios", chat: "AI Advisor", reports: "Reports", settings: "Settings",
+  },
+  compare: {
+    title: "Asset comparator",
+    subtitle: "Pick 2 to 5 assets and watch their performance side by side, normalised to 100 at the start.",
+    search_placeholder: "Add an asset (AAPL, Bitcoin, VOO…)",
+    base_100: "Base 100",
+    empty: "Add at least one asset to start comparing.",
+    cols: { asset: "Asset", start_price: "Start", end_price: "End", change: "Change" },
   },
   watchlist: {
     title: "Watchlist", items: "items",
@@ -58,6 +66,7 @@ const en = {
     title: "Dashboard",
     total_invested: "Total invested", current_value: "Current value",
     total_roi: "Total ROI", best_performer: "Best performer",
+    diversification: "Diversification",
     portfolio_over_time: "Portfolio value over time",
     asset_allocation: "Asset allocation",
     monthly_returns: "Monthly returns",
@@ -143,6 +152,20 @@ const en = {
       title: "Startup details",
       annual_yield: "Expected annual yield",
     },
+    whatif: {
+      title: "What if I'd invested elsewhere?",
+      button: "What if?",
+      subtitle: "Simulate the same {amount} invested on {date} in a different asset.",
+      custom: "Or pick another asset",
+      search_placeholder: "Search any ticker…",
+      simulating: "Simulating…",
+      your_actual: "Your actual investment",
+      alternative: "Alternative",
+      current_value: "Current value",
+      gain: "Gain",
+      delta: "Difference vs your actual",
+      basis: "Would hold {qty} units bought at ${buy_price} on {date}",
+    },
   },
   calculator: {
     title: "Financial calculator",
@@ -222,8 +245,16 @@ const en = {
 const fr = {
   app: { title: "Application d'investissement", logout: "Déconnexion" },
   nav: {
-    dashboard: "Tableau de bord", markets: "Marchés", watchlist: "Liste de suivi", investments: "Investissements", calculator: "Calculatrice",
+    dashboard: "Tableau de bord", markets: "Marchés", compare: "Comparateur", watchlist: "Liste de suivi", investments: "Investissements", calculator: "Calculatrice",
     scenarios: "Scénarios", chat: "Conseiller IA", reports: "Rapports", settings: "Paramètres",
+  },
+  compare: {
+    title: "Comparateur d'actifs",
+    subtitle: "Sélectionne 2 à 5 actifs et observe leur performance comparée, normalisée à 100 au début.",
+    search_placeholder: "Ajouter un actif (AAPL, Bitcoin, VOO…)",
+    base_100: "Base 100",
+    empty: "Ajoute au moins un actif pour démarrer la comparaison.",
+    cols: { asset: "Actif", start_price: "Début", end_price: "Fin", change: "Variation" },
   },
   watchlist: {
     title: "Liste de suivi", items: "éléments",
@@ -276,6 +307,7 @@ const fr = {
     title: "Tableau de bord",
     total_invested: "Total investi", current_value: "Valeur actuelle",
     total_roi: "ROI total", best_performer: "Meilleure performance",
+    diversification: "Diversification",
     portfolio_over_time: "Valeur du portefeuille dans le temps",
     asset_allocation: "Répartition d'actifs",
     monthly_returns: "Rendements mensuels",
@@ -361,6 +393,20 @@ const fr = {
       title: "Startup",
       annual_yield: "Rendement annuel attendu",
     },
+    whatif: {
+      title: "Et si j'avais investi ailleurs ?",
+      button: "Et si ?",
+      subtitle: "Simule la même somme de {amount} investie le {date} dans un autre actif.",
+      custom: "Ou choisis un autre actif",
+      search_placeholder: "Cherche un ticker…",
+      simulating: "Simulation…",
+      your_actual: "Ton investissement réel",
+      alternative: "Alternative",
+      current_value: "Valeur actuelle",
+      gain: "Gain",
+      delta: "Écart vs ton investissement réel",
+      basis: "Aurait détenu {qty} unités achetées à ${buy_price} le {date}",
+    },
   },
   calculator: {
     title: "Calculatrice financière",
@@ -440,8 +486,16 @@ const fr = {
 const zh = {
   app: { title: "投资分析应用", logout: "退出" },
   nav: {
-    dashboard: "仪表盘", markets: "市场", watchlist: "关注列表", investments: "投资", calculator: "计算器",
+    dashboard: "仪表盘", markets: "市场", compare: "对比", watchlist: "关注列表", investments: "投资", calculator: "计算器",
     scenarios: "情景规划", chat: "AI 顾问", reports: "报告", settings: "设置",
+  },
+  compare: {
+    title: "资产对比",
+    subtitle: "选择 2 到 5 个资产，以起始 100 为基准进行表现对比。",
+    search_placeholder: "添加资产（AAPL、Bitcoin、VOO…）",
+    base_100: "基准 100",
+    empty: "请添加至少一个资产开始对比。",
+    cols: { asset: "资产", start_price: "起始", end_price: "结束", change: "变动" },
   },
   watchlist: {
     title: "关注列表", items: "项",
@@ -494,6 +548,7 @@ const zh = {
     title: "仪表盘",
     total_invested: "总投入", current_value: "当前价值",
     total_roi: "总收益率", best_performer: "表现最佳",
+    diversification: "多样化",
     portfolio_over_time: "组合价值走势",
     asset_allocation: "资产配置",
     monthly_returns: "月度回报",
@@ -578,6 +633,20 @@ const zh = {
     startup: {
       title: "初创公司",
       annual_yield: "预期年化收益率",
+    },
+    whatif: {
+      title: "如果当时投了别的呢？",
+      button: "如果？",
+      subtitle: "用同样的 {amount} 在 {date} 投资其他资产的模拟结果。",
+      custom: "或选择其他资产",
+      search_placeholder: "搜索代码…",
+      simulating: "模拟中…",
+      your_actual: "你的实际投资",
+      alternative: "替代方案",
+      current_value: "当前价值",
+      gain: "收益",
+      delta: "与实际投资的差距",
+      basis: "将持有 {qty} 单位，于 {date} 以 ${buy_price} 购入",
     },
   },
   calculator: {

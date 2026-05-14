@@ -103,6 +103,7 @@ export function pct(value, signed = true) {
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import("/static/views/dashboard.js") },
   { hash: "#/markets", titleKey: "markets.title", load: () => import("/static/views/markets.js") },
+  { hash: "#/compare", titleKey: "compare.title", load: () => import("/static/views/compare.js") },
   { hash: "#/watchlist", titleKey: "watchlist.title", load: () => import("/static/views/watchlist.js") },
   { hash: "#/investments", titleKey: "investments.title", load: () => import("/static/views/investments.js") },
   { hash: "#/calculator", titleKey: "calculator.title", load: () => import("/static/views/calculator.js") },
@@ -124,6 +125,7 @@ const ICONS = {
   scenarios:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="15 7 21 7 21 13"/></svg>`,
   chat:        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.2L3 21l1.8-6.4A8 8 0 1 1 21 12z"/></svg>`,
   reports:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>`,
+  compare:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><path d="M3 6 H21"/><path d="M3 6 L7 10"/><path d="M3 6 L7 2"/></svg>`,
   settings:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v3M12 20v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M1 12h3M20 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>`,
   sun:         `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>`,
   moon:        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>`,
@@ -133,6 +135,7 @@ const ICONS = {
 const SIDEBAR_LINKS = [
   { hash: "#/dashboard",   icon: "dashboard",   labelKey: "nav.dashboard" },
   { hash: "#/markets",     icon: "markets",     labelKey: "nav.markets" },
+  { hash: "#/compare",     icon: "compare",     labelKey: "nav.compare" },
   { hash: "#/watchlist",   icon: "watchlist",   labelKey: "nav.watchlist" },
   { hash: "#/investments", icon: "investments", labelKey: "nav.investments" },
   { hash: "#/calculator",  icon: "calculator",  labelKey: "nav.calculator" },

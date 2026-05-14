@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query
+from pydantic import BaseModel
 
 from data.asset_universe import TOP_CRYPTOS, TOP_ETFS, TOP_STOCKS
 from services.market_universe import market_universe

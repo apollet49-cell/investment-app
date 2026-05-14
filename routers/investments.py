@@ -6,6 +6,7 @@ from datetime import date, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from auth import get_current_user
@@ -151,6 +152,78 @@ async def delete_investment(
     db.delete(inv)
     db.commit()
     return Response(status_code=204)
+
+
+class WhatIfRequest(BaseModel):
+    symbol: str
+    asset_type: str = "stock"
+
+
+@router.post("/{inv_id}/what-if")
+async def what_if(
+    inv_id: int,
+    payload: WhatIfRequest,
+    current: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Retroactive 'what if I'd invested the same amount in X at the same date?'
+    Returns the alternative current value and a delta vs the original investment."""
+    from services.market_data import market_service
+    from services.market_universe import market_universe
+
+    inv = db.get(Investment, inv_id)
+    if not inv or inv.user_id != current.id:
+        raise HTTPException(status_code=404, detail="investment not found")
+
+    # Historical price of the alternative at the original purchase date
+    hist = await market_universe.get_price_on_date(payload.symbol, inv.purchase_date, payload.asset_type)
+    if not hist or not hist.get("price"):
+        raise HTTPException(status_code=404, detail=f"no historical price for {payload.symbol} on {inv.purchase_date}")
+
+    # Current price of the alternative
+    if payload.asset_type == "crypto" and "-" not in payload.symbol:
+        cur = await market_service.get_crypto_price(payload.symbol.lower())
+        current_price = cur.get("price_usd") if cur else None
+    else:
+        cur = await market_service.get_stock_price(payload.symbol)
+        current_price = cur.get("price") if cur else None
+
+    if not current_price:
+        raise HTTPException(status_code=404, detail=f"no current price for {payload.symbol}")
+
+    alt_qty = inv.amount_invested / hist["price"]
+    alt_current = alt_qty * current_price
+    alt_gain = alt_current - inv.amount_invested
+    alt_gain_pct = (alt_gain / inv.amount_invested * 100.0) if inv.amount_invested else 0.0
+
+    orig_gain = inv.current_value - inv.amount_invested
+    orig_gain_pct = (orig_gain / inv.amount_invested * 100.0) if inv.amount_invested else 0.0
+
+    return {
+        "original": {
+            "name": inv.name,
+            "symbol": inv.symbol,
+            "amount_invested": inv.amount_invested,
+            "current_value": inv.current_value,
+            "gain": round(orig_gain, 2),
+            "gain_pct": round(orig_gain_pct, 2),
+        },
+        "alternative": {
+            "symbol": payload.symbol,
+            "asset_type": payload.asset_type,
+            "purchase_price": round(hist["price"], 4),
+            "purchase_date_used": hist.get("date_actual"),
+            "current_price": round(current_price, 4),
+            "implied_quantity": round(alt_qty, 8),
+            "current_value": round(alt_current, 2),
+            "gain": round(alt_gain, 2),
+            "gain_pct": round(alt_gain_pct, 2),
+        },
+        "delta": {
+            "value": round(alt_current - inv.current_value, 2),
+            "pct_points": round(alt_gain_pct - orig_gain_pct, 2),
+        },
+    }
 
 
 @router.post("/estimate-value", response_model=PropertyValuationResponse)

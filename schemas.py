@@ -226,6 +226,16 @@ class AlertOut(BaseModel):
 
 
 # ---------- Dashboard ----------
+class DiversificationScore(BaseModel):
+    score: Optional[float] = None
+    position_score: Optional[float] = None
+    type_score: Optional[float] = None
+    positions: int = 0
+    top_positions: list[dict[str, Any]] = []
+    type_distribution: dict[str, float] = {}
+    message: Optional[str] = None
+
+
 class DashboardSummary(BaseModel):
     total_invested: float
     current_value: float
@@ -235,6 +245,7 @@ class DashboardSummary(BaseModel):
     portfolio_over_time: list[dict[str, Any]]  # [{date, value}]
     monthly_returns: list[dict[str, Any]]  # [{month, return_pct}]
     triggered_alerts: list[AlertOut] = []
+    diversification: Optional[DiversificationScore] = None
 
 
 # ---------- Market data ----------

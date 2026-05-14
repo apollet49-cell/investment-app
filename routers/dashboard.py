@@ -11,6 +11,7 @@ from database import get_db
 from models import Investment, User
 from schemas import DashboardSummary, InvestmentOut
 from services.alerts_engine import evaluate_alerts
+from services.diversification import compute_score as compute_diversification
 from services.live_value import refresh_current_values
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -91,6 +92,7 @@ async def summary(current: User = Depends(get_current_user), db: Session = Depen
         monthly_returns.append({"month": portfolio_over_time[i]["date"], "return_pct": round(ret, 2)})
 
     triggered = evaluate_alerts(db, current)
+    diversification = compute_diversification(rows)
 
     return DashboardSummary(
         total_invested=round(total_invested, 2),
@@ -101,4 +103,5 @@ async def summary(current: User = Depends(get_current_user), db: Session = Depen
         portfolio_over_time=portfolio_over_time,
         monthly_returns=monthly_returns,
         triggered_alerts=triggered,
+        diversification=diversification,
     )

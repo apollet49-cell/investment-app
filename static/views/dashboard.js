@@ -45,6 +45,7 @@ export async function render(root) {
 
   const bp = data.best_performer;
   const bpRoiClass = bp ? (bp.roi_pct >= 0 ? "positive" : "negative") : "";
+  const div = data.diversification;
 
   root.innerHTML = `
     ${alerts}
@@ -55,6 +56,7 @@ export async function render(root) {
       ${bp
         ? bestPerformerCard(t("dashboard.best_performer"), bp.name, pct(bp.roi_pct), bpRoiClass)
         : summaryCard(t("dashboard.best_performer"), "—")}
+      ${diversificationCard(div)}
     </div>
     <div class="chart-grid">
       <div class="card chart-card">
@@ -86,6 +88,18 @@ export async function render(root) {
   buildPortfolioChart(data.portfolio_over_time);
   buildAllocationChart(data.by_type);
   buildMonthlyChart(data.monthly_returns);
+
+  // Wire the diversification card expand/collapse
+  for (const btn of root.querySelectorAll(".div-toggle")) {
+    btn.onclick = () => {
+      const card = document.getElementById(btn.dataset.target);
+      const panel = card?.querySelector(".div-breakdown");
+      if (!panel) return;
+      const show = panel.style.display === "none";
+      panel.style.display = show ? "block" : "none";
+      btn.textContent = show ? "⌃" : "⌄";
+    };
+  }
 }
 
 function summaryCard(label, value, cls = "") {
@@ -97,6 +111,42 @@ function bestPerformerCard(label, name, roiText, roiClass) {
     <div class="label">${label}</div>
     <div class="value compact">${escapeHtml(name)}</div>
     <div class="sub ${roiClass}" style="font-weight:500;font-size:13px;margin-top:4px">${roiText}</div>
+  </div>`;
+}
+
+function diversificationCard(div) {
+  const label = t("dashboard.diversification");
+  if (!div || div.score == null) {
+    return summaryCard(label, "—");
+  }
+  const score = div.score;
+  const color = score >= 75 ? "var(--success)" : score >= 50 ? "var(--warning)" : "var(--danger)";
+  const id = `div-card-${Math.random().toString(36).slice(2, 8)}`;
+  // Render the breakdown collapsed; expanded via click.
+  const topRows = (div.top_positions || []).slice(0, 5).map(p => `
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+      <span style="color:var(--text-muted)">${escapeHtml(p.name)}</span>
+      <strong>${p.weight_pct.toFixed(1)}%</strong>
+    </div>`).join("");
+  const typeRows = Object.entries(div.type_distribution || {}).map(([k, v]) => `
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+      <span style="color:var(--text-muted)">${escapeHtml(t(`investments.types.${k}`) || k)}</span>
+      <strong>${v.toFixed(1)}%</strong>
+    </div>`).join("");
+  return `
+  <div class="summary-card div-card" id="${id}">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div class="label">${label}</div>
+      <button class="div-toggle" data-target="${id}" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:11px">⌄</button>
+    </div>
+    <div class="value" style="color:${color}">${score.toFixed(0)}<span style="font-size:14px;color:var(--text-muted);font-family:var(--font-sans)"> / 100</span></div>
+    <div class="sub" style="font-size:11px;margin-top:6px">${escapeHtml(div.message || "")}</div>
+    <div class="div-breakdown" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px">Top positions</div>
+      ${topRows || '<div style="color:var(--text-muted);font-size:12px">—</div>'}
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin:10px 0 6px">By asset type</div>
+      ${typeRows || '<div style="color:var(--text-muted);font-size:12px">—</div>'}
+    </div>
   </div>`;
 }
 
