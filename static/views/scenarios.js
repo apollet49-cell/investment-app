@@ -130,6 +130,7 @@ function subCard(sub, color) {
 function drawChart(sim) {
   const ctx = document.getElementById("sc-chart");
   if (!ctx || !window.Chart) return;
+  try { state.charts.scenario?.destroy?.(); } catch (_) {}
   state.charts.scenario = new window.Chart(ctx, {
     type: "line",
     data: {

@@ -367,3 +367,20 @@ def _parse_date(s: str) -> date:
         except ValueError:
             continue
     raise ValueError(f"unrecognised date format: {s}")
+
+
+@router.post("/seed-demo")
+async def seed_demo(
+    current: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Populate the current user's account with a realistic demo portfolio
+    (~21 investments across all types, 50+ transactions, DCA plans, alerts,
+    watchlist, 18 months of daily snapshots). Idempotent: re-running wipes
+    the user's existing data first.
+
+    Used by the empty-state "Try with sample portfolio" button so a brand
+    new user can explore the app without manually entering everything."""
+    from services.demo_seed import seed_user
+    result = seed_user(db, current)
+    return {"ok": True, **result}

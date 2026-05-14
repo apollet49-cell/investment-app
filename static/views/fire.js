@@ -115,6 +115,7 @@ function draw(root, data) {
   // Draw the trajectory chart
   if (data.trajectory && data.trajectory.length && window.Chart) {
     const ctx = document.getElementById("fire-chart");
+    try { state.charts.fire?.destroy?.(); } catch (_) {}
     state.charts.fire = new window.Chart(ctx, {
       type: "line",
       data: {

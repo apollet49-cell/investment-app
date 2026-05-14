@@ -148,9 +148,12 @@ async def performance(
     contribs_by_date: dict[date, float] = defaultdict(float)
     for tx in txs:
         amt = float(tx.amount or 0)
-        if tx.type in ("buy", "fee"):
+        # Only buys/sells are external cashflows for the TWR sub-period start
+        # adjustment. Dividends and fees come from inside the portfolio (they
+        # change the snapshot value organically, not via new money in/out).
+        if tx.type == "buy":
             contribs_by_date[tx.transaction_date] += amt
-        elif tx.type in ("sell", "dividend"):
+        elif tx.type == "sell":
             contribs_by_date[tx.transaction_date] -= amt
 
     xirr = compute_xirr_from_transactions(txs, current_value)

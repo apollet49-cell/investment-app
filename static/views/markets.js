@@ -1,6 +1,15 @@
 import { API, state, money, pct, spinner, toast, escapeHtml, onViewCleanup } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
+// Whitelist URL schemes when rendering external links — blocks javascript:/data:
+// vectors that could appear in attacker-controlled market data.
+function safeUrl(u) {
+  if (!u || typeof u !== "string") return "#";
+  const trimmed = u.trim();
+  if (/^(https?:|\/)/i.test(trimmed)) return escapeHtml(trimmed);
+  return "#";
+}
+
 let activeTab = "stocks";
 let cache = { stocks: null, etfs: null, crypto: null };
 let sortKey = { stocks: "market_cap", etfs: "volume", crypto: "market_cap" };
@@ -460,7 +469,7 @@ async function loadDetail(symbol, assetType, period) {
 function renderDetailBody(d, assetType) {
   const body = document.getElementById("detail-body");
   document.getElementById("detail-title").innerHTML =
-    `${d.image_url ? `<img src="${d.image_url}" width="22" style="vertical-align:middle;border-radius:50%;margin-right:8px"/>` : ""}${escapeHtml(d.name || d.symbol)} <span style="color:var(--text-muted);font-size:13px">${escapeHtml(d.symbol)}${d.exchange ? " · " + escapeHtml(d.exchange) : ""}</span>`;
+    `${d.image_url ? `<img src="${safeUrl(d.image_url)}" width="22" style="vertical-align:middle;border-radius:50%;margin-right:8px"/>` : ""}${escapeHtml(d.name || d.symbol)} <span style="color:var(--text-muted);font-size:13px">${escapeHtml(d.symbol)}${d.exchange ? " · " + escapeHtml(d.exchange) : ""}</span>`;
 
   const periods = ["1mo", "3mo", "6mo", "1y", "5y"];
   body.innerHTML = `
@@ -492,7 +501,7 @@ function renderDetailBody(d, assetType) {
     </div>
     <div id="detail-rsi-macd" style="margin-top:8px"></div>
 
-    ${d.summary ? `<div class="card" style="margin-top:14px"><h3>${escapeHtml(d.name || d.symbol)}</h3><p style="color:var(--text-muted)">${escapeHtml(d.summary)}</p>${d.website ? `<a href="${d.website}" target="_blank" rel="noopener">${t("markets.detail.website")} →</a>` : ""}</div>` : ""}
+    ${d.summary ? `<div class="card" style="margin-top:14px"><h3>${escapeHtml(d.name || d.symbol)}</h3><p style="color:var(--text-muted)">${escapeHtml(d.summary)}</p>${d.website ? `<a href="${safeUrl(d.website)}" target="_blank" rel="noopener">${t("markets.detail.website")} →</a>` : ""}</div>` : ""}
 
     <div class="card" style="margin-top:14px">
       <h3>${t("markets.detail.news")}</h3>
@@ -577,7 +586,7 @@ async function loadAssetNews(symbol) {
     if (!res.items.length) { host.innerHTML = `<p style="color:var(--text-muted)">${t("markets.detail.no_news")}</p>`; return; }
     host.innerHTML = res.items.map(n => `
       <div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border)">
-        <a href="${n.link}" target="_blank" rel="noopener"><strong>${escapeHtml(n.title)}</strong></a>
+        <a href="${safeUrl(n.link)}" target="_blank" rel="noopener"><strong>${escapeHtml(n.title)}</strong></a>
         <div style="color:var(--text-muted);font-size:11px;margin:2px 0">${n.published ? new Date(n.published).toLocaleString() : ""} · ${escapeHtml(n.source)}</div>
         <div style="color:var(--text-muted);font-size:13px">${escapeHtml(n.summary)}</div>
       </div>`).join("");

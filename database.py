@@ -63,6 +63,9 @@ def init_db() -> None:
         ("investments", "garden_sqm", "ALTER TABLE investments ADD COLUMN garden_sqm FLOAT"),
         ("investments", "account_type", "ALTER TABLE investments ADD COLUMN account_type VARCHAR(16)"),
         ("users", "target_allocation_json", "ALTER TABLE users ADD COLUMN target_allocation_json TEXT"),
+        # transactions.user_id was added after the table — older deployed DBs
+        # need this backfill to avoid every transaction query 500ing.
+        ("transactions", "user_id", "ALTER TABLE transactions ADD COLUMN user_id INTEGER"),
     ]
     insp = inspect(engine)
     with engine.begin() as conn:

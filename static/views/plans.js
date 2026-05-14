@@ -107,7 +107,7 @@ function openCreateModal(root) {
             </div>
             <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
               <button class="btn btn-ghost" type="button" id="plan-cancel">${t("common.cancel")}</button>
-              <button class="btn btn-primary" type="submit">${t("common.saved")}</button>
+              <button class="btn btn-primary" type="submit">${t("common.save")}</button>
             </div>
           </form>
         </div>

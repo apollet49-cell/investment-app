@@ -41,6 +41,7 @@ export async function render(root) {
   if (!data.total_invested && !data.current_value) {
     root.innerHTML = emptyState();
     document.getElementById("dash-empty-add")?.addEventListener("click", () => location.hash = "#/investments");
+    document.getElementById("dash-empty-seed")?.addEventListener("click", loadDemoData);
     return;
   }
 
@@ -55,58 +56,106 @@ export async function render(root) {
   const bpRoiClass = bp ? (bp.roi_pct >= 0 ? "positive" : "negative") : "";
   const div = data.diversification;
 
+  // ---- 4 hero KPIs at the top ----
+  const netWorthDelta = data.current_value - data.total_invested;
+  const netWorthDeltaClass = netWorthDelta >= 0 ? "positive" : "negative";
+  const netWorthDeltaSign = netWorthDelta >= 0 ? "+" : "";
+
   root.innerHTML = `
     ${alerts}
-    <div class="summary-grid">
-      ${summaryCard(t("dashboard.total_invested"), money(data.total_invested))}
-      ${summaryCard(t("dashboard.current_value"), money(data.current_value))}
-      ${summaryCard(t("dashboard.total_roi"), pct(data.total_roi_pct), roiClass)}
+    <div class="summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+      <div class="summary-card">
+        <div class="label">${t("dashboard.net_worth")}</div>
+        <div class="value" style="font-size:26px">${money(data.current_value)}</div>
+        <div class="sub ${netWorthDeltaClass}" style="font-size:12px;margin-top:6px">${netWorthDeltaSign}${money(netWorthDelta)} · ${pct(data.total_roi_pct)}</div>
+      </div>
       <div class="summary-card" id="perf-card">
-        <div class="label">${t("dashboard.xirr")}</div>
-        <div class="value" id="perf-xirr" style="font-size:22px">—</div>
-        <div class="sub" id="perf-sub" style="font-size:11px;margin-top:4px;color:var(--text-muted)">${t("dashboard.xirr_loading")}</div>
+        <div class="label">${t("dashboard.xirr_vs_sp")}</div>
+        <div class="value" id="perf-xirr" style="font-size:26px">—</div>
+        <div class="sub" id="perf-sub" style="font-size:12px;margin-top:6px;color:var(--text-muted)">${t("dashboard.xirr_loading")}</div>
       </div>
-      ${bp
-        ? bestPerformerCard(t("dashboard.best_performer"), bp.name, pct(bp.roi_pct), bpRoiClass)
-        : summaryCard(t("dashboard.best_performer"), "—")}
       ${riskCard(div)}
-      ${diversificationCard(div)}
-      ${carbonCard(data.carbon)}
-    </div>
-    <div class="chart-grid">
-      <div class="card chart-card">
-        <div class="chart-header">
-          <h3>${t("dashboard.portfolio_over_time")}</h3>
-          <span class="live-badge"><span class="live-dot"></span>${t("dashboard.live")}</span>
-        </div>
-        <div class="chart-canvas-wrap"><canvas id="chart-portfolio"></canvas></div>
-      </div>
-      <div class="card chart-card">
-        <h3>${t("dashboard.asset_allocation")}</h3>
-        <div class="chart-canvas-wrap"><canvas id="chart-allocation"></canvas></div>
+      <div class="summary-card" id="fire-card">
+        <div class="label">${t("dashboard.years_to_fire")}</div>
+        <div class="value" id="fire-years" style="font-size:26px">—</div>
+        <div class="sub" id="fire-sub" style="font-size:12px;margin-top:6px;color:var(--text-muted)">${t("dashboard.fire_loading")}</div>
       </div>
     </div>
+
     <div class="card chart-card">
-      <h3>${t("dashboard.monthly_returns")}</h3>
-      <div class="chart-canvas-wrap compact"><canvas id="chart-monthly"></canvas></div>
+      <div class="chart-header">
+        <h3>${t("dashboard.portfolio_over_time")}</h3>
+        <span class="live-badge"><span class="live-dot"></span>${t("dashboard.live")}</span>
+      </div>
+      <div class="chart-canvas-wrap"><canvas id="chart-portfolio"></canvas></div>
     </div>
 
-    <div class="card" id="stress-test-card">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <h3 style="margin:0">${t("dashboard.stress_tests")}</h3>
-        <span style="color:var(--text-muted);font-size:12px">${t("dashboard.stress_tests_subtitle")}</span>
+    <div class="card" style="padding:0">
+      <div class="dash-tabs" role="tablist" style="display:flex;gap:2px;border-bottom:1px solid var(--border);overflow-x:auto">
+        <button class="dash-tab active" data-tab="allocation" style="padding:12px 18px;background:transparent;border:none;border-bottom:2px solid var(--primary);font-weight:500;color:var(--text);cursor:pointer;font-size:13px">${t("dashboard.tab_allocation")}</button>
+        <button class="dash-tab" data-tab="performance" style="padding:12px 18px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text-muted);cursor:pointer;font-size:13px">${t("dashboard.tab_performance")}</button>
+        <button class="dash-tab" data-tab="risk" style="padding:12px 18px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text-muted);cursor:pointer;font-size:13px">${t("dashboard.tab_risk")}</button>
+        <button class="dash-tab" data-tab="income" style="padding:12px 18px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text-muted);cursor:pointer;font-size:13px">${t("dashboard.tab_income")}</button>
       </div>
-      <div id="stress-test-body" style="margin-top:12px;text-align:center;padding:14px;color:var(--text-muted)">${spinner()}</div>
-    </div>
-
-    <div class="card" id="dividend-calendar-card">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <h3 style="margin:0">${t("dashboard.dividend_calendar")}</h3>
-        <span style="color:var(--text-muted);font-size:12px" id="dividend-annual-summary"></span>
+      <div style="padding:18px">
+        <div class="dash-panel" data-panel="allocation">
+          <div class="chart-grid">
+            <div class="chart-card" style="padding:0;border:none">
+              <h4 style="margin:0 0 10px 0">${t("dashboard.asset_allocation")}</h4>
+              <div class="chart-canvas-wrap"><canvas id="chart-allocation"></canvas></div>
+            </div>
+            <div class="chart-card" style="padding:0;border:none">
+              <h4 style="margin:0 0 10px 0">${t("dashboard.diversification")}</h4>
+              <div id="diversification-host">${diversificationInline(div)}</div>
+            </div>
+          </div>
+        </div>
+        <div class="dash-panel" data-panel="performance" style="display:none">
+          <h4 style="margin:0 0 10px 0">${t("dashboard.monthly_returns")}</h4>
+          <div class="chart-canvas-wrap compact"><canvas id="chart-monthly"></canvas></div>
+          ${bp ? `<div style="margin-top:14px;padding:12px;background:var(--surface);border-radius:8px">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px">${t("dashboard.best_performer")}</div>
+            <div style="font-size:18px;font-family:var(--font-serif)">${escapeHtml(bp.name)}</div>
+            <div style="color:${bp.roi_pct >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:500;margin-top:4px">${pct(bp.roi_pct)}</div>
+          </div>` : ""}
+        </div>
+        <div class="dash-panel" data-panel="risk" style="display:none">
+          <div class="chart-grid">
+            <div style="padding:0">
+              <h4 style="margin:0 0 10px 0">${t("dashboard.stress_tests")}</h4>
+              <div id="stress-test-body" style="text-align:center;padding:14px;color:var(--text-muted)">${spinner()}</div>
+            </div>
+            <div style="padding:0">
+              ${carbonCard(data.carbon)}
+            </div>
+          </div>
+        </div>
+        <div class="dash-panel" data-panel="income" style="display:none">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <h4 style="margin:0">${t("dashboard.dividend_calendar")}</h4>
+            <span style="color:var(--text-muted);font-size:12px" id="dividend-annual-summary"></span>
+          </div>
+          <div id="dividend-calendar-body" style="text-align:center;padding:14px;color:var(--text-muted)">${spinner()}</div>
+        </div>
       </div>
-      <div id="dividend-calendar-body" style="margin-top:12px;text-align:center;padding:14px;color:var(--text-muted)">${spinner()}</div>
     </div>
   `;
+
+  // Wire dashboard tabs
+  for (const btn of root.querySelectorAll(".dash-tab")) {
+    btn.onclick = () => {
+      for (const b of root.querySelectorAll(".dash-tab")) {
+        const active = b === btn;
+        b.classList.toggle("active", active);
+        b.style.borderBottomColor = active ? "var(--primary)" : "transparent";
+        b.style.color = active ? "var(--text)" : "var(--text-muted)";
+        b.style.fontWeight = active ? "500" : "400";
+      }
+      for (const p of root.querySelectorAll(".dash-panel")) {
+        p.style.display = p.dataset.panel === btn.dataset.tab ? "" : "none";
+      }
+    };
+  }
 
   // Wire dismiss
   for (const btn of root.querySelectorAll(".dismiss-alert")) {
@@ -123,8 +172,9 @@ export async function render(root) {
   loadDividendCalendar();
   loadPerformance(() => cancelled);
   loadHistoryAndBenchmark(() => cancelled);
+  loadFireYears(() => cancelled);
 
-  // Wire the diversification card expand/collapse
+  // Wire the diversification card expand/collapse (still used inside tabs)
   for (const btn of root.querySelectorAll(".div-toggle")) {
     btn.onclick = () => {
       const card = document.getElementById(btn.dataset.target);
@@ -135,6 +185,49 @@ export async function render(root) {
       btn.textContent = show ? "⌃" : "⌄";
     };
   }
+}
+
+async function loadFireYears(isCancelled) {
+  const yEl = document.getElementById("fire-years");
+  const sEl = document.getElementById("fire-sub");
+  if (!yEl || !sEl) return;
+  try {
+    // Conservative defaults — user can fine-tune on the FIRE page
+    const data = await API.request("/planning/fire?monthly_expenses=2500&monthly_savings=1500&expected_return_pct=7&target_multiplier=25");
+    if (isCancelled()) return;
+    if (data.already_fire) {
+      yEl.textContent = "🎉";
+      sEl.textContent = t("dashboard.fire_already");
+    } else if (data.years_to_fire == null) {
+      yEl.textContent = "—";
+      sEl.textContent = t("dashboard.fire_unreachable");
+    } else {
+      yEl.textContent = data.years_to_fire.toFixed(1);
+      sEl.textContent = `${t("dashboard.fire_at_25x")} (${(data.progress_pct || 0).toFixed(0)}% ${t("dashboard.fire_progress")})`;
+    }
+  } catch (_) {
+    if (sEl) sEl.textContent = t("dashboard.fire_unreachable");
+  }
+}
+
+function diversificationInline(div) {
+  if (!div || div.score == null) return `<p style="color:var(--text-muted)">—</p>`;
+  const score = div.score;
+  const color = score >= 75 ? "var(--success)" : score >= 50 ? "var(--warning)" : "var(--danger)";
+  const topRows = (div.top_positions || []).slice(0, 5).map(p => `
+    <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
+      <span style="color:var(--text-muted)">${escapeHtml(p.name)}</span>
+      <strong>${p.weight_pct.toFixed(1)}%</strong>
+    </div>`).join("");
+  return `
+    <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px">
+      <div style="font-size:28px;color:${color};font-family:var(--font-serif)">${score.toFixed(0)}</div>
+      <div style="color:var(--text-muted);font-size:12px">/ 100</div>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">${escapeHtml(div.message || "")}</div>
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px">${t("dashboard.top_positions") || "Top positions"}</div>
+    ${topRows || `<div style="color:var(--text-muted);font-size:12px">—</div>`}
+  `;
 }
 
 function summaryCard(label, value, cls = "") {
@@ -265,8 +358,30 @@ function emptyState() {
       </svg>
       <h3>${t("dashboard.no_investments_title")}</h3>
       <p>${t("dashboard.no_investments_sub")}</p>
-      <button id="dash-empty-add" class="btn btn-primary">${t("dashboard.add_investment")}</button>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px">
+        <button id="dash-empty-add" class="btn btn-primary">${t("dashboard.add_investment")}</button>
+        <button id="dash-empty-seed" class="btn btn-ghost">${t("dashboard.try_demo_data")}</button>
+      </div>
+      <p style="color:var(--text-muted);font-size:12px;margin-top:14px;max-width:420px;margin-left:auto;margin-right:auto">${t("dashboard.try_demo_hint")}</p>
     </div>`;
+}
+
+async function loadDemoData() {
+  const btn = document.getElementById("dash-empty-seed");
+  if (!btn) return;
+  if (!confirm(t("dashboard.try_demo_confirm"))) return;
+  btn.disabled = true;
+  btn.textContent = t("dashboard.try_demo_loading");
+  try {
+    await API.request("/investments/seed-demo", { method: "POST" });
+    toast(t("dashboard.try_demo_done"), "success");
+    // Re-render the dashboard from scratch so the new data shows up.
+    setTimeout(() => location.reload(), 600);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = t("dashboard.try_demo_data");
+    toast(e.message || "Seed failed", "error");
+  }
 }
 
 async function loadDividendCalendar() {
@@ -380,11 +495,22 @@ async function loadPerformance(isCancelled) {
     } else {
       xirrEl.textContent = "—";
     }
+    // Sub-line: TWR + try to compute vs S&P 500 from the history endpoint.
     const parts = [];
     if (data.twr_pct != null) parts.push(`${t("dashboard.twr")}: ${pct(data.twr_pct)}`);
-    if (data.transaction_count > 0) parts.push(`${data.transaction_count} ${t("dashboard.transactions_label")}`);
+    try {
+      const h = await API.request("/dashboard/history?days=365&benchmark=^GSPC");
+      if (!isCancelled() && h?.portfolio?.length > 1 && h.benchmark?.length > 0) {
+        const youEnd = h.portfolio[h.portfolio.length - 1].normalized;
+        const benchEnd = h.benchmark[h.benchmark.length - 1].normalized;
+        const diff = youEnd - benchEnd;
+        const sign = diff >= 0 ? "+" : "";
+        const cls = diff >= 0 ? "positive" : "negative";
+        parts.push(`<span class="${cls}">${sign}${diff.toFixed(1)} ${t("dashboard.vs_sp500")}</span>`);
+      }
+    } catch (_) {}
     if (parts.length === 0) parts.push(t("dashboard.xirr_no_data"));
-    subEl.textContent = parts.join(" · ");
+    subEl.innerHTML = parts.join(" · ");
   } catch (e) {
     const subEl = document.getElementById("perf-sub");
     if (subEl) subEl.textContent = t("dashboard.xirr_no_data");
@@ -460,6 +586,7 @@ async function loadHistoryAndBenchmark(isCancelled) {
 function buildAllocationChart(byType) {
   const ctx = document.getElementById("chart-allocation");
   if (!ctx || !window.Chart) return;
+  try { state.charts.allocation?.destroy?.(); } catch (_) {}
   const labels = Object.keys(byType);
   const data = Object.values(byType);
   state.charts.allocation = new window.Chart(ctx, {
@@ -484,6 +611,7 @@ function buildAllocationChart(byType) {
 function buildMonthlyChart(rows) {
   const ctx = document.getElementById("chart-monthly");
   if (!ctx || !window.Chart) return;
+  try { state.charts.monthly?.destroy?.(); } catch (_) {}
   state.charts.monthly = new window.Chart(ctx, {
     type: "bar",
     data: {

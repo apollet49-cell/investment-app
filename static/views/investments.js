@@ -1299,14 +1299,17 @@ async function renderRealEstateDetail(body, inv) {
           surface_sqm: inv.surface_sqm, property_subtype: inv.property_subtype || "apartment",
         },
       });
-      if (data?.estimated_value != null) {
-        const delta = data.estimated_value - inv.current_value;
+      const estValue = data?.estimated_value_usd ?? data?.estimated_value_local;
+      if (estValue != null) {
+        const delta = estValue - inv.current_value;
         const dc = delta >= 0 ? "var(--success)" : "var(--danger)";
+        const ppsqm = data?.median_price_per_sqm_local;
+        const ppsqmCurrency = data?.local_currency || "EUR";
         dvfHost.innerHTML = `
           <div style="font-weight:500;color:var(--text);margin-bottom:6px">${t("investments.detail_market_estimate")}</div>
-          <div>${t("investments.detail_estimate_value")}: <strong>${money(data.estimated_value)}</strong>
+          <div>${t("investments.detail_estimate_value")}: <strong>${money(estValue)}</strong>
             <span style="color:${dc};margin-left:8px">(${delta >= 0 ? "+" : ""}${money(delta)} ${t("investments.detail_vs_book")})</span></div>
-          ${data.price_per_sqm ? `<div style="margin-top:4px;font-size:12px">${t("investments.detail_price_sqm")}: <strong>${money(data.price_per_sqm)}/m²</strong> · ${data.comparable_count || 0} ${t("investments.detail_comparables")}</div>` : ""}
+          ${ppsqm ? `<div style="margin-top:4px;font-size:12px">${t("investments.detail_price_sqm")}: <strong>${ppsqm.toLocaleString()} ${ppsqmCurrency}/m²</strong> · ${data.comparable_count || 0} ${t("investments.detail_comparables")}</div>` : ""}
         `;
       } else {
         dvfHost.innerHTML = `<em>${t("investments.detail_no_comparables")}</em>`;

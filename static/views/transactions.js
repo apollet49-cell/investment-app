@@ -68,20 +68,20 @@ function draw(root) {
   }
 }
 
-function rowHtml(t) {
+function rowHtml(tx) {
   const typeColor = {
     buy: "var(--success)", sell: "var(--warning)",
     dividend: "var(--primary)", fee: "var(--danger)", split: "var(--text-muted)",
-  }[t.type] || "var(--text-muted)";
+  }[tx.type] || "var(--text-muted)";
   return `<tr>
-    <td>${t.transaction_date || "—"}</td>
-    <td><span class="badge" style="background:rgba(138,117,88,0.12);color:${typeColor};text-transform:uppercase;font-size:10px">${t.type}</span></td>
-    <td>${escapeHtml(t.investment_name || "—")}</td>
-    <td style="text-align:right;font-variant-numeric:tabular-nums">${t.quantity != null ? Number(t.quantity).toLocaleString(undefined, { maximumFractionDigits: 8 }) : "—"}</td>
-    <td style="text-align:right;font-variant-numeric:tabular-nums">${t.price_per_unit != null ? money(Number(t.price_per_unit)) : "—"}</td>
-    <td style="text-align:right"><strong>${money(t.amount)}</strong>${t.fees ? `<div style="color:var(--text-muted);font-size:10px">fees ${money(t.fees)}</div>` : ""}</td>
-    <td style="color:var(--text-muted);font-size:12px;max-width:200px">${escapeHtml(t.notes || "")}</td>
-    <td><button class="btn btn-ghost txn-del" data-id="${t.id}" title="${t("transactions.delete")}">×</button></td>
+    <td>${tx.transaction_date || "—"}</td>
+    <td><span class="badge" style="background:rgba(138,117,88,0.12);color:${typeColor};text-transform:uppercase;font-size:10px">${tx.type}</span></td>
+    <td>${escapeHtml(tx.investment_name || "—")}</td>
+    <td style="text-align:right;font-variant-numeric:tabular-nums">${tx.quantity != null ? Number(tx.quantity).toLocaleString(undefined, { maximumFractionDigits: 8 }) : "—"}</td>
+    <td style="text-align:right;font-variant-numeric:tabular-nums">${tx.price_per_unit != null ? money(Number(tx.price_per_unit)) : "—"}</td>
+    <td style="text-align:right"><strong>${money(tx.amount)}</strong>${tx.fees ? `<div style="color:var(--text-muted);font-size:10px">fees ${money(tx.fees)}</div>` : ""}</td>
+    <td style="color:var(--text-muted);font-size:12px;max-width:200px">${escapeHtml(tx.notes || "")}</td>
+    <td><button class="btn btn-ghost txn-del" data-id="${tx.id}" title="${t("transactions.delete")}">×</button></td>
   </tr>`;
 }
 
@@ -133,7 +133,7 @@ function openAddModal(root) {
             </div>
             <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
               <button class="btn btn-ghost" type="button" id="txn-cancel">${t("common.cancel")}</button>
-              <button class="btn btn-primary" type="submit">${t("common.saved")}</button>
+              <button class="btn btn-primary" type="submit">${t("common.save")}</button>
             </div>
           </form>
         </div>
