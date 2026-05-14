@@ -343,11 +343,27 @@ async def import_csv(
     imported = 0
     skipped = 0
     errors: list[str] = []
+    # Pre-compute the user's existing investment ids so re-importing the
+    # app's own CSV export doesn't double the portfolio. Rows whose `id`
+    # matches an existing investment are skipped (we treat the CSV as a
+    # NEW-rows feed, not an upsert).
+    existing_ids = {
+        i_id for (i_id,) in db.query(Investment.id).filter(Investment.user_id == current.id).all()
+    }
     for i, row in enumerate(reader, start=2):  # row 1 is header
         try:
             inv_type = row["type"].strip().lower()
             if inv_type not in INVESTMENT_TYPES:
                 raise ValueError(f"invalid type '{inv_type}'")
+            row_id_raw = (row.get("id") or "").strip()
+            if row_id_raw:
+                try:
+                    row_id = int(row_id_raw)
+                    if row_id in existing_ids:
+                        skipped += 1
+                        continue
+                except ValueError:
+                    pass  # ignore malformed id, treat as new row
             def _opt_float(key: str) -> Optional[float]:
                 v = (row.get(key) or "").strip()
                 return float(v) if v else None
