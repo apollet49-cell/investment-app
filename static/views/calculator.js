@@ -1,4 +1,4 @@
-import { API, toast, spinner } from "/static/app.js";
+import { API, toast, spinner, escapeHtml } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 const FIELDS = {
@@ -81,7 +81,7 @@ async function run() {
         </details>
       </div>`;
   } catch (e) {
-    out.innerHTML = `<div class="alert-banner error">${e.message}</div>`;
+    out.innerHTML = `<div class="alert-banner error">${escapeHtml(e.message)}</div>`;
   }
 }
 

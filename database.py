@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from settings import settings
@@ -21,6 +21,17 @@ engine = create_engine(
     pool_pre_ping=True,  # detects dropped Postgres connections (e.g. after sleep)
 )
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+
+# SQLite ignores `ondelete="CASCADE"` unless PRAGMA foreign_keys is ON per
+# connection — without this, deleting an Investment leaves orphan
+# Transactions on dev SQLite while Postgres enforces it. Force the PRAGMA
+# on every new connection so dev parity matches prod.
+if _db_url.startswith("sqlite"):
+    @event.listens_for(engine, "connect")
+    def _sqlite_fk_on(dbapi_conn, _conn_record):
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 
 class Base(DeclarativeBase):

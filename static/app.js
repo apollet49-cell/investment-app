@@ -130,7 +130,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "49";
+const VIEW_VERSION = "50";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -210,22 +210,34 @@ function destroyCharts() {
   }
 }
 
-// View-lifecycle cleanup. Views can register a cleanup callback (e.g. to clear
-// auto-refresh intervals) that the router runs before swapping to a new view.
-let _viewCleanup = null;
-export function onViewCleanup(fn) { _viewCleanup = fn; }
+// View-lifecycle cleanup. Views can register MULTIPLE cleanup callbacks
+// (the previous single-slot design dropped earlier cleanups when later
+// ones were registered — caused "stuck on wrong page" when two clicks
+// landed in fast succession). All registered fns run on next navigation.
+let _viewCleanups = [];
+export function onViewCleanup(fn) { _viewCleanups.push(fn); }
 function runViewCleanup() {
-  if (_viewCleanup) {
-    try { _viewCleanup(); } catch (_) {}
-    _viewCleanup = null;
+  const fns = _viewCleanups;
+  _viewCleanups = [];
+  for (const fn of fns) {
+    try { fn(); } catch (_) {}
   }
 }
+
+// Route sequence — incremented on every renderRoute call. Async work
+// (module load, view render) checks against this; if a newer route has
+// started, abort instead of overwriting the new view's DOM.
+let _routeSeq = 0;
+// Preload state — once we've eagerly imported every view module, the
+// next click skips the dynamic-import wait entirely.
+const _preloadedModules = new Map();
 
 async function renderRoute() {
   if (!state.token || !state.user) {
     showAuth();
     return;
   }
+  const mySeq = ++_routeSeq;
   const hash = window.location.hash || "#/dashboard";
   const route = ROUTES.find(r => r.hash === hash) || ROUTES[0];
   document.getElementById("page-title").textContent = t(route.titleKey);
@@ -238,11 +250,23 @@ async function renderRoute() {
   runViewCleanup();
   destroyCharts();
   const root = document.getElementById("view-root");
-  root.innerHTML = `<div style="text-align:center;padding:60px">${spinner(true)}</div>`;
+  // Only show the spinner if the module isn't already cached — otherwise
+  // the swap is synchronous and showing-then-immediately-replacing a
+  // spinner causes a flash. Just leave the existing content briefly.
+  if (!_preloadedModules.has(route.hash)) {
+    root.innerHTML = `<div style="text-align:center;padding:60px">${spinner(true)}</div>`;
+  }
   try {
-    const mod = await route.load();
+    const mod = _preloadedModules.get(route.hash) || await route.load();
+    // Cache for future navigations (instant on second visit).
+    _preloadedModules.set(route.hash, mod);
+    // If a newer renderRoute already started, abort so we don't paint
+    // the OLD view's content over the new spinner / new view's render.
+    if (mySeq !== _routeSeq) return;
     await mod.render(root);
+    if (mySeq !== _routeSeq) return;
   } catch (err) {
+    if (mySeq !== _routeSeq) return;
     console.error(err);
     root.innerHTML = `<div class="alert-banner error">${err.message || "Failed to load view"}</div>`;
   }
@@ -397,6 +421,22 @@ async function bootApp() {
   if (!window.location.hash) window.location.hash = "#/dashboard";
   renderRoute();
   setupSSE();
+  // Preload every view module in the background after the first render so
+  // subsequent navigations skip the dynamic-import wait. Cached in
+  // _preloadedModules; renderRoute reads from there before falling back to
+  // route.load(). Uses requestIdleCallback so it doesn't fight the initial
+  // dashboard render for bandwidth.
+  const preload = () => {
+    for (const r of ROUTES) {
+      if (_preloadedModules.has(r.hash)) continue;
+      r.load().then(mod => _preloadedModules.set(r.hash, mod)).catch(() => {});
+    }
+  };
+  if ("requestIdleCallback" in window) {
+    requestIdleCallback(preload, { timeout: 2000 });
+  } else {
+    setTimeout(preload, 500);
+  }
 }
 
 function setupSSE() {
@@ -447,7 +487,7 @@ async function loadChatPanelHistory() {
     messages.innerHTML = history.map(msgHtml).join("");
     messages.scrollTop = messages.scrollHeight;
   } catch (err) {
-    messages.innerHTML = `<div class="msg error">${err.message}</div>`;
+    messages.innerHTML = `<div class="msg error">${escapeHtml(err.message)}</div>`;
   }
 }
 

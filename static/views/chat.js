@@ -1,4 +1,4 @@
-import { API, sendChatMessage, toast, spinner } from "/static/app.js";
+import { API, sendChatMessage, toast, spinner, escapeHtml } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 export async function render(root) {
@@ -47,7 +47,7 @@ async function loadHistory(messagesEl) {
     }).join("");
     messagesEl.scrollTop = messagesEl.scrollHeight;
   } catch (e) {
-    messagesEl.innerHTML = `<div class="msg error">${e.message}</div>`;
+    messagesEl.innerHTML = `<div class="msg error">${escapeHtml(e.message)}</div>`;
   }
 }
 

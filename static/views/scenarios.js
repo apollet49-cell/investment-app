@@ -7,7 +7,7 @@ export async function render(root) {
   root.innerHTML = `<div style="text-align:center;padding:40px">${spinner(true)}</div>`;
   let scenarios;
   try { scenarios = await API.request("/scenarios/"); }
-  catch (err) { root.innerHTML = `<div class="alert-banner error">${err.message}</div>`; return; }
+  catch (err) { root.innerHTML = `<div class="alert-banner error">${escapeHtml(err.message)}</div>`; return; }
 
   root.innerHTML = `
     <div class="card">
@@ -115,7 +115,7 @@ async function simulate(id) {
         <canvas id="sc-chart" height="120" style="margin-top:16px"></canvas>
       </div>`;
     drawChart(sim);
-  } catch (e) { host.innerHTML = `<div class="alert-banner error">${e.message}</div>`; }
+  } catch (e) { host.innerHTML = `<div class="alert-banner error">${escapeHtml(e.message)}</div>`; }
 }
 
 function subCard(sub, color) {

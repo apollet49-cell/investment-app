@@ -41,7 +41,7 @@ export async function render(root) {
     data = await API.request("/dashboard/summary");
   } catch (err) {
     if (cancelled) return;
-    root.innerHTML = `<div class="alert-banner error">${err.message}</div>`;
+    root.innerHTML = `<div class="alert-banner error">${escapeHtml(err.message)}</div>`;
     return;
   }
   if (cancelled) return;

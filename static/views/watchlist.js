@@ -5,7 +5,7 @@ export async function render(root) {
   root.innerHTML = `<div class="card" style="text-align:center;padding:40px">${spinner(true)}</div>`;
   let items;
   try { items = (await API.request("/watchlist/live")).items; }
-  catch (e) { root.innerHTML = `<div class="alert-banner error">${e.message}</div>`; return; }
+  catch (e) { root.innerHTML = `<div class="alert-banner error">${escapeHtml(e.message)}</div>`; return; }
 
   if (!items.length) {
     root.innerHTML = `

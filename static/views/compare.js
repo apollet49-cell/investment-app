@@ -69,7 +69,7 @@ async function doSearch(q) {
         <span class="badge gray">${escapeHtml(r.type || "stock")}</span>
       </button>`).join("");
     for (const row of out.querySelectorAll(".asset-row")) row.onclick = () => addPick(row);
-  } catch (e) { out.innerHTML = `<div class="asset-empty">${e.message}</div>`; }
+  } catch (e) { out.innerHTML = `<div class="asset-empty">${escapeHtml(e.message)}</div>`; }
 }
 
 function addPick(row) {

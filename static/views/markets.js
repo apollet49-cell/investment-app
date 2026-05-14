@@ -89,7 +89,7 @@ async function loadAndRenderTable(body, kind, silent = false) {
     cache[kind] = data.items;
     renderTable(body, kind);
   } catch (err) {
-    body.innerHTML = `<div class="alert-banner error">${err.message}</div>`;
+    body.innerHTML = `<div class="alert-banner error">${escapeHtml(err.message)}</div>`;
   }
 }
 
@@ -284,7 +284,7 @@ async function loadMovers(assetType) {
     for (const card of host.querySelectorAll(".mover-card")) {
       card.onclick = () => openDetail(card.dataset.symbol, card.dataset.assetType);
     }
-  } catch (e) { host.innerHTML = `<div class="alert-banner error">${e.message}</div>`; }
+  } catch (e) { host.innerHTML = `<div class="alert-banner error">${escapeHtml(e.message)}</div>`; }
 }
 
 function moverColumn(title, items, assetType, color, showVolume = false) {
@@ -345,7 +345,7 @@ async function runScreener() {
       const data = await API.request(path);
       cache[kind === "stock" ? "stocks" : (kind === "etf" ? "etfs" : "crypto")] = data.items;
       items = data.items;
-    } catch (e) { out.innerHTML = `<div class="alert-banner error">${e.message}</div>`; return; }
+    } catch (e) { out.innerHTML = `<div class="alert-banner error">${escapeHtml(e.message)}</div>`; return; }
   }
 
   const filtered = items.filter(r => {
@@ -462,7 +462,7 @@ async function loadDetail(symbol, assetType, period) {
     currentDetail = detail;
     renderDetailBody(detail, assetType);
   } catch (e) {
-    body.innerHTML = `<div class="alert-banner error">${e.message}</div>`;
+    body.innerHTML = `<div class="alert-banner error">${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -590,7 +590,7 @@ async function loadAssetNews(symbol) {
         <div style="color:var(--text-muted);font-size:11px;margin:2px 0">${n.published ? new Date(n.published).toLocaleString() : ""} · ${escapeHtml(n.source)}</div>
         <div style="color:var(--text-muted);font-size:13px">${escapeHtml(n.summary)}</div>
       </div>`).join("");
-  } catch (e) { host.innerHTML = `<p style="color:var(--text-muted)">${e.message}</p>`; }
+  } catch (e) { host.innerHTML = `<p style="color:var(--text-muted)">${escapeHtml(e.message)}</p>`; }
 }
 
 function askAiAboutAsset(d) {

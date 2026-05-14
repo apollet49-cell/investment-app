@@ -21,7 +21,7 @@ let historicalPrice = null;
 export async function render(root) {
   root.innerHTML = `<div style="text-align:center;padding:40px">${spinner(true)}</div>`;
   try { cache = await API.request("/investments/"); }
-  catch (err) { root.innerHTML = `<div class="alert-banner error">${err.message}</div>`; return; }
+  catch (err) { root.innerHTML = `<div class="alert-banner error">${escapeHtml(err.message)}</div>`; return; }
 
   root.innerHTML = `
     <div class="toolbar">

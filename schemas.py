@@ -6,6 +6,14 @@ from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
+# Base model for all write-side schemas: reject NaN/Inf floats (would
+# corrupt arithmetic downstream) and forbid extra fields (mass-assignment
+# defense — extra keys in a POST body now 422 instead of being silently
+# dropped, surfacing client/server contract drift).
+class StrictBase(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+
 # ---------- Auth ----------
 class UserRegister(BaseModel):
     email: EmailStr
@@ -36,9 +44,12 @@ class UserOut(BaseModel):
 
 # ---------- Investments ----------
 class InvestmentBase(BaseModel):
+    # NaN/Inf in floats would silently corrupt arithmetic (XIRR Newton's,
+    # ROI division). Reject at the schema level.
+    model_config = ConfigDict(allow_inf_nan=False)
     name: str = Field(min_length=1, max_length=255)
     type: str
-    symbol: Optional[str] = None
+    symbol: Optional[str] = Field(default=None, max_length=64)
     amount_invested: float = Field(gt=0)
     current_value: float = Field(ge=0)
     quantity: Optional[float] = Field(default=None, ge=0)
@@ -65,7 +76,8 @@ class InvestmentCreate(InvestmentBase):
 
 
 class InvestmentUpdate(BaseModel):
-    name: Optional[str] = None
+    model_config = ConfigDict(allow_inf_nan=False)
+    name: Optional[str] = Field(default=None, max_length=255)
     type: Optional[str] = None
     symbol: Optional[str] = None
     amount_invested: Optional[float] = Field(default=None, gt=0)
@@ -130,6 +142,7 @@ class CSVImportResult(BaseModel):
 
 # ---------- Scenarios ----------
 class ScenarioBase(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
     name: str = Field(min_length=1, max_length=255)
     amount: float = Field(gt=0)
     horizon_months: int = Field(gt=0, le=600)
@@ -206,13 +219,14 @@ class AlertCreate(BaseModel):
 
 
 class TransactionCreate(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
     type: str  # buy | sell | dividend | fee | split
     transaction_date: date
     quantity: Optional[float] = Field(default=None, ge=0)
     price_per_unit: Optional[float] = Field(default=None, ge=0)
     amount: float = Field(gt=0)
     fees: Optional[float] = Field(default=None, ge=0)
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(default=None, max_length=2000)
 
 
 class TransactionOut(BaseModel):
@@ -230,8 +244,9 @@ class TransactionOut(BaseModel):
 
 
 class DCAPlanCreate(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
     name: str = Field(min_length=1, max_length=255)
-    symbol: Optional[str] = None
+    symbol: Optional[str] = Field(default=None, max_length=64)
     asset_type: str = "etf"
     amount: float = Field(gt=0)
     frequency: str = "monthly"
