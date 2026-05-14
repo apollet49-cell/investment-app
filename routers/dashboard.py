@@ -43,17 +43,30 @@ def _to_out(inv: Investment) -> InvestmentOut:
 @router.get("/summary", response_model=DashboardSummary)
 async def summary(current: User = Depends(get_current_user), db: Session = Depends(get_db)) -> DashboardSummary:
     rows = db.query(Investment).filter(Investment.user_id == current.id).all()
-    # Apply live market refresh before computing aggregates.
-    updates = await refresh_current_values(rows)
-    if updates:
-        changed = False
-        for r in rows:
-            new_val = updates.get(r.id)
-            if new_val is not None and r.current_value != new_val:
-                r.current_value = new_val
-                changed = True
-        if changed:
-            db.commit()
+    # Live market refresh runs as a fire-and-forget background task so the
+    # dashboard renders instantly with stored values. Fresh prices land in
+    # the DB before the next 60s auto-refresh — no user-visible wait on
+    # slow yfinance/CoinGecko. Skip when live refresh is disabled (tests).
+    import os as _os
+    if _os.getenv("INVESTAPP_DISABLE_LIVE_REFRESH") != "1":
+        async def _bg_refresh():
+            from database import SessionLocal
+            bg_db = SessionLocal()
+            try:
+                bg_rows = bg_db.query(Investment).filter(Investment.user_id == current.id).all()
+                updates = await refresh_current_values(bg_rows)
+                if updates:
+                    changed = False
+                    for r in bg_rows:
+                        new_val = updates.get(r.id)
+                        if new_val is not None and r.current_value != new_val:
+                            r.current_value = new_val
+                            changed = True
+                    if changed:
+                        bg_db.commit()
+            finally:
+                bg_db.close()
+        asyncio.create_task(_bg_refresh())
     total_invested = sum(r.amount_invested for r in rows)
     current_value = sum(r.current_value for r in rows)
     total_roi = ((current_value - total_invested) / total_invested * 100.0) if total_invested > 0 else 0.0

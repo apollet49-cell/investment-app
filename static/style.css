@@ -315,11 +315,34 @@ a { color: var(--primary-strong); }
 }
 .lang-switch button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 
+/* ---------- Compact icon-only action buttons (used in tables) ---------- */
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  margin-right: 2px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.btn-icon svg { width: 14px; height: 14px; }
+.btn-icon:hover { background: var(--surface-2); color: var(--text); }
+.btn-icon.inv-delete:hover { color: var(--danger); border-color: var(--danger); }
+
 /* ---------- Main ---------- */
 .main {
   display: flex; flex-direction: column; min-width: 0;
   height: 100vh;
   overflow-y: auto;       /* main scrolls internally so the sidebar stays put */
+  -webkit-overflow-scrolling: touch; /* iOS momentum scroll */
+  overscroll-behavior-y: contain;    /* don't bubble scroll to body / no rubber-band past edges */
+  scroll-behavior: smooth;            /* anchor jumps feel less jarring */
 }
 .topbar {
   display: flex; justify-content: space-between; align-items: center;
@@ -655,6 +678,67 @@ a { color: var(--primary-strong); }
 @media (max-width: 380px) {
   .summary-grid { grid-template-columns: 1fr !important; }
   .topbar h1 { font-size: 17px; }
+}
+
+/* ---------- Investments table: collapse to mobile-friendly view ---------- */
+/* Default desktop: sub-label hidden, all columns visible. */
+.col-mobile-sub { display: none; }
+@media (max-width: 640px) {
+  /* Hide secondary columns on phones so the row fits on one line without
+     horizontal scroll. Keep: Nom (with Type · Symbol sub-line) | Actuelle
+     | ROI | Actions. */
+  .inv-table .col-mobile-hidden { display: none !important; }
+  /* Show the type+symbol sub-label under the name on phone */
+  .inv-table .col-mobile-sub {
+    display: block;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 400;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .inv-table .col-name {
+    max-width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .inv-table .col-name strong {
+    font-size: 13px;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .inv-table .col-current {
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .inv-table .col-roi {
+    white-space: nowrap;
+    padding-left: 4px !important;
+    padding-right: 4px !important;
+  }
+  .inv-table .col-roi .badge {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+  .inv-table .col-actions {
+    padding-left: 2px !important;
+    padding-right: 0 !important;
+  }
+  .inv-table .col-actions .btn-icon {
+    width: 28px; height: 28px; margin-right: 1px;
+  }
+  /* Remove the table-wrap horizontal-scroll affordance gradient — no
+     scroll needed now that columns are hidden. */
+  .inv-table-wrap::after { display: none; }
+  .inv-table-wrap { overflow-x: visible; }
+  /* The .data min-width: 520px from the generic mobile rule would force
+     a scroll even with hidden columns; override for this table only. */
+  .inv-table { min-width: 0 !important; }
 }
 
 /* ---------- Mobile fixes for view-injected styles ---------- */

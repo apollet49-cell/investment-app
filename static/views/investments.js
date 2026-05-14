@@ -115,36 +115,45 @@ function renderTable(rows) {
       <span>${t("investments.row_count", { count: filtered.length, total: rows.length })}</span>
       <span style="font-style:italic">${t("investments.click_row_hint")}</span>
     </div>
-    <div class="table-wrap">
-      <table class="data">
+    <div class="table-wrap inv-table-wrap">
+      <table class="data inv-table">
         <thead>
           <tr>
-            <th data-sort="name">${t("investments.name")}${tdir("name")}</th>
-            <th data-sort="type">${t("investments.type")}${tdir("type")}</th>
-            <th data-sort="symbol">${t("investments.symbol")}${tdir("symbol")}</th>
-            <th data-sort="quantity" style="text-align:right">${t("investments.quantity")}${tdir("quantity")}</th>
-            <th data-sort="amount_invested" style="text-align:right">${t("investments.invested")}${tdir("amount_invested")}</th>
-            <th data-sort="current_value" style="text-align:right">${t("investments.current")}${tdir("current_value")}</th>
-            <th data-sort="purchase_date">${t("investments.purchase_date")}${tdir("purchase_date")}</th>
-            <th data-sort="roi_pct" style="text-align:right">${t("investments.roi")}${tdir("roi_pct")}</th>
-            <th>${t("investments.actions")}</th>
+            <th data-sort="name" class="col-name">${t("investments.name")}${tdir("name")}</th>
+            <th data-sort="type" class="col-mobile-hidden">${t("investments.type")}${tdir("type")}</th>
+            <th data-sort="symbol" class="col-mobile-hidden">${t("investments.symbol")}${tdir("symbol")}</th>
+            <th data-sort="quantity" class="col-mobile-hidden" style="text-align:right">${t("investments.quantity")}${tdir("quantity")}</th>
+            <th data-sort="amount_invested" class="col-mobile-hidden" style="text-align:right">${t("investments.invested")}${tdir("amount_invested")}</th>
+            <th data-sort="current_value" class="col-current" style="text-align:right">${t("investments.current")}${tdir("current_value")}</th>
+            <th data-sort="purchase_date" class="col-mobile-hidden">${t("investments.purchase_date")}${tdir("purchase_date")}</th>
+            <th data-sort="roi_pct" class="col-roi" style="text-align:right">${t("investments.roi")}${tdir("roi_pct")}</th>
+            <th class="col-actions">${t("investments.actions")}</th>
           </tr>
         </thead>
         <tbody>
           ${filtered.map(r => `
             <tr class="inv-row" data-id="${r.id}" style="cursor:pointer">
-              <td><strong>${escapeHtml(r.name)}</strong></td>
-              <td>${t(`investments.types.${r.type}`)}</td>
-              <td>${escapeHtml(r.symbol || (r.city || "—"))}</td>
-              <td style="text-align:right">${r.quantity == null ? "—" : Number(r.quantity).toLocaleString(undefined, { maximumFractionDigits: 8 })}</td>
-              <td style="text-align:right">${money(r.amount_invested)}</td>
-              <td style="text-align:right">${money(r.current_value)}</td>
-              <td>${r.purchase_date}</td>
-              <td style="text-align:right"><span class="badge ${badgeClass(r.roi_pct)}">${pct(r.roi_pct)}</span></td>
-              <td onclick="event.stopPropagation()">
-                <button class="btn btn-ghost inv-edit" data-id="${r.id}">${t("investments.edit")}</button>
-                <button class="btn btn-ghost inv-whatif" data-id="${r.id}" title="${t("investments.whatif.title")}">${t("investments.whatif.button")}</button>
-                <button class="btn btn-ghost inv-delete" data-id="${r.id}">×</button>
+              <td class="col-name">
+                <strong>${escapeHtml(r.name)}</strong>
+                <div class="col-mobile-sub">${t(`investments.types.${r.type}`)}${r.symbol ? ` · ${escapeHtml(r.symbol)}` : (r.city ? ` · ${escapeHtml(r.city)}` : "")}</div>
+              </td>
+              <td class="col-mobile-hidden">${t(`investments.types.${r.type}`)}</td>
+              <td class="col-mobile-hidden">${escapeHtml(r.symbol || (r.city || "—"))}</td>
+              <td class="col-mobile-hidden" style="text-align:right">${r.quantity == null ? "—" : Number(r.quantity).toLocaleString(undefined, { maximumFractionDigits: 8 })}</td>
+              <td class="col-mobile-hidden" style="text-align:right">${money(r.amount_invested)}</td>
+              <td class="col-current" style="text-align:right">${money(r.current_value)}</td>
+              <td class="col-mobile-hidden">${r.purchase_date}</td>
+              <td class="col-roi" style="text-align:right"><span class="badge ${badgeClass(r.roi_pct)}">${pct(r.roi_pct)}</span></td>
+              <td class="col-actions" onclick="event.stopPropagation()" style="white-space:nowrap">
+                <button class="btn-icon inv-edit" data-id="${r.id}" title="${t("investments.edit")}" aria-label="${t("investments.edit")}">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button class="btn-icon inv-whatif" data-id="${r.id}" title="${t("investments.whatif.title")}" aria-label="${t("investments.whatif.title")}">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 3v6h6"/></svg>
+                </button>
+                <button class="btn-icon inv-delete" data-id="${r.id}" title="${t("investments.delete")}" aria-label="${t("investments.delete")}">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+                </button>
               </td>
             </tr>`).join("")}
         </tbody>
