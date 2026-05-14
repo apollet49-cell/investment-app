@@ -1,4 +1,4 @@
-import { API, money, pct, spinner, toast, escapeHtml } from "/static/app.js";
+import { API, money, pct, spinner, toast, escapeHtml, onViewCleanup } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 const TYPES = ["stock", "real_estate", "crypto", "bond", "etf", "startup"];
@@ -42,6 +42,16 @@ export async function render(root) {
   document.getElementById("csv-input").onchange = onCsvUpload;
   document.getElementById("inv-search").oninput = (e) => { filterText = e.target.value.toLowerCase(); refresh(root); };
   attachRowHandlers(root);
+
+  // Auto-refresh every 60s so live market prices flow into the table without
+  // a manual reload. Cleanup hook stops the interval when the user leaves the view.
+  const refreshTimer = setInterval(async () => {
+    try {
+      cache = await API.request("/investments/");
+      refresh(root);
+    } catch (_) { /* network blip — try again next tick */ }
+  }, 60000);
+  onViewCleanup(() => clearInterval(refreshTimer));
 }
 
 function refresh(root) {
@@ -198,7 +208,7 @@ function openForm(id) {
               <div id="units-total-preview" class="hint" style="margin-top:-6px"></div>
             </div>
 
-            <!-- Real-estate-only block: rental income + monthly charges + net cashflow preview -->
+            <!-- Real-estate-only block: rental income + charges + optional loan -->
             <div id="real-estate-fields" style="display:none;border-top:1px solid var(--border);padding-top:16px;margin-top:12px">
               <div style="font-family:var(--font-serif);font-size:16px;font-weight:500;margin-bottom:12px">${t("investments.real_estate.title")}</div>
               <div class="row">
@@ -209,7 +219,39 @@ function openForm(id) {
                   <input name="monthly_rental_charges" type="number" step="0.01" min="0"
                          value="${inv && inv.monthly_rental_charges ? inv.monthly_rental_charges : ""}"/></div>
               </div>
-              <div id="cashflow-hint" class="hint" style="margin-top:-6px"></div>
+              <div class="field" style="margin-top:4px">
+                <label style="display:inline-flex !important;align-items:center;gap:8px;cursor:pointer;text-transform:none;letter-spacing:normal;font-weight:400;color:var(--text);margin-bottom:0">
+                  <input type="checkbox" id="has-loan"
+                         ${inv && (inv.loan_amount || inv.monthly_mortgage_payment) ? "checked" : ""}
+                         style="width:16px;height:16px;accent-color:var(--primary)"/>
+                  <span>${t("investments.real_estate.financed_by_loan")}</span>
+                </label>
+              </div>
+              <div id="loan-fields" style="display:none">
+                <div class="row">
+                  <div class="col field"><label>${t("investments.real_estate.loan_amount")} (USD)</label>
+                    <input name="loan_amount" type="number" step="0.01" min="0"
+                           value="${inv && inv.loan_amount ? inv.loan_amount : ""}"/></div>
+                  <div class="col field"><label>${t("investments.real_estate.loan_rate")} (%)</label>
+                    <input name="loan_interest_rate_pct" type="number" step="0.01" min="0"
+                           value="${inv && inv.loan_interest_rate_pct ? inv.loan_interest_rate_pct : ""}"/></div>
+                  <div class="col field"><label>${t("investments.real_estate.monthly_mortgage")} (USD)</label>
+                    <input name="monthly_mortgage_payment" type="number" step="0.01" min="0"
+                           value="${inv && inv.monthly_mortgage_payment ? inv.monthly_mortgage_payment : ""}"/></div>
+                </div>
+              </div>
+              <div id="cashflow-hint" class="hint" style="margin-top:6px"></div>
+            </div>
+
+            <!-- Startup-only block: expected annual yield -->
+            <div id="startup-fields" style="display:none;border-top:1px solid var(--border);padding-top:16px;margin-top:12px">
+              <div style="font-family:var(--font-serif);font-size:16px;font-weight:500;margin-bottom:12px">${t("investments.startup.title")}</div>
+              <div class="row">
+                <div class="col field"><label>${t("investments.startup.annual_yield")} (%)</label>
+                  <input name="annual_yield_pct" type="number" step="0.01"
+                         value="${inv && inv.annual_yield_pct != null ? inv.annual_yield_pct : ""}"/></div>
+              </div>
+              <div id="yield-hint" class="hint"></div>
             </div>
 
             <div class="field"><label>${t("investments.notes")}</label>
@@ -253,12 +295,21 @@ function openForm(id) {
       purchase_date: fd.get("purchase_date"),
       notes: (fd.get("notes") || "").trim() || undefined,
     };
-    // Real-estate rental fields (only meaningful when type === "real_estate"
+    // Real-estate rental + loan fields (only meaningful when type === "real_estate"
     // but we send them whenever filled — the backend stores nullable values).
     const ri = parseFloat(fd.get("monthly_rental_income"));
     const rc = parseFloat(fd.get("monthly_rental_charges"));
     if (isFinite(ri) && ri >= 0) payload.monthly_rental_income = ri;
     if (isFinite(rc) && rc >= 0) payload.monthly_rental_charges = rc;
+    const la = parseFloat(fd.get("loan_amount"));
+    const lr = parseFloat(fd.get("loan_interest_rate_pct"));
+    const mp = parseFloat(fd.get("monthly_mortgage_payment"));
+    if (isFinite(la) && la >= 0) payload.loan_amount = la;
+    if (isFinite(lr) && lr >= 0) payload.loan_interest_rate_pct = lr;
+    if (isFinite(mp) && mp >= 0) payload.monthly_mortgage_payment = mp;
+    // Startup yield
+    const ay = parseFloat(fd.get("annual_yield_pct"));
+    if (isFinite(ay)) payload.annual_yield_pct = ay;
 
     if (mode === "usd") {
       const inv = parseFloat(fd.get("amount_invested"));
@@ -267,6 +318,12 @@ function openForm(id) {
       if (!isFinite(cur) || cur < 0) { toast("Current value must be ≥ 0", "error"); return; }
       payload.amount_invested = inv;
       payload.current_value = cur;
+      // If we know the historical price (asset picked + date set), derive the
+      // implied quantity and store it. This unlocks live current-value refresh
+      // on subsequent GET /investments calls.
+      if (historicalPrice && historicalPrice > 0) {
+        payload.quantity = inv / historicalPrice;
+      }
     } else {
       const qty = parseFloat(fd.get("quantity"));
       const ppu = parseFloat(fd.get("price_per_unit"));
@@ -290,20 +347,39 @@ function openForm(id) {
   };
 }
 
-// Show / hide the real-estate-specific block (rental income + charges) when the
-// type select changes. Live-updates the net cashflow hint as the user types.
+// Show / hide the type-specific blocks (real_estate, startup) and wire all
+// the live hints that depend on inputs in those blocks.
 function setupRealEstateToggle() {
   const typeSelect = document.querySelector('select[name="type"]');
   const incomeInput = document.querySelector('input[name="monthly_rental_income"]');
   const chargesInput = document.querySelector('input[name="monthly_rental_charges"]');
+  const mortgageInput = document.querySelector('input[name="monthly_mortgage_payment"]');
+  const loanCheckbox = document.getElementById("has-loan");
+  const loanFields = document.getElementById("loan-fields");
+  const yieldInput = document.querySelector('input[name="annual_yield_pct"]');
+
   const updateVisibility = () => {
     const reFields = document.getElementById("real-estate-fields");
-    if (reFields) reFields.style.display = typeSelect?.value === "real_estate" ? "" : "none";
+    const stFields = document.getElementById("startup-fields");
+    const type = typeSelect?.value;
+    if (reFields) reFields.style.display = type === "real_estate" ? "" : "none";
+    if (stFields) stFields.style.display = type === "startup" ? "" : "none";
+    updateCashflowHint();
+    updateYieldHint();
+  };
+  const updateLoanVisibility = () => {
+    if (loanFields) loanFields.style.display = loanCheckbox?.checked ? "" : "none";
     updateCashflowHint();
   };
+
   if (typeSelect) typeSelect.addEventListener("change", updateVisibility);
   if (incomeInput) incomeInput.addEventListener("input", updateCashflowHint);
   if (chargesInput) chargesInput.addEventListener("input", updateCashflowHint);
+  if (mortgageInput) mortgageInput.addEventListener("input", updateCashflowHint);
+  if (loanCheckbox) loanCheckbox.addEventListener("change", updateLoanVisibility);
+  if (yieldInput) yieldInput.addEventListener("input", updateYieldHint);
+
+  updateLoanVisibility();
   updateVisibility();
 }
 
@@ -312,18 +388,42 @@ function updateCashflowHint() {
   if (!hint) return;
   const inc = parseFloat(document.querySelector('input[name="monthly_rental_income"]')?.value);
   const exp = parseFloat(document.querySelector('input[name="monthly_rental_charges"]')?.value);
-  const hasInc = isFinite(inc) && inc > 0;
-  const hasExp = isFinite(exp) && exp > 0;
-  if (!hasInc && !hasExp) { hint.innerHTML = ""; return; }
-  const incVal = hasInc ? inc : 0;
-  const expVal = hasExp ? exp : 0;
-  const net = incVal - expVal;
+  const mortgage = parseFloat(document.querySelector('input[name="monthly_mortgage_payment"]')?.value);
+  const incVal = isFinite(inc) && inc > 0 ? inc : 0;
+  const expVal = isFinite(exp) && exp > 0 ? exp : 0;
+  const mortVal = isFinite(mortgage) && mortgage > 0 ? mortgage : 0;
+  if (!incVal && !expVal && !mortVal) { hint.innerHTML = ""; return; }
+  const net = incVal - expVal - mortVal;
   const annual = net * 12;
   const netColor = net >= 0 ? "var(--success)" : "var(--danger)";
   const sign = net >= 0 ? "+" : "−";
   const absNet = Math.abs(net).toLocaleString(undefined, { maximumFractionDigits: 2 });
   const absAnnual = Math.abs(annual).toLocaleString(undefined, { maximumFractionDigits: 2 });
-  hint.innerHTML = `<span style="color:var(--text-muted)">${t("investments.real_estate.net_monthly")}: <strong style="color:${netColor}">${sign}$${absNet}</strong> · ${t("investments.real_estate.net_annual")}: <strong style="color:${netColor}">${sign}$${absAnnual}</strong></span>`;
+  const breakdown = mortVal > 0
+    ? `<br><span style="color:var(--text-muted);font-size:11px">Rent $${incVal.toFixed(2)} − Charges $${expVal.toFixed(2)} − Mortgage $${mortVal.toFixed(2)}</span>`
+    : "";
+  hint.innerHTML = `<span style="color:var(--text-muted)">${t("investments.real_estate.net_monthly")}: <strong style="color:${netColor}">${sign}$${absNet}</strong> · ${t("investments.real_estate.net_annual")}: <strong style="color:${netColor}">${sign}$${absAnnual}</strong></span>${breakdown}`;
+}
+
+function updateYieldHint() {
+  const hint = document.getElementById("yield-hint");
+  if (!hint) return;
+  const yieldPct = parseFloat(document.querySelector('input[name="annual_yield_pct"]')?.value);
+  const investedEl = document.querySelector('input[name="amount_invested"]');
+  const purchaseEl = document.querySelector('input[name="purchase_date"]');
+  if (!isFinite(yieldPct) || !investedEl || !purchaseEl) { hint.innerHTML = ""; return; }
+  const invested = parseFloat(investedEl.value);
+  const purchase = purchaseEl.value;
+  if (!isFinite(invested) || invested <= 0 || !purchase) { hint.innerHTML = ""; return; }
+  // Compound the expected return between purchase date and today.
+  const days = (Date.now() - new Date(purchase).getTime()) / (1000 * 60 * 60 * 24);
+  if (!isFinite(days) || days < 0) { hint.innerHTML = ""; return; }
+  const years = days / 365.25;
+  const projected = invested * Math.pow(1 + yieldPct / 100, years);
+  const gain = projected - invested;
+  const color = gain >= 0 ? "var(--success)" : "var(--danger)";
+  const sign = gain >= 0 ? "+" : "−";
+  hint.innerHTML = `<span style="color:var(--text-muted)">Projected value today (${years.toFixed(1)} yr @ ${yieldPct}%/yr): <strong style="color:${color}">$${projected.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong> (<span style="color:${color}">${sign}$${Math.abs(gain).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>)</span>`;
 }
 
 function setupInputModeToggle() {

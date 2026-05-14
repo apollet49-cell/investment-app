@@ -109,9 +109,17 @@ const en = {
     real_estate: {
       title: "Rental details",
       monthly_income: "Monthly rent received",
-      monthly_charges: "Monthly charges (taxes, maintenance, mortgage interest…)",
+      monthly_charges: "Monthly charges (taxes, maintenance…)",
       net_monthly: "Net monthly cashflow",
       net_annual: "Annual cashflow",
+      financed_by_loan: "Financed by a loan / mortgage",
+      loan_amount: "Total loan amount",
+      loan_rate: "Annual interest rate",
+      monthly_mortgage: "Monthly mortgage payment",
+    },
+    startup: {
+      title: "Startup details",
+      annual_yield: "Expected annual yield",
     },
   },
   calculator: {
@@ -297,9 +305,17 @@ const fr = {
     real_estate: {
       title: "Locatif",
       monthly_income: "Loyer mensuel perçu",
-      monthly_charges: "Charges mensuelles (taxes, entretien, intérêts d'emprunt…)",
+      monthly_charges: "Charges mensuelles (taxes, entretien…)",
       net_monthly: "Cashflow net mensuel",
       net_annual: "Cashflow annuel",
+      financed_by_loan: "Financé par un prêt",
+      loan_amount: "Montant total du prêt",
+      loan_rate: "Taux d'intérêt annuel",
+      monthly_mortgage: "Mensualité de prêt",
+    },
+    startup: {
+      title: "Startup",
+      annual_yield: "Rendement annuel attendu",
     },
   },
   calculator: {
@@ -485,9 +501,17 @@ const zh = {
     real_estate: {
       title: "出租信息",
       monthly_income: "每月租金收入",
-      monthly_charges: "每月支出（税费、维护、按揭利息…）",
+      monthly_charges: "每月支出（税费、维护…）",
       net_monthly: "每月净现金流",
       net_annual: "年度现金流",
+      financed_by_loan: "贷款融资",
+      loan_amount: "贷款总额",
+      loan_rate: "年利率",
+      monthly_mortgage: "每月按揭还款",
+    },
+    startup: {
+      title: "初创公司",
+      annual_yield: "预期年化收益率",
     },
   },
   calculator: {

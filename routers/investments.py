@@ -12,6 +12,7 @@ from auth import get_current_user
 from database import get_db
 from models import INVESTMENT_TYPES, Investment, User
 from schemas import CSVImportResult, InvestmentCreate, InvestmentOut, InvestmentUpdate
+from services.live_value import refresh_current_values
 
 router = APIRouter(prefix="/investments", tags=["investments"])
 
@@ -31,6 +32,10 @@ def _to_out(inv: Investment) -> InvestmentOut:
         quantity=inv.quantity,
         monthly_rental_income=inv.monthly_rental_income,
         monthly_rental_charges=inv.monthly_rental_charges,
+        loan_amount=inv.loan_amount,
+        loan_interest_rate_pct=inv.loan_interest_rate_pct,
+        monthly_mortgage_payment=inv.monthly_mortgage_payment,
+        annual_yield_pct=inv.annual_yield_pct,
         purchase_date=inv.purchase_date,
         notes=inv.notes,
         created_at=inv.created_at,
@@ -46,6 +51,19 @@ def _validate_type(t: str) -> None:
 @router.get("/", response_model=list[InvestmentOut])
 async def list_investments(current: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[InvestmentOut]:
     rows = db.query(Investment).filter(Investment.user_id == current.id).order_by(Investment.created_at.desc()).all()
+    # Live refresh: for tradable investments where we know the quantity,
+    # recompute current_value = quantity × current_market_price. Persist so
+    # subsequent reads stay fast and any reports/exports see fresh values.
+    updates = await refresh_current_values(rows)
+    if updates:
+        changed = False
+        for r in rows:
+            new_val = updates.get(r.id)
+            if new_val is not None and r.current_value != new_val:
+                r.current_value = new_val
+                changed = True
+        if changed:
+            db.commit()
     return [_to_out(r) for r in rows]
 
 
@@ -66,6 +84,10 @@ async def create_investment(
         quantity=payload.quantity,
         monthly_rental_income=payload.monthly_rental_income,
         monthly_rental_charges=payload.monthly_rental_charges,
+        loan_amount=payload.loan_amount,
+        loan_interest_rate_pct=payload.loan_interest_rate_pct,
+        monthly_mortgage_payment=payload.monthly_mortgage_payment,
+        annual_yield_pct=payload.annual_yield_pct,
         purchase_date=payload.purchase_date,
         notes=payload.notes,
     )

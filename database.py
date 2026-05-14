@@ -50,6 +50,10 @@ def init_db() -> None:
         ("investments", "quantity", "ALTER TABLE investments ADD COLUMN quantity FLOAT"),
         ("investments", "monthly_rental_income", "ALTER TABLE investments ADD COLUMN monthly_rental_income FLOAT"),
         ("investments", "monthly_rental_charges", "ALTER TABLE investments ADD COLUMN monthly_rental_charges FLOAT"),
+        ("investments", "loan_amount", "ALTER TABLE investments ADD COLUMN loan_amount FLOAT"),
+        ("investments", "loan_interest_rate_pct", "ALTER TABLE investments ADD COLUMN loan_interest_rate_pct FLOAT"),
+        ("investments", "monthly_mortgage_payment", "ALTER TABLE investments ADD COLUMN monthly_mortgage_payment FLOAT"),
+        ("investments", "annual_yield_pct", "ALTER TABLE investments ADD COLUMN annual_yield_pct FLOAT"),
     ]
     insp = inspect(engine)
     with engine.begin() as conn:

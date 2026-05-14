@@ -11,6 +11,7 @@ from database import get_db
 from models import Investment, User
 from schemas import DashboardSummary, InvestmentOut
 from services.alerts_engine import evaluate_alerts
+from services.live_value import refresh_current_values
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -37,6 +38,17 @@ def _to_out(inv: Investment) -> InvestmentOut:
 @router.get("/summary", response_model=DashboardSummary)
 async def summary(current: User = Depends(get_current_user), db: Session = Depends(get_db)) -> DashboardSummary:
     rows = db.query(Investment).filter(Investment.user_id == current.id).all()
+    # Apply live market refresh before computing aggregates.
+    updates = await refresh_current_values(rows)
+    if updates:
+        changed = False
+        for r in rows:
+            new_val = updates.get(r.id)
+            if new_val is not None and r.current_value != new_val:
+                r.current_value = new_val
+                changed = True
+        if changed:
+            db.commit()
     total_invested = sum(r.amount_invested for r in rows)
     current_value = sum(r.current_value for r in rows)
     total_roi = ((current_value - total_invested) / total_invested * 100.0) if total_invested > 0 else 0.0

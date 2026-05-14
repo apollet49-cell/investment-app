@@ -149,6 +149,17 @@ function destroyCharts() {
   }
 }
 
+// View-lifecycle cleanup. Views can register a cleanup callback (e.g. to clear
+// auto-refresh intervals) that the router runs before swapping to a new view.
+let _viewCleanup = null;
+export function onViewCleanup(fn) { _viewCleanup = fn; }
+function runViewCleanup() {
+  if (_viewCleanup) {
+    try { _viewCleanup(); } catch (_) {}
+    _viewCleanup = null;
+  }
+}
+
 async function renderRoute() {
   if (!state.token || !state.user) {
     showAuth();
@@ -160,6 +171,7 @@ async function renderRoute() {
   for (const a of document.querySelectorAll(".sidebar-link")) {
     a.classList.toggle("active", a.dataset.hash === route.hash);
   }
+  runViewCleanup();
   destroyCharts();
   const root = document.getElementById("view-root");
   root.innerHTML = `<div style="text-align:center;padding:60px">${spinner(true)}</div>`;

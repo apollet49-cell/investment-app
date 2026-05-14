@@ -44,6 +44,10 @@ class InvestmentBase(BaseModel):
     quantity: Optional[float] = Field(default=None, ge=0)
     monthly_rental_income: Optional[float] = Field(default=None, ge=0)
     monthly_rental_charges: Optional[float] = Field(default=None, ge=0)
+    loan_amount: Optional[float] = Field(default=None, ge=0)
+    loan_interest_rate_pct: Optional[float] = Field(default=None, ge=0)
+    monthly_mortgage_payment: Optional[float] = Field(default=None, ge=0)
+    annual_yield_pct: Optional[float] = None
     purchase_date: date
     notes: Optional[str] = None
 
@@ -61,6 +65,10 @@ class InvestmentUpdate(BaseModel):
     quantity: Optional[float] = Field(default=None, ge=0)
     monthly_rental_income: Optional[float] = Field(default=None, ge=0)
     monthly_rental_charges: Optional[float] = Field(default=None, ge=0)
+    loan_amount: Optional[float] = Field(default=None, ge=0)
+    loan_interest_rate_pct: Optional[float] = Field(default=None, ge=0)
+    monthly_mortgage_payment: Optional[float] = Field(default=None, ge=0)
+    annual_yield_pct: Optional[float] = None
     purchase_date: Optional[date] = None
     notes: Optional[str] = None
 

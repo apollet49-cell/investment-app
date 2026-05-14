@@ -1,4 +1,4 @@
-import { API, state, money, pct, spinner, toast, escapeHtml } from "/static/app.js";
+import { API, state, money, pct, spinner, toast, escapeHtml, onViewCleanup } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 // Muted earth-tone palette to match the beige / taupe theme.
@@ -12,6 +12,12 @@ const TYPE_COLORS = {
 };
 
 export async function render(root) {
+  // Destroy any previous Chart.js instances before redrawing — auto-refresh
+  // calls render(root) again every 60s.
+  for (const k of Object.keys(state.charts)) {
+    try { state.charts[k]?.destroy?.(); } catch (_) {}
+    delete state.charts[k];
+  }
   root.innerHTML = `<div style="text-align:center;padding:40px">${spinner(true)}</div>`;
   let data;
   try {
@@ -20,6 +26,10 @@ export async function render(root) {
     root.innerHTML = `<div class="alert-banner error">${err.message}</div>`;
     return;
   }
+
+  // Schedule the next live refresh (cleared on view change via onViewCleanup).
+  const refreshTimer = setTimeout(() => render(root), 60000);
+  onViewCleanup(() => clearTimeout(refreshTimer));
   if (!data.total_invested && !data.current_value) {
     root.innerHTML = emptyState();
     document.getElementById("dash-empty-add")?.addEventListener("click", () => location.hash = "#/investments");
