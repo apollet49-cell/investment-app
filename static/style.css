@@ -248,12 +248,17 @@ a { color: var(--primary-strong); }
 .lang-switch button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 
 /* ---------- Main ---------- */
-.main { display: flex; flex-direction: column; min-width: 0; }
+.main {
+  display: flex; flex-direction: column; min-width: 0;
+  height: 100vh;
+  overflow-y: auto;       /* main scrolls internally so the sidebar stays put */
+}
 .topbar {
   display: flex; justify-content: space-between; align-items: center;
   padding: 28px var(--content-padding) 22px;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 5;   /* page header stays at the top while content scrolls */
 }
 .topbar h1 {
   font-size: 32px;
