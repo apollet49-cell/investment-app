@@ -93,3 +93,57 @@ async def universe() -> dict:
         "cryptos": len(TOP_CRYPTOS),
         "total": len(TOP_STOCKS) + len(TOP_ETFS) + len(TOP_CRYPTOS),
     }
+
+
+class CompareItem(BaseModel):
+    symbol: str
+    asset_type: str = "stock"
+    name: Optional[str] = None
+
+
+class CompareRequest(BaseModel):
+    items: list[CompareItem]
+    period: str = "1y"
+
+
+@router.post("/compare")
+async def compare(body: CompareRequest) -> dict:
+    """Return base-100 normalised historical price series for 1-5 assets.
+    Useful for comparing performance across stocks/ETFs/crypto over a period."""
+    items = body.items[:5]
+    if not items:
+        raise HTTPException(status_code=400, detail="at least one symbol required")
+
+    async def _fetch(item: CompareItem):
+        try:
+            return await market_universe.get_historical(item.symbol, body.period)
+        except Exception:
+            return None
+
+    raw = await asyncio.gather(*(_fetch(i) for i in items))
+
+    series = []
+    for item, hist in zip(items, raw):
+        if not hist or len(hist) < 2:
+            series.append({"symbol": item.symbol, "name": item.name or item.symbol, "error": "no data"})
+            continue
+        base = hist[0]["close"]
+        if not base or base <= 0:
+            series.append({"symbol": item.symbol, "name": item.name or item.symbol, "error": "invalid base price"})
+            continue
+        # Sub-sample if too many points to keep the payload reasonable
+        step = max(1, len(hist) // 250)
+        sampled = hist[::step]
+        if sampled[-1] != hist[-1]:
+            sampled.append(hist[-1])
+        points = [{"date": h["date"], "value": round((h["close"] / base) * 100, 2)} for h in sampled]
+        series.append({
+            "symbol": item.symbol,
+            "name": item.name or item.symbol,
+            "start_price": round(base, 4),
+            "end_price": round(hist[-1]["close"], 4),
+            "change_pct": round((hist[-1]["close"] / base - 1) * 100, 2),
+            "points": points,
+        })
+
+    return {"period": body.period, "series": series}
