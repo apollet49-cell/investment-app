@@ -297,11 +297,12 @@ async function searchAsset(q) {
   }
 }
 
-function pickAsset(row) {
+async function pickAsset(row) {
   const sym = row.dataset.symbol;
+  const id = row.dataset.id;
   const name = row.dataset.name;
   const type = (row.dataset.type || "stock").toLowerCase();
-  // Map yahoo's "equity" → "stock" etc.
+  // Map yahoo's "equity" → "stock", "cryptocurrency" → "crypto", etc.
   const typeMap = { equity: "stock", cryptocurrency: "crypto", crypto: "crypto", etf: "etf" };
   const normType = typeMap[type] || (TYPES.includes(type) ? type : "stock");
 
@@ -309,7 +310,38 @@ function pickAsset(row) {
   document.querySelector('input[name="symbol"]').value = sym;
   document.querySelector('select[name="type"]').value = normType;
   document.getElementById("asset-search").value = `${sym} — ${name}`;
-  document.getElementById("asset-results").innerHTML = "";
+  document.getElementById("asset-results").innerHTML = `<div class="asset-loading">${spinner()} fetching live price…</div>`;
+
+  // Auto-fill the current price from the live market data.
+  try {
+    let price = null;
+    if (id) {
+      // CoinGecko id from local crypto catalog
+      const data = await API.request(`/market/crypto/${encodeURIComponent(id)}`);
+      price = data?.price_usd;
+    } else {
+      // yfinance ticker (stock / ETF / yahoo crypto)
+      const data = await API.request(`/market/price/${encodeURIComponent(sym)}`);
+      price = data?.price;
+    }
+    if (price != null && isFinite(price)) {
+      const formatted = price >= 1 ? price.toFixed(2) : (price >= 0.01 ? price.toFixed(4) : price.toFixed(8));
+      const usdCurrent = document.querySelector('input[name="current_value"]');
+      const unitsCurrent = document.querySelector('input[name="current_value_units"]');
+      const pricePerUnit = document.querySelector('input[name="price_per_unit"]');
+      if (usdCurrent && !usdCurrent.value) usdCurrent.value = formatted;
+      if (unitsCurrent && !unitsCurrent.value) unitsCurrent.value = formatted;
+      if (pricePerUnit && !pricePerUnit.value) pricePerUnit.value = formatted;
+      document.getElementById("asset-results").innerHTML =
+        `<div class="asset-empty">✓ live price: $${formatted}</div>`;
+    } else {
+      document.getElementById("asset-results").innerHTML =
+        `<div class="asset-empty">No live price found — enter manually</div>`;
+    }
+  } catch (e) {
+    console.warn("pickAsset price fetch failed:", e);
+    document.getElementById("asset-results").innerHTML = "";
+  }
 }
 
 // ---------- Connect Wallet modal ----------
@@ -468,8 +500,29 @@ function injectModalStyles() {
     .asset-loading, .asset-empty {
       padding: 12px; text-align: center; color: var(--text-muted); font-size: 12px;
     }
-    .mode-toggle { display: flex; gap: 18px; align-items: center; }
-    .mode-toggle label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; color: var(--text); }
+    .mode-toggle { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; }
+    /* Override the global .field label rules (uppercase + bold + display:block)
+       which would otherwise stack the radios on top of each other. */
+    .mode-toggle label {
+      display: inline-flex !important;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: normal;
+      margin-bottom: 0;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .mode-toggle input[type="radio"] {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      padding: 0;
+      flex-shrink: 0;
+      accent-color: var(--primary);
+    }
   `;
   const s = document.createElement("style");
   s.id = "inv-modal-styles";
