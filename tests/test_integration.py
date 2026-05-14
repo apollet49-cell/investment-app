@@ -7,11 +7,19 @@ rebalance dict-payload crash on malformed body) on the first commit.
 """
 from __future__ import annotations
 
+import uuid
+
+
+def _fresh_email() -> str:
+    """Per-test unique email so the session-scoped DB doesn't collide on
+    re-runs (pytest-watch, pytest-randomly, or just re-running the file)."""
+    return f"test-{uuid.uuid4().hex[:10]}@example.com"
+
 
 # ---------- auth ----------
 
 def test_register_and_login_flow(client):
-    email = "integ-1@example.com"
+    email = _fresh_email()
     r = client.post("/auth/register", json={
         "email": email, "password": "secret123", "name": "Integration",
     })
@@ -39,10 +47,11 @@ def test_register_and_login_flow(client):
 
 
 def test_login_wrong_password_returns_401(client):
+    email = _fresh_email()
     client.post("/auth/register", json={
-        "email": "wrong-pw@example.com", "password": "right-password", "name": "X",
+        "email": email, "password": "right-password", "name": "X",
     })
-    r = client.post("/auth/login", json={"email": "wrong-pw@example.com", "password": "WRONG"})
+    r = client.post("/auth/login", json={"email": email, "password": "WRONG"})
     assert r.status_code == 401
 
 

@@ -106,7 +106,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "40";
+const VIEW_VERSION = "41";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },

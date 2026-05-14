@@ -110,6 +110,10 @@ _fetch_one = _fetch_price_in_usd
 async def refresh_current_values(investments: Iterable) -> dict[int, float]:
     """Return {investment_id: new_current_value_usd} for tradable rows with
     a symbol + quantity. Caller decides whether to persist."""
+    # Tests opt out so they don't hit real yfinance / CoinGecko.
+    import os as _os
+    if _os.getenv("INVESTAPP_DISABLE_LIVE_REFRESH") == "1":
+        return {}
     work = [
         inv for inv in investments
         if inv.type in TRADABLE_TYPES
@@ -121,10 +125,21 @@ async def refresh_current_values(investments: Iterable) -> dict[int, float]:
         return {}
 
     keys = list({(inv.symbol, inv.type) for inv in work})
-    results = await asyncio.gather(
-        *(_fetch_price_in_usd(sym, typ) for (sym, typ) in keys),
-        return_exceptions=True,
-    )
+    # Wrap the whole batch in a 10s deadline so a flaky upstream (yfinance
+    # cold-start, CoinGecko rate-limit) can't hang GET /investments/ or
+    # /dashboard/summary indefinitely. On timeout, we return {} and the
+    # caller sees the stored values — better than a 504.
+    try:
+        results = await asyncio.wait_for(
+            asyncio.gather(
+                *(_fetch_price_in_usd(sym, typ) for (sym, typ) in keys),
+                return_exceptions=True,
+            ),
+            timeout=10.0,
+        )
+    except asyncio.TimeoutError:
+        log.warning("live refresh timed out (>10s) — using stored values")
+        return {}
     price_by_key: dict[tuple[str, str], float] = {}
     for key, r in zip(keys, results):
         if isinstance(r, (int, float)) and r > 0:

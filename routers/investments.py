@@ -358,11 +358,13 @@ async def import_csv(
             row_id_raw = (row.get("id") or "").strip()
             if row_id_raw:
                 try:
-                    row_id = int(row_id_raw)
+                    # int(float(...)) handles "12.0" that Excel emits when it
+                    # round-trips a numeric column. Catches floats and ints.
+                    row_id = int(float(row_id_raw))
                     if row_id in existing_ids:
                         skipped += 1
                         continue
-                except ValueError:
+                except (ValueError, TypeError):
                     pass  # ignore malformed id, treat as new row
             def _opt_float(key: str) -> Optional[float]:
                 v = (row.get(key) or "").strip()

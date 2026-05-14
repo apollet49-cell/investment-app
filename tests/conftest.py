@@ -11,6 +11,12 @@ import tempfile
 from pathlib import Path
 
 # Inject env vars BEFORE importing main / settings so Pydantic's validator passes.
+# Hermetic test mode: skip the scheduler + live market refresh so tests
+# don't hit real yfinance / AlphaVantage / CoinGecko endpoints (flaky,
+# slow, and would leak network from CI).
+os.environ.setdefault("INVESTAPP_DISABLE_SCHEDULER", "1")
+os.environ.setdefault("INVESTAPP_DISABLE_LIVE_REFRESH", "1")
+
 # Valid Fernet key (32 url-safe-base64-encoded bytes). Required by crypto.py.
 os.environ.setdefault("APP_ENCRYPTION_KEY", "x6bMRJR4jD9SMX7fSeomDbTkEfx-cyreg3IcDzG1rTE=")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -14,17 +15,23 @@ from database import init_db
 from settings import settings as app_settings
 
 # Sentry: initialise BEFORE the FastAPI app so its middleware catches every
-# unhandled exception. If SENTRY_DSN is empty, the SDK is a no-op.
+# unhandled exception. If SENTRY_DSN is empty or the SDK isn't installed
+# (minimal lockfile / dev env without monitoring), we no-op rather than
+# refusing to boot.
 if app_settings.SENTRY_DSN:
-    import sentry_sdk
-    sentry_sdk.init(
-        dsn=app_settings.SENTRY_DSN,
-        environment=app_settings.SENTRY_ENV,
-        traces_sample_rate=app_settings.SENTRY_TRACES_SAMPLE_RATE,
-        # Don't send PII (user emails) by default; flip on once you have
-        # a data-retention policy reviewed.
-        send_default_pii=False,
-    )
+    try:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=app_settings.SENTRY_DSN,
+            environment=app_settings.SENTRY_ENV,
+            traces_sample_rate=app_settings.SENTRY_TRACES_SAMPLE_RATE,
+            send_default_pii=False,
+        )
+    except ImportError:
+        logging.getLogger("investment_app").warning(
+            "SENTRY_DSN is set but sentry-sdk is not installed — "
+            "error reporting disabled. Run `pip install sentry-sdk[fastapi]`."
+        )
 from routers import (
     alerts as alerts_router,
     chatbot as chatbot_router,
@@ -59,6 +66,13 @@ async def lifespan(app: FastAPI):
     log.info("Starting investment app — config validated")
     init_db()
     log.info("Database initialised")
+
+    # Tests (and other hermetic environments) opt out of the scheduler so
+    # they don't hit real yfinance / AlphaVantage endpoints.
+    if os.getenv("INVESTAPP_DISABLE_SCHEDULER") == "1":
+        log.info("Scheduler disabled via INVESTAPP_DISABLE_SCHEDULER=1")
+        yield
+        return
 
     # Phase B: scheduler + SSE state
     from services.sse import SSEHub
