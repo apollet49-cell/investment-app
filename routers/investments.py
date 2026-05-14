@@ -11,8 +11,16 @@ from sqlalchemy.orm import Session
 from auth import get_current_user
 from database import get_db
 from models import INVESTMENT_TYPES, Investment, User
-from schemas import CSVImportResult, InvestmentCreate, InvestmentOut, InvestmentUpdate
+from schemas import (
+    CSVImportResult,
+    InvestmentCreate,
+    InvestmentOut,
+    InvestmentUpdate,
+    PropertyValuationRequest,
+    PropertyValuationResponse,
+)
 from services.live_value import refresh_current_values
+from services.property_valuation import estimate_value as estimate_property_value
 
 router = APIRouter(prefix="/investments", tags=["investments"])
 
@@ -36,6 +44,13 @@ def _to_out(inv: Investment) -> InvestmentOut:
         loan_interest_rate_pct=inv.loan_interest_rate_pct,
         monthly_mortgage_payment=inv.monthly_mortgage_payment,
         annual_yield_pct=inv.annual_yield_pct,
+        address=inv.address,
+        postal_code=inv.postal_code,
+        city=inv.city,
+        country=inv.country,
+        surface_sqm=inv.surface_sqm,
+        property_subtype=inv.property_subtype,
+        garden_sqm=inv.garden_sqm,
         purchase_date=inv.purchase_date,
         notes=inv.notes,
         created_at=inv.created_at,
@@ -88,6 +103,13 @@ async def create_investment(
         loan_interest_rate_pct=payload.loan_interest_rate_pct,
         monthly_mortgage_payment=payload.monthly_mortgage_payment,
         annual_yield_pct=payload.annual_yield_pct,
+        address=payload.address,
+        postal_code=payload.postal_code,
+        city=payload.city,
+        country=payload.country,
+        surface_sqm=payload.surface_sqm,
+        property_subtype=payload.property_subtype,
+        garden_sqm=payload.garden_sqm,
         purchase_date=payload.purchase_date,
         notes=payload.notes,
     )
@@ -129,6 +151,22 @@ async def delete_investment(
     db.delete(inv)
     db.commit()
     return Response(status_code=204)
+
+
+@router.post("/estimate-value", response_model=PropertyValuationResponse)
+async def estimate_value_endpoint(
+    payload: PropertyValuationRequest,
+    current: User = Depends(get_current_user),
+) -> PropertyValuationResponse:
+    """Look up comparable real-estate transactions and return an estimated value.
+    Currently supports France (DVF). Other countries return `unsupported_country`."""
+    result = await estimate_property_value(
+        postal_code=payload.postal_code,
+        country=payload.country,
+        surface_sqm=payload.surface_sqm,
+        property_subtype=payload.property_subtype,
+    )
+    return PropertyValuationResponse(**result)
 
 
 REQUIRED_CSV_COLS = {"name", "type", "amount_invested", "current_value", "purchase_date"}

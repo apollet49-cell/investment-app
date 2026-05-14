@@ -65,6 +65,14 @@ class Investment(Base):
     loan_amount: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     loan_interest_rate_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     monthly_mortgage_payment: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # Real-estate property details (used by the DVF valuation feature for FR).
+    address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    postal_code: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    city: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    country: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    surface_sqm: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    property_subtype: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    garden_sqm: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     # Startup-only: expected annual yield as a percentage (e.g. 12.5 for 12.5%/yr).
     annual_yield_pct: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     purchase_date: Mapped[date] = mapped_column(Date, nullable=False)

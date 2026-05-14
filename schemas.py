@@ -48,6 +48,13 @@ class InvestmentBase(BaseModel):
     loan_interest_rate_pct: Optional[float] = Field(default=None, ge=0)
     monthly_mortgage_payment: Optional[float] = Field(default=None, ge=0)
     annual_yield_pct: Optional[float] = None
+    address: Optional[str] = None
+    postal_code: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    surface_sqm: Optional[float] = Field(default=None, ge=0)
+    property_subtype: Optional[str] = None
+    garden_sqm: Optional[float] = Field(default=None, ge=0)
     purchase_date: date
     notes: Optional[str] = None
 
@@ -69,8 +76,34 @@ class InvestmentUpdate(BaseModel):
     loan_interest_rate_pct: Optional[float] = Field(default=None, ge=0)
     monthly_mortgage_payment: Optional[float] = Field(default=None, ge=0)
     annual_yield_pct: Optional[float] = None
+    address: Optional[str] = None
+    postal_code: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    surface_sqm: Optional[float] = Field(default=None, ge=0)
+    property_subtype: Optional[str] = None
+    garden_sqm: Optional[float] = Field(default=None, ge=0)
     purchase_date: Optional[date] = None
     notes: Optional[str] = None
+
+
+class PropertyValuationRequest(BaseModel):
+    postal_code: str = Field(min_length=2, max_length=16)
+    country: str = "FR"
+    surface_sqm: float = Field(gt=0)
+    property_subtype: str = "apartment"  # apartment | house | office
+
+
+class PropertyValuationResponse(BaseModel):
+    status: str  # ok | no_data | no_match | unsupported_country | error
+    estimated_value_local: Optional[float] = None
+    local_currency: Optional[str] = None
+    estimated_value_usd: Optional[float] = None
+    median_price_per_sqm_local: Optional[float] = None
+    comparable_count: int = 0
+    source: Optional[str] = None
+    samples: list[dict] = []
+    message: Optional[str] = None
 
 
 class InvestmentOut(InvestmentBase):

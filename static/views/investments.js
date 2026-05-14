@@ -241,6 +241,42 @@ function openForm(id) {
                 </div>
               </div>
               <div id="cashflow-hint" class="hint" style="margin-top:6px"></div>
+
+              <!-- Property details for auto-valuation via DVF (France) -->
+              <div style="margin-top:18px;padding-top:14px;border-top:1px dashed var(--border)">
+                <div style="font-family:var(--font-serif);font-size:14px;font-weight:500;margin-bottom:10px">${t("investments.real_estate.property_details")}</div>
+                <div class="field"><label>${t("investments.real_estate.address")}</label>
+                  <input name="address" value="${inv && inv.address ? escapeHtml(inv.address) : ""}"/></div>
+                <div class="row">
+                  <div class="col field"><label>${t("investments.real_estate.postal_code")}</label>
+                    <input name="postal_code" value="${inv && inv.postal_code ? escapeHtml(inv.postal_code) : ""}"/></div>
+                  <div class="col field"><label>${t("investments.real_estate.city")}</label>
+                    <input name="city" value="${inv && inv.city ? escapeHtml(inv.city) : ""}"/></div>
+                  <div class="col field"><label>${t("investments.real_estate.country")}</label>
+                    <select name="country">
+                      <option value="FR" ${!inv || inv.country === "FR" || !inv.country ? "selected" : ""}>${t("investments.real_estate.country_fr")}</option>
+                      <option value="OTHER" ${inv && inv.country && inv.country !== "FR" ? "selected" : ""}>${t("investments.real_estate.country_other")}</option>
+                    </select></div>
+                </div>
+                <div class="row">
+                  <div class="col field"><label>${t("investments.real_estate.surface_sqm")} (m²)</label>
+                    <input name="surface_sqm" type="number" step="0.1" min="0"
+                           value="${inv && inv.surface_sqm ? inv.surface_sqm : ""}"/></div>
+                  <div class="col field"><label>${t("investments.real_estate.property_subtype")}</label>
+                    <select name="property_subtype">
+                      <option value="apartment" ${!inv || inv.property_subtype === "apartment" || !inv.property_subtype ? "selected" : ""}>${t("investments.real_estate.subtype_apartment")}</option>
+                      <option value="house" ${inv && inv.property_subtype === "house" ? "selected" : ""}>${t("investments.real_estate.subtype_house")}</option>
+                      <option value="office" ${inv && inv.property_subtype === "office" ? "selected" : ""}>${t("investments.real_estate.subtype_office")}</option>
+                    </select></div>
+                  <div class="col field"><label>${t("investments.real_estate.garden_sqm")} (m²)</label>
+                    <input name="garden_sqm" type="number" step="0.1" min="0"
+                           value="${inv && inv.garden_sqm ? inv.garden_sqm : ""}"/></div>
+                </div>
+                <button type="button" class="btn btn-ghost" id="estimate-value-btn" style="margin-top:6px">
+                  ${t("investments.real_estate.estimate_button")}
+                </button>
+                <div id="estimate-result" style="margin-top:12px"></div>
+              </div>
             </div>
 
             <!-- Startup-only block: expected annual yield -->
@@ -379,8 +415,59 @@ function setupRealEstateToggle() {
   if (loanCheckbox) loanCheckbox.addEventListener("change", updateLoanVisibility);
   if (yieldInput) yieldInput.addEventListener("input", updateYieldHint);
 
+  // Wire the DVF estimate button (visible only when the real-estate block is shown)
+  const estimateBtn = document.getElementById("estimate-value-btn");
+  if (estimateBtn) estimateBtn.onclick = estimateMarketValue;
+
   updateLoanVisibility();
   updateVisibility();
+}
+
+async function estimateMarketValue() {
+  const out = document.getElementById("estimate-result");
+  if (!out) return;
+  const postal = document.querySelector('input[name="postal_code"]')?.value?.trim();
+  const country = document.querySelector('select[name="country"]')?.value || "FR";
+  const surface = parseFloat(document.querySelector('input[name="surface_sqm"]')?.value);
+  const subtype = document.querySelector('select[name="property_subtype"]')?.value || "apartment";
+  if (!postal || !isFinite(surface) || surface <= 0) {
+    out.innerHTML = `<div class="alert-banner error" style="margin:0">${t("investments.real_estate.estimate_missing")}</div>`;
+    return;
+  }
+  out.innerHTML = `<div class="hint">${spinner()} ${t("investments.real_estate.estimate_loading")}</div>`;
+  try {
+    const data = await API.request("/investments/estimate-value", {
+      method: "POST",
+      body: { postal_code: postal, country, surface_sqm: surface, property_subtype: subtype },
+    });
+    if (data.status === "ok") {
+      const eurFmt = Number(data.estimated_value_local).toLocaleString("fr-FR", { maximumFractionDigits: 0 });
+      const usdFmt = Number(data.estimated_value_usd).toLocaleString(undefined, { maximumFractionDigits: 0 });
+      const ppsqmFmt = Number(data.median_price_per_sqm_local).toLocaleString("fr-FR", { maximumFractionDigits: 0 });
+      out.innerHTML = `
+        <div class="card" style="margin:0;padding:16px;background:var(--surface-2)">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
+            <div>
+              <div style="font-family:var(--font-serif);font-size:24px;line-height:1.2">€${eurFmt} <span style="color:var(--text-muted);font-size:14px">≈ $${usdFmt}</span></div>
+              <div style="color:var(--text-muted);font-size:12px;margin-top:4px">${t("investments.real_estate.estimate_based_on", { n: data.comparable_count })} · ${t("investments.real_estate.estimate_median")} €${ppsqmFmt}/m²</div>
+              <div style="color:var(--text-muted);font-size:11px;margin-top:2px">${escapeHtml(data.source || "")}</div>
+            </div>
+            <button type="button" class="btn btn-primary" id="apply-estimate-btn">${t("investments.real_estate.estimate_apply")}</button>
+          </div>
+        </div>`;
+      document.getElementById("apply-estimate-btn").onclick = () => {
+        const currentEl = document.querySelector('input[name="current_value"]');
+        if (currentEl) currentEl.value = data.estimated_value_usd.toFixed(2);
+        toast(t("investments.real_estate.estimate_applied"), "success");
+      };
+    } else if (data.status === "unsupported_country") {
+      out.innerHTML = `<div class="alert-banner" style="margin:0">${escapeHtml(data.message || "")}</div>`;
+    } else {
+      out.innerHTML = `<div class="alert-banner" style="margin:0">${escapeHtml(data.message || t("investments.real_estate.estimate_no_match"))}</div>`;
+    }
+  } catch (e) {
+    out.innerHTML = `<div class="alert-banner error" style="margin:0">${escapeHtml(e.message)}</div>`;
+  }
 }
 
 function updateCashflowHint() {

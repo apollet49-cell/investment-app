@@ -54,6 +54,13 @@ def init_db() -> None:
         ("investments", "loan_interest_rate_pct", "ALTER TABLE investments ADD COLUMN loan_interest_rate_pct FLOAT"),
         ("investments", "monthly_mortgage_payment", "ALTER TABLE investments ADD COLUMN monthly_mortgage_payment FLOAT"),
         ("investments", "annual_yield_pct", "ALTER TABLE investments ADD COLUMN annual_yield_pct FLOAT"),
+        ("investments", "address", "ALTER TABLE investments ADD COLUMN address TEXT"),
+        ("investments", "postal_code", "ALTER TABLE investments ADD COLUMN postal_code VARCHAR(16)"),
+        ("investments", "city", "ALTER TABLE investments ADD COLUMN city VARCHAR(128)"),
+        ("investments", "country", "ALTER TABLE investments ADD COLUMN country VARCHAR(8)"),
+        ("investments", "surface_sqm", "ALTER TABLE investments ADD COLUMN surface_sqm FLOAT"),
+        ("investments", "property_subtype", "ALTER TABLE investments ADD COLUMN property_subtype VARCHAR(32)"),
+        ("investments", "garden_sqm", "ALTER TABLE investments ADD COLUMN garden_sqm FLOAT"),
     ]
     insp = inspect(engine)
     with engine.begin() as conn:
