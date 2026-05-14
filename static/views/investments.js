@@ -210,7 +210,8 @@ function openForm(id) {
 
             <!-- Real-estate-only block: rental income + charges + optional loan -->
             <div id="real-estate-fields" style="display:none;border-top:1px solid var(--border);padding-top:16px;margin-top:12px">
-              <div style="font-family:var(--font-serif);font-size:16px;font-weight:500;margin-bottom:12px">${t("investments.real_estate.title")}</div>
+              <div style="font-family:var(--font-serif);font-size:16px;font-weight:500;margin-bottom:6px">${t("investments.real_estate.title")}</div>
+              <div style="color:var(--text-muted);font-size:12px;margin-bottom:12px">${t("investments.real_estate.section_optional")}</div>
               <div class="row">
                 <div class="col field"><label>${t("investments.real_estate.monthly_income")} (USD)</label>
                   <input name="monthly_rental_income" type="number" step="0.01" min="0"
@@ -346,6 +347,21 @@ function openForm(id) {
     // Startup yield
     const ay = parseFloat(fd.get("annual_yield_pct"));
     if (isFinite(ay)) payload.annual_yield_pct = ay;
+    // Real-estate property details (all optional — used by DVF auto-valuation)
+    const addr = (fd.get("address") || "").toString().trim();
+    const pc = (fd.get("postal_code") || "").toString().trim();
+    const city = (fd.get("city") || "").toString().trim();
+    const ctry = (fd.get("country") || "").toString().trim();
+    const surface = parseFloat(fd.get("surface_sqm"));
+    const pst = (fd.get("property_subtype") || "").toString().trim();
+    const gs = parseFloat(fd.get("garden_sqm"));
+    if (addr) payload.address = addr;
+    if (pc) payload.postal_code = pc;
+    if (city) payload.city = city;
+    if (ctry) payload.country = ctry;
+    if (isFinite(surface) && surface > 0) payload.surface_sqm = surface;
+    if (pst) payload.property_subtype = pst;
+    if (isFinite(gs) && gs >= 0) payload.garden_sqm = gs;
 
     if (mode === "usd") {
       const inv = parseFloat(fd.get("amount_invested"));

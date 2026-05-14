@@ -108,6 +108,7 @@ const en = {
     },
     real_estate: {
       title: "Rental details",
+      section_optional: "All fields below are optional — fill in only what's relevant.",
       monthly_income: "Monthly rent received",
       monthly_charges: "Monthly charges (taxes, maintenance…)",
       net_monthly: "Net monthly cashflow",
@@ -325,6 +326,7 @@ const fr = {
     },
     real_estate: {
       title: "Locatif",
+      section_optional: "Tous les champs ci-dessous sont facultatifs — renseigne uniquement ce qui s'applique.",
       monthly_income: "Loyer mensuel perçu",
       monthly_charges: "Charges mensuelles (taxes, entretien…)",
       net_monthly: "Cashflow net mensuel",
@@ -542,6 +544,7 @@ const zh = {
     },
     real_estate: {
       title: "出租信息",
+      section_optional: "以下所有字段均为可选——仅填写适用的字段。",
       monthly_income: "每月租金收入",
       monthly_charges: "每月支出（税费、维护…）",
       net_monthly: "每月净现金流",
