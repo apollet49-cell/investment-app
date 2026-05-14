@@ -106,7 +106,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "42";
+const VIEW_VERSION = "43";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -292,8 +292,13 @@ function renderAuthForm(mode) {
 function logout() {
   state.token = null;
   state.user = null;
+  state.fxRate = 1.0;
+  state.fxFailed = false;
   localStorage.removeItem("token");
   if (state.sse) { state.sse.close(); state.sse = null; }
+  // Reset view-local state that survives across logins via module scope.
+  // Lazy-import to avoid loading the dashboard module on the auth screen.
+  import(v("/static/views/dashboard.js")).then(m => m.resetActiveTab?.()).catch(() => {});
   showAuth();
 }
 

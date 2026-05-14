@@ -17,9 +17,12 @@ router = APIRouter(prefix="/wallet", tags=["wallet"])
 async def preview(
     chain: str = Body(..., embed=True),
     address: str = Body(..., embed=True),
+    current: User = Depends(get_current_user),
 ) -> dict:
     """Read-only check: return the balance for the given chain + address.
-    Does NOT touch the user's portfolio — call /wallet/sync to actually save."""
+    Does NOT touch the user's portfolio — call /wallet/sync to actually save.
+    Auth required to prevent the server being used as an anonymous proxy
+    for Blockstream / ETH RPC traffic."""
     chain = (chain or "").lower()
     if chain == "btc":
         fn = fetch_btc_balance

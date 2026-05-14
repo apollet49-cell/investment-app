@@ -3,7 +3,9 @@ import { t } from "/static/i18n.js";
 
 // Persist the active dashboard tab across renders (auto-refresh re-renders
 // every 60s; without this the user gets snapped back to "allocation").
+// Reset by `resetActiveTab()` on logout so the next user starts fresh.
 let activeTab = "allocation";
+export function resetActiveTab() { activeTab = "allocation"; }
 
 // Muted earth-tone palette to match the beige / taupe theme.
 const TYPE_COLORS = {

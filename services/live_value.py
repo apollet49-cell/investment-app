@@ -72,11 +72,12 @@ async def _fetch_price_in_usd(symbol: str, asset_type: str) -> Optional[float]:
     the source currency in the `currency` field; we trust it but fall back
     to a per-suffix heuristic when it's missing or wrong (LSE only).
 
-    Each fetch is hard-bounded to 4s. Python threads can't be cancelled, but
-    a per-call timeout keeps the parent gather's wait_for from accumulating
-    silently-running threads beyond their useful deadline."""
+    Each fetch is hard-bounded to 6s — leaves room for the 5s Alpha Vantage
+    fallback inside get_stock_price after a yfinance miss. Python threads
+    can't be cancelled, but the deadline still prevents the parent gather
+    from accumulating runaway calls forever."""
     try:
-        return await asyncio.wait_for(_fetch_price_inner(symbol, asset_type), timeout=4.0)
+        return await asyncio.wait_for(_fetch_price_inner(symbol, asset_type), timeout=6.0)
     except asyncio.TimeoutError:
         log.warning("live price fetch for %s timed out", symbol)
         return None
@@ -137,20 +138,21 @@ async def refresh_current_values(investments: Iterable) -> dict[int, float]:
         return {}
 
     keys = list({(inv.symbol, inv.type) for inv in work})
-    # Wrap the whole batch in a 10s deadline so a flaky upstream (yfinance
-    # cold-start, CoinGecko rate-limit) can't hang GET /investments/ or
-    # /dashboard/summary indefinitely. On timeout, we return {} and the
-    # caller sees the stored values — better than a 504.
+    # Per-call deadline is 4s (in _fetch_price_in_usd). The batch deadline
+    # is 12s so a slow yfinance + 5s Alpha Vantage fallback can still
+    # finish within the parent window for a single ticker, while the
+    # whole gather doesn't drag GET /investments/ past 12s in the worst
+    # case. On timeout we return {} so the caller sees stored values.
     try:
         results = await asyncio.wait_for(
             asyncio.gather(
                 *(_fetch_price_in_usd(sym, typ) for (sym, typ) in keys),
                 return_exceptions=True,
             ),
-            timeout=10.0,
+            timeout=12.0,
         )
     except asyncio.TimeoutError:
-        log.warning("live refresh timed out (>10s) — using stored values")
+        log.warning("live refresh batch timed out (>12s) — using stored values")
         return {}
     price_by_key: dict[tuple[str, str], float] = {}
     for key, r in zip(keys, results):

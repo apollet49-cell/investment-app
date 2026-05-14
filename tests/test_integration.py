@@ -203,19 +203,14 @@ def test_rebalance_rejects_malformed_payload(client, auth_headers):
 
 def test_live_refresh_normalises_to_usd(monkeypatch):
     """Sanity-check the live_value pipeline without making a real network
-    call. Verifies the GBp pence heuristic and EUR FX conversion both
-    actually run."""
+    call. Verifies the GBp pence heuristic and GBP→USD conversion."""
     import asyncio
-    import os as _os
     from types import SimpleNamespace
     from services import live_value
 
-    # Bypass the test-mode short-circuit just for this test
-    monkeypatch.setattr(_os, "getenv", lambda k, *a, **kw: {
-        "INVESTAPP_DISABLE_LIVE_REFRESH": "0",
-    }.get(k, _os.environ.get(k, *a)))
+    # Bypass the conftest-wide hermetic flag for this test only
+    monkeypatch.setenv("INVESTAPP_DISABLE_LIVE_REFRESH", "0")
 
-    # AZN.L returns 13810 pence (= £138.10)
     async def fake_stock_price(symbol):
         if symbol.upper() == "AZN.L":
             return {"symbol": "AZN.L", "price": 13810.0, "currency": "GBp"}
@@ -224,7 +219,6 @@ def test_live_refresh_normalises_to_usd(monkeypatch):
         return None
 
     async def fake_forex(from_c, to_c):
-        # 1 GBP = ~1.27 USD
         if (from_c.upper(), to_c.upper()) == ("GBP", "USD"):
             return {"rate": 1.27}
         return None
@@ -232,18 +226,14 @@ def test_live_refresh_normalises_to_usd(monkeypatch):
     monkeypatch.setattr(live_value.market_service, "get_stock_price", fake_stock_price)
     monkeypatch.setattr(live_value.market_service, "get_forex_rate", fake_forex)
 
-    # Fake Investment objects with the minimal shape live_value reads
     invs = [
         SimpleNamespace(id=1, type="stock", symbol="AZN.L", quantity=21),
         SimpleNamespace(id=2, type="stock", symbol="AAPL", quantity=10),
     ]
-    out = asyncio.get_event_loop().run_until_complete(
-        live_value.refresh_current_values(invs)
-    )
-    # 21 × 13810 pence = 290,010 pence = £2,900.10 = $3,683 (× 1.27)
+    out = asyncio.run(live_value.refresh_current_values(invs))
+    # 21 × 138.10 (pence→pounds) × 1.27 (GBP→USD) ≈ $3,683
     assert 3500 < out[1] < 3850, f"AZN.L FX-converted price unexpected: {out[1]}"
-    # 10 × $200 = $2000
-    assert out[2] == 2000
+    assert out[2] == 2000  # 10 × $200
 
 
 def test_seed_demo_requires_confirm_wipe(client, auth_headers):
