@@ -130,7 +130,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "45";
+const VIEW_VERSION = "46";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -530,10 +530,36 @@ window.addEventListener("unhandledrejection", (ev) => {
   console.error("[unhandled rejection]", ev.reason);
 });
 
+function setSidebarOpen(open) {
+  const sb = document.querySelector(".sidebar");
+  const bd = document.getElementById("sidebar-backdrop");
+  const btn = document.getElementById("nav-toggle");
+  if (!sb) return;
+  sb.classList.toggle("open", open);
+  bd?.classList.toggle("open", open);
+  btn?.setAttribute("aria-expanded", String(open));
+  // Lock body scroll while the sidebar is open on mobile
+  document.body.style.overflow = open ? "hidden" : "";
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   setTheme(state.theme);
   document.getElementById("theme-toggle").onclick = () => setTheme(state.theme === "dark" ? "light" : "dark");
   document.getElementById("logout-btn").onclick = logout;
+  document.getElementById("mobile-logout")?.addEventListener("click", logout);
+  // Hamburger nav on mobile
+  document.getElementById("nav-toggle")?.addEventListener("click", () => {
+    const sb = document.querySelector(".sidebar");
+    setSidebarOpen(!sb?.classList.contains("open"));
+  });
+  document.getElementById("sidebar-backdrop")?.addEventListener("click", () => setSidebarOpen(false));
+  // Auto-close sidebar when the user picks a link on mobile
+  document.getElementById("sidebar-nav")?.addEventListener("click", (ev) => {
+    if (ev.target.closest("a")) setSidebarOpen(false);
+  });
+  document.getElementById("sidebar-nav-bottom")?.addEventListener("click", (ev) => {
+    if (ev.target.closest("a")) setSidebarOpen(false);
+  });
   document.getElementById("chat-fab").onclick = () => toggleChatPanel(true);
   document.getElementById("chat-close").onclick = () => toggleChatPanel(false);
   document.getElementById("chat-clear").onclick = async () => {
@@ -550,7 +576,10 @@ document.addEventListener("DOMContentLoaded", () => {
     ta.value = "";
     sendChatMessage(text, document.getElementById("chat-panel-messages"));
   };
-  window.addEventListener("hashchange", renderRoute);
+  window.addEventListener("hashchange", () => {
+    setSidebarOpen(false);
+    renderRoute();
+  });
 
   if (state.token) {
     bootApp().catch(err => { console.error(err); logout(); });
