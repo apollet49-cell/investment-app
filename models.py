@@ -49,8 +49,7 @@ class User(Base):
     watchlist: Mapped[list["WatchlistItem"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     dca_plans: Mapped[list["DCAPlan"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    transactions: Mapped[list["Transaction"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    dca_plans: Mapped[list["DCAPlan"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    snapshots: Mapped[list["PortfolioSnapshot"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
 class Investment(Base):
@@ -138,9 +137,6 @@ class Alert(Base):
     user: Mapped["User"] = relationship(back_populates="alerts")
 
 
-TRANSACTION_TYPES = ("buy", "sell", "dividend", "fee", "split")
-
-
 class Transaction(Base):
     """Audit log of every buy/sell/dividend/fee on an investment. Coexists
     with the manual Investment.amount_invested/quantity fields — the
@@ -199,3 +195,20 @@ class WatchlistItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="watchlist")
+
+
+class PortfolioSnapshot(Base):
+    """Daily snapshot of the user's portfolio. Captured by a scheduled job
+    so the dashboard chart shows real historical value (not a linear
+    interpolation between purchase date and today). One row per user per
+    date — re-running the job for the same day updates the existing row."""
+    __tablename__ = "portfolio_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    snapshot_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    total_value: Mapped[float] = mapped_column(Float, nullable=False)
+    total_invested: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+    user: Mapped["User"] = relationship(back_populates="snapshots")

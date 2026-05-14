@@ -61,6 +61,11 @@ export async function render(root) {
       ${summaryCard(t("dashboard.total_invested"), money(data.total_invested))}
       ${summaryCard(t("dashboard.current_value"), money(data.current_value))}
       ${summaryCard(t("dashboard.total_roi"), pct(data.total_roi_pct), roiClass)}
+      <div class="summary-card" id="perf-card">
+        <div class="label">${t("dashboard.xirr")}</div>
+        <div class="value" id="perf-xirr" style="font-size:22px">—</div>
+        <div class="sub" id="perf-sub" style="font-size:11px;margin-top:4px;color:var(--text-muted)">${t("dashboard.xirr_loading")}</div>
+      </div>
       ${bp
         ? bestPerformerCard(t("dashboard.best_performer"), bp.name, pct(bp.roi_pct), bpRoiClass)
         : summaryCard(t("dashboard.best_performer"), "—")}
@@ -115,6 +120,8 @@ export async function render(root) {
   buildMonthlyChart(data.monthly_returns);
   loadStressTest();
   loadDividendCalendar();
+  loadPerformance(() => cancelled);
+  loadHistoryAndBenchmark(() => cancelled);
 
   // Wire the diversification card expand/collapse
   for (const btn of root.querySelectorAll(".div-toggle")) {
@@ -334,6 +341,96 @@ function buildPortfolioChart(points) {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: { y: { beginAtZero: false } },
+    },
+  });
+}
+
+async function loadPerformance(isCancelled) {
+  try {
+    const data = await API.request("/dashboard/performance");
+    if (isCancelled()) return;
+    const xirrEl = document.getElementById("perf-xirr");
+    const subEl = document.getElementById("perf-sub");
+    if (!xirrEl || !subEl) return;
+    if (data.xirr_pct != null) {
+      xirrEl.textContent = pct(data.xirr_pct);
+      xirrEl.classList.add(data.xirr_pct >= 0 ? "positive" : "negative");
+    } else {
+      xirrEl.textContent = "—";
+    }
+    const parts = [];
+    if (data.twr_pct != null) parts.push(`${t("dashboard.twr")}: ${pct(data.twr_pct)}`);
+    if (data.transaction_count > 0) parts.push(`${data.transaction_count} ${t("dashboard.transactions_label")}`);
+    if (parts.length === 0) parts.push(t("dashboard.xirr_no_data"));
+    subEl.textContent = parts.join(" · ");
+  } catch (e) {
+    const subEl = document.getElementById("perf-sub");
+    if (subEl) subEl.textContent = t("dashboard.xirr_no_data");
+  }
+}
+
+async function loadHistoryAndBenchmark(isCancelled) {
+  let history;
+  try {
+    history = await API.request("/dashboard/history?days=365&benchmark=^GSPC");
+  } catch (e) {
+    return; // keep the interpolated chart already drawn
+  }
+  if (isCancelled()) return;
+  if (!history?.portfolio?.length || history.portfolio.length < 2) return;
+
+  // Re-draw the portfolio chart with the real snapshot series + S&P overlay.
+  const ctx = document.getElementById("chart-portfolio");
+  if (!ctx || !window.Chart) return;
+  try { state.charts.portfolio?.destroy?.(); } catch (_) {}
+
+  // Both series use the snapshot dates as the x-axis; map benchmark by date.
+  const labels = history.portfolio.map(p => p.date);
+  const portfolioData = history.portfolio.map(p => p.normalized);
+  const benchByDate = {};
+  for (const b of history.benchmark || []) benchByDate[b.date] = b.normalized;
+  // Forward-fill benchmark on weekends/holidays for visual continuity.
+  let lastBench = null;
+  const benchmarkData = labels.map(d => {
+    if (benchByDate[d] != null) lastBench = benchByDate[d];
+    return lastBench;
+  });
+
+  state.charts.portfolio = new window.Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: t("dashboard.your_portfolio"),
+          data: portfolioData,
+          borderColor: "#8a7558",
+          backgroundColor: "rgba(138, 117, 88, 0.08)",
+          borderWidth: 1.8, fill: true, tension: 0.3,
+          pointRadius: 0, pointHoverRadius: 4,
+        },
+        {
+          label: `${t("dashboard.benchmark")} (${history.benchmark_symbol})`,
+          data: benchmarkData,
+          borderColor: "#6b7d5e",
+          borderDash: [4, 4],
+          borderWidth: 1.3, fill: false, tension: 0.3,
+          pointRadius: 0, pointHoverRadius: 4,
+        },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: "bottom", labels: { font: { size: 11 }, boxWidth: 14 } },
+        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)}` } },
+      },
+      scales: {
+        y: {
+          beginAtZero: false,
+          title: { display: true, text: t("dashboard.base_100"), font: { size: 10 }, color: "var(--text-muted)" },
+        },
+      },
     },
   });
 }

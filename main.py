@@ -51,6 +51,8 @@ async def lifespan(app: FastAPI):
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from services.market_data import market_service
     from services.alerts_engine import refresh_all_alerts
+    from services.snapshots import take_all_snapshots
+    from database import SessionLocal
 
     app.state.sse = SSEHub()
     app.state.scheduler = AsyncIOScheduler()
@@ -79,12 +81,30 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             log.exception("macro refresh failed: %s", e)
 
+    async def daily_snapshots():
+        try:
+            n = await asyncio.to_thread(take_all_snapshots, SessionLocal)
+            log.info("daily snapshots written: %d", n)
+        except Exception as e:
+            log.exception("daily snapshots failed: %s", e)
+
     app.state.scheduler.add_job(refresh_portfolios, "interval", seconds=60, id="portfolios", max_instances=1)
     app.state.scheduler.add_job(refresh_forex, "interval", seconds=300, id="forex", max_instances=1)
     app.state.scheduler.add_job(refresh_indices, "interval", seconds=900, id="indices", max_instances=1)
     app.state.scheduler.add_job(refresh_macro, "interval", seconds=3600, id="macro", max_instances=1)
+    # Snapshot every 6h so we get coverage even if the process restarts daily
+    # (Render free tier sleeps idle services). The take_snapshot helper is
+    # idempotent — running it 4× a day still produces one row per user per date.
+    app.state.scheduler.add_job(daily_snapshots, "interval", hours=6, id="snapshots", max_instances=1, next_run_time=None)
     app.state.scheduler.start()
-    log.info("Scheduler started (portfolio 60s, forex 300s, indices 900s, macro 3600s)")
+    log.info("Scheduler started (portfolio 60s, forex 300s, indices 900s, macro 3600s, snapshots 6h)")
+
+    # Take an initial snapshot for everyone on boot so the chart isn't empty.
+    try:
+        n = await asyncio.to_thread(take_all_snapshots, SessionLocal)
+        log.info("startup snapshots written: %d", n)
+    except Exception as e:
+        log.exception("startup snapshots failed: %s", e)
 
     try:
         yield
