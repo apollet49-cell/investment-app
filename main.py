@@ -19,6 +19,7 @@ from routers import (
     investments as investments_router,
     market as market_router,
     markets as markets_router,
+    planning as planning_router,
     scenarios as scenarios_router,
     settings as settings_router,
     tax as tax_router,
@@ -119,6 +120,7 @@ app.include_router(markets_router.router)
 app.include_router(watchlist_router.router)
 app.include_router(wallet_router.router)
 app.include_router(tax_router.router)
+app.include_router(planning_router.router)
 
 
 @app.get("/health")

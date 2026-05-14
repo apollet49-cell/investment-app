@@ -84,6 +84,14 @@ export async function render(root) {
       <h3>${t("dashboard.monthly_returns")}</h3>
       <div class="chart-canvas-wrap compact"><canvas id="chart-monthly"></canvas></div>
     </div>
+
+    <div class="card" id="stress-test-card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0">${t("dashboard.stress_tests")}</h3>
+        <span style="color:var(--text-muted);font-size:12px">${t("dashboard.stress_tests_subtitle")}</span>
+      </div>
+      <div id="stress-test-body" style="margin-top:12px;text-align:center;padding:14px;color:var(--text-muted)">${spinner()}</div>
+    </div>
   `;
 
   // Wire dismiss
@@ -97,6 +105,7 @@ export async function render(root) {
   buildPortfolioChart(data.portfolio_over_time);
   buildAllocationChart(data.by_type);
   buildMonthlyChart(data.monthly_returns);
+  loadStressTest();
 
   // Wire the diversification card expand/collapse
   for (const btn of root.querySelectorAll(".div-toggle")) {
@@ -220,6 +229,43 @@ function emptyState() {
       <p>${t("dashboard.no_investments_sub")}</p>
       <button id="dash-empty-add" class="btn btn-primary">${t("dashboard.add_investment")}</button>
     </div>`;
+}
+
+async function loadStressTest() {
+  const host = document.getElementById("stress-test-body");
+  if (!host) return;
+  try {
+    const data = await API.request("/planning/stress-test");
+    if (!data.scenarios || !data.scenarios.length) {
+      host.innerHTML = `<div style="color:var(--text-muted);font-size:13px">${t("dashboard.no_positions_for_stress")}</div>`;
+      return;
+    }
+    host.innerHTML = `
+      <div style="margin-bottom:8px;font-size:13px;color:var(--text-muted)">
+        ${t("dashboard.baseline")}: <strong style="color:var(--text)">${money(data.baseline)}</strong>
+      </div>
+      <div class="table-wrap"><table class="data" style="font-size:12.5px">
+        <thead><tr>
+          <th>${t("dashboard.scenario")}</th>
+          <th style="text-align:right">${t("dashboard.under_value")}</th>
+          <th style="text-align:right">${t("dashboard.loss")}</th>
+          <th style="text-align:right">${t("dashboard.impact")}</th>
+        </tr></thead>
+        <tbody>
+        ${data.scenarios.map(s => `
+          <tr>
+            <td><strong>${escapeHtml(s.label)}</strong><div style="color:var(--text-muted);font-size:11px">${escapeHtml(s.description)}</div></td>
+            <td style="text-align:right">${money(s.value)}</td>
+            <td style="text-align:right;color:${s.loss < 0 ? 'var(--danger)' : 'var(--text-muted)'}">${s.loss < 0 ? money(s.loss) : '—'}</td>
+            <td style="text-align:right">
+              <span class="badge ${s.loss_pct <= -25 ? 'red' : s.loss_pct <= -10 ? 'yellow' : 'gray'}" style="font-variant-numeric:tabular-nums">${s.loss_pct.toFixed(1)}%</span>
+            </td>
+          </tr>`).join("")}
+        </tbody>
+      </table></div>`;
+  } catch (e) {
+    host.innerHTML = `<div class="alert-banner error" style="margin:0">${escapeHtml(e.message)}</div>`;
+  }
 }
 
 function buildPortfolioChart(points) {
