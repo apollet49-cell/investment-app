@@ -21,6 +21,7 @@ from routers import (
     markets as markets_router,
     scenarios as scenarios_router,
     settings as settings_router,
+    wallet as wallet_router,
     watchlist as watchlist_router,
 )
 from routers import calculator as calculator_router
@@ -115,6 +116,7 @@ app.include_router(alerts_router.router)
 app.include_router(market_router.router)
 app.include_router(markets_router.router)
 app.include_router(watchlist_router.router)
+app.include_router(wallet_router.router)
 
 
 @app.get("/health")

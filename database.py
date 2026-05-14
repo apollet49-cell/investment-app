@@ -38,5 +38,27 @@ def get_db() -> Generator[Session, None, None]:
 def init_db() -> None:
     # Import models so SQLAlchemy registers them on Base before create_all.
     import models  # noqa: F401
+    from sqlalchemy import inspect, text
 
     Base.metadata.create_all(bind=engine)
+
+    # Idempotent column additions for already-deployed tables. SQLAlchemy's
+    # create_all() creates missing tables but NOT missing columns, so we
+    # patch in new optional columns by hand. Safe to run on every boot.
+    _migrations = [
+        # (table, column, ddl)
+        ("investments", "quantity", "ALTER TABLE investments ADD COLUMN quantity FLOAT"),
+    ]
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table, column, ddl in _migrations:
+            try:
+                existing_cols = {c["name"] for c in insp.get_columns(table)}
+            except Exception:
+                continue
+            if column in existing_cols:
+                continue
+            try:
+                conn.execute(text(ddl))
+            except Exception:
+                pass  # column probably added by a concurrent worker

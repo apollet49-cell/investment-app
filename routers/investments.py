@@ -28,6 +28,7 @@ def _to_out(inv: Investment) -> InvestmentOut:
         symbol=inv.symbol,
         amount_invested=inv.amount_invested,
         current_value=inv.current_value,
+        quantity=inv.quantity,
         purchase_date=inv.purchase_date,
         notes=inv.notes,
         created_at=inv.created_at,
@@ -60,6 +61,7 @@ async def create_investment(
         symbol=payload.symbol,
         amount_invested=payload.amount_invested,
         current_value=payload.current_value,
+        quantity=payload.quantity,
         purchase_date=payload.purchase_date,
         notes=payload.notes,
     )
