@@ -9,6 +9,8 @@ export const state = {
   charts: {},               // { name: Chart.js instance, destroyed on view change }
   sse: null,                // EventSource
   lastPrices: new Map(),    // for flash animations
+  fxRate: 1.0,              // USD → user.currency multiplier (1.0 when user.currency == "USD")
+  fxFetchedAt: null,
 };
 
 const API = {
@@ -56,13 +58,39 @@ export function spinner(big = false) {
   return `<span class="spinner ${big ? "lg" : ""}"></span>`;
 }
 
+// ---------- FX rate (USD → user currency) ----------
+// All monetary values are stored in USD on the backend; the frontend converts
+// at display time using a live rate from /market/forex/USD/{currency}.
+export async function loadFxRate() {
+  const cur = state.user?.currency || "USD";
+  if (cur === "USD") {
+    state.fxRate = 1.0;
+    state.fxFetchedAt = Date.now();
+    return 1.0;
+  }
+  try {
+    const data = await API.request(`/market/forex/USD/${cur}`);
+    if (data?.rate && isFinite(data.rate) && data.rate > 0) {
+      state.fxRate = data.rate;
+      state.fxFetchedAt = Date.now();
+      return data.rate;
+    }
+  } catch (e) {
+    console.warn(`FX rate USD→${cur} failed, falling back to 1.0:`, e.message);
+  }
+  state.fxRate = 1.0;
+  return 1.0;
+}
+
 // ---------- Formatting ----------
 export function money(value, currency) {
   const ccy = currency || state.user?.currency || "USD";
+  const rate = (ccy === "USD") ? 1.0 : (state.fxRate || 1.0);
+  const converted = (Number(value) || 0) * rate;
   try {
-    return new Intl.NumberFormat(getLang() === "zh" ? "zh-CN" : getLang(), { style: "currency", currency: ccy, maximumFractionDigits: 2 }).format(value);
+    return new Intl.NumberFormat(getLang() === "zh" ? "zh-CN" : getLang(), { style: "currency", currency: ccy, maximumFractionDigits: 2 }).format(converted);
   } catch {
-    return `${ccy} ${Number(value).toFixed(2)}`;
+    return `${ccy} ${converted.toFixed(2)}`;
   }
 }
 export function pct(value, signed = true) {
@@ -266,6 +294,8 @@ async function bootApp() {
   document.getElementById("chat-fab").classList.remove("hidden");
   document.getElementById("user-chip").textContent = `${state.user.name} · ${state.user.currency || "USD"}`;
   buildSidebar();
+  // Fetch the FX rate before rendering so money() shows the right values.
+  await loadFxRate();
   if (!window.location.hash) window.location.hash = "#/dashboard";
   renderRoute();
   setupSSE();

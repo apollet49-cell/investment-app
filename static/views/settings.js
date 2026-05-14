@@ -1,4 +1,4 @@
-import { API, state, toast, escapeHtml } from "/static/app.js";
+import { API, state, toast, escapeHtml, loadFxRate } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 const CURRENCIES = ["USD", "EUR", "GBP", "CHF"];
@@ -69,8 +69,13 @@ export async function render(root) {
     }
     try {
       const updated = await API.request("/settings/", { method: "PUT", body: payload });
+      const oldCurrency = state.user?.currency;
       state.user = updated;
       document.getElementById("user-chip").textContent = `${updated.name} · ${updated.currency}`;
+      // If currency changed, refresh the FX rate so money() converts properly.
+      if (updated.currency !== oldCurrency) {
+        await loadFxRate();
+      }
       toast(t("settings.saved"), "success");
     } catch (e) { toast(e.message, "error"); }
   };
