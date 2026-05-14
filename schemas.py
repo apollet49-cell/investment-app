@@ -42,6 +42,8 @@ class InvestmentBase(BaseModel):
     amount_invested: float = Field(gt=0)
     current_value: float = Field(ge=0)
     quantity: Optional[float] = Field(default=None, ge=0)
+    monthly_rental_income: Optional[float] = Field(default=None, ge=0)
+    monthly_rental_charges: Optional[float] = Field(default=None, ge=0)
     purchase_date: date
     notes: Optional[str] = None
 
@@ -57,6 +59,8 @@ class InvestmentUpdate(BaseModel):
     amount_invested: Optional[float] = Field(default=None, gt=0)
     current_value: Optional[float] = Field(default=None, ge=0)
     quantity: Optional[float] = Field(default=None, ge=0)
+    monthly_rental_income: Optional[float] = Field(default=None, ge=0)
+    monthly_rental_charges: Optional[float] = Field(default=None, ge=0)
     purchase_date: Optional[date] = None
     notes: Optional[str] = None
 

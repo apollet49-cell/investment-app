@@ -29,6 +29,8 @@ def _to_out(inv: Investment) -> InvestmentOut:
         amount_invested=inv.amount_invested,
         current_value=inv.current_value,
         quantity=inv.quantity,
+        monthly_rental_income=inv.monthly_rental_income,
+        monthly_rental_charges=inv.monthly_rental_charges,
         purchase_date=inv.purchase_date,
         notes=inv.notes,
         created_at=inv.created_at,
@@ -62,6 +64,8 @@ async def create_investment(
         amount_invested=payload.amount_invested,
         current_value=payload.current_value,
         quantity=payload.quantity,
+        monthly_rental_income=payload.monthly_rental_income,
+        monthly_rental_charges=payload.monthly_rental_charges,
         purchase_date=payload.purchase_date,
         notes=payload.notes,
     )

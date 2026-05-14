@@ -48,6 +48,8 @@ def init_db() -> None:
     _migrations = [
         # (table, column, ddl)
         ("investments", "quantity", "ALTER TABLE investments ADD COLUMN quantity FLOAT"),
+        ("investments", "monthly_rental_income", "ALTER TABLE investments ADD COLUMN monthly_rental_income FLOAT"),
+        ("investments", "monthly_rental_charges", "ALTER TABLE investments ADD COLUMN monthly_rental_charges FLOAT"),
     ]
     insp = inspect(engine)
     with engine.begin() as conn:

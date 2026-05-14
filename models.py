@@ -56,6 +56,11 @@ class Investment(Base):
     amount_invested: Mapped[float] = mapped_column(Float, nullable=False)
     current_value: Mapped[float] = mapped_column(Float, nullable=False)
     quantity: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # Real-estate-only: monthly rent received and monthly expenses (taxes,
+    # maintenance, mortgage interest, etc.). Both nullable; populated only when
+    # type == "real_estate". Stored in USD like the other amounts.
+    monthly_rental_income: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    monthly_rental_charges: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     purchase_date: Mapped[date] = mapped_column(Date, nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)

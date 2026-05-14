@@ -198,6 +198,20 @@ function openForm(id) {
               <div id="units-total-preview" class="hint" style="margin-top:-6px"></div>
             </div>
 
+            <!-- Real-estate-only block: rental income + monthly charges + net cashflow preview -->
+            <div id="real-estate-fields" style="display:none;border-top:1px solid var(--border);padding-top:16px;margin-top:12px">
+              <div style="font-family:var(--font-serif);font-size:16px;font-weight:500;margin-bottom:12px">${t("investments.real_estate.title")}</div>
+              <div class="row">
+                <div class="col field"><label>${t("investments.real_estate.monthly_income")} (USD)</label>
+                  <input name="monthly_rental_income" type="number" step="0.01" min="0"
+                         value="${inv && inv.monthly_rental_income ? inv.monthly_rental_income : ""}"/></div>
+                <div class="col field"><label>${t("investments.real_estate.monthly_charges")} (USD)</label>
+                  <input name="monthly_rental_charges" type="number" step="0.01" min="0"
+                         value="${inv && inv.monthly_rental_charges ? inv.monthly_rental_charges : ""}"/></div>
+              </div>
+              <div id="cashflow-hint" class="hint" style="margin-top:-6px"></div>
+            </div>
+
             <div class="field"><label>${t("investments.notes")}</label>
               <textarea name="notes" rows="2">${inv ? escapeHtml(inv.notes || "") : ""}</textarea></div>
 
@@ -214,6 +228,7 @@ function openForm(id) {
   setupAssetPicker();
   setupInputModeToggle();
   setupHistoricalPriceTracking();
+  setupRealEstateToggle();
 
   // In edit mode, kick off a re-pick of the saved asset so the live price and
   // the historical price get fetched and the "current value" recomputes
@@ -238,6 +253,12 @@ function openForm(id) {
       purchase_date: fd.get("purchase_date"),
       notes: (fd.get("notes") || "").trim() || undefined,
     };
+    // Real-estate rental fields (only meaningful when type === "real_estate"
+    // but we send them whenever filled — the backend stores nullable values).
+    const ri = parseFloat(fd.get("monthly_rental_income"));
+    const rc = parseFloat(fd.get("monthly_rental_charges"));
+    if (isFinite(ri) && ri >= 0) payload.monthly_rental_income = ri;
+    if (isFinite(rc) && rc >= 0) payload.monthly_rental_charges = rc;
 
     if (mode === "usd") {
       const inv = parseFloat(fd.get("amount_invested"));
@@ -267,6 +288,42 @@ function openForm(id) {
       refresh(document);
     } catch (e) { toast(e.message, "error"); }
   };
+}
+
+// Show / hide the real-estate-specific block (rental income + charges) when the
+// type select changes. Live-updates the net cashflow hint as the user types.
+function setupRealEstateToggle() {
+  const typeSelect = document.querySelector('select[name="type"]');
+  const incomeInput = document.querySelector('input[name="monthly_rental_income"]');
+  const chargesInput = document.querySelector('input[name="monthly_rental_charges"]');
+  const updateVisibility = () => {
+    const reFields = document.getElementById("real-estate-fields");
+    if (reFields) reFields.style.display = typeSelect?.value === "real_estate" ? "" : "none";
+    updateCashflowHint();
+  };
+  if (typeSelect) typeSelect.addEventListener("change", updateVisibility);
+  if (incomeInput) incomeInput.addEventListener("input", updateCashflowHint);
+  if (chargesInput) chargesInput.addEventListener("input", updateCashflowHint);
+  updateVisibility();
+}
+
+function updateCashflowHint() {
+  const hint = document.getElementById("cashflow-hint");
+  if (!hint) return;
+  const inc = parseFloat(document.querySelector('input[name="monthly_rental_income"]')?.value);
+  const exp = parseFloat(document.querySelector('input[name="monthly_rental_charges"]')?.value);
+  const hasInc = isFinite(inc) && inc > 0;
+  const hasExp = isFinite(exp) && exp > 0;
+  if (!hasInc && !hasExp) { hint.innerHTML = ""; return; }
+  const incVal = hasInc ? inc : 0;
+  const expVal = hasExp ? exp : 0;
+  const net = incVal - expVal;
+  const annual = net * 12;
+  const netColor = net >= 0 ? "var(--success)" : "var(--danger)";
+  const sign = net >= 0 ? "+" : "−";
+  const absNet = Math.abs(net).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const absAnnual = Math.abs(annual).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  hint.innerHTML = `<span style="color:var(--text-muted)">${t("investments.real_estate.net_monthly")}: <strong style="color:${netColor}">${sign}$${absNet}</strong> · ${t("investments.real_estate.net_annual")}: <strong style="color:${netColor}">${sign}$${absAnnual}</strong></span>`;
 }
 
 function setupInputModeToggle() {
