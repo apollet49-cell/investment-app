@@ -6,6 +6,7 @@ const UNIT_CAPABLE_TYPES = new Set(["stock", "etf", "crypto"]);
 
 let cache = [];
 let filterText = "";
+let filterType = "all";
 let sortKey = "created_at";
 let sortDir = -1;
 // The asset most recently picked from the catalogue, used to refresh the
@@ -24,7 +25,11 @@ export async function render(root) {
 
   root.innerHTML = `
     <div class="toolbar">
-      <input id="inv-search" class="grow" placeholder="${t("investments.search_placeholder")}" />
+      <input id="inv-search" class="grow" placeholder="${t("investments.search_placeholder")}" value="${escapeHtml(filterText)}" />
+      <select id="inv-type-filter" class="btn btn-ghost" style="cursor:pointer">
+        <option value="all">${t("investments.filter_all_types")}</option>
+        ${TYPES.map(typ => `<option value="${typ}" ${filterType === typ ? "selected" : ""}>${t(`investments.types.${typ}`)}</option>`).join("")}
+      </select>
       <button class="btn btn-primary" id="btn-add">+ ${t("investments.add")}</button>
       <button class="btn btn-ghost" id="btn-wallet">${t("investments.connect_wallet")}</button>
       <label class="btn btn-ghost" for="csv-input">${t("investments.import_csv")}</label>
@@ -35,12 +40,14 @@ export async function render(root) {
       ${cache.length ? renderTable(cache) : emptyState()}
     </div>
     <div id="modal-host"></div>
+    <div id="detail-modal-host"></div>
   `;
 
   document.getElementById("btn-add").onclick = () => openForm();
   document.getElementById("btn-wallet").onclick = () => openWalletModal();
   document.getElementById("csv-input").onchange = onCsvUpload;
   document.getElementById("inv-search").oninput = (e) => { filterText = e.target.value.toLowerCase(); refresh(root); };
+  document.getElementById("inv-type-filter").onchange = (e) => { filterType = e.target.value; refresh(root); };
   attachRowHandlers(root);
 
   // Auto-refresh every 60s so live market prices flow into the table without
@@ -77,14 +84,26 @@ function attachRowHandlers(root) {
   for (const btn of root.querySelectorAll(".inv-edit")) btn.onclick = () => openForm(parseInt(btn.dataset.id, 10));
   for (const btn of root.querySelectorAll(".inv-delete")) btn.onclick = () => deleteInv(parseInt(btn.dataset.id, 10), root);
   for (const btn of root.querySelectorAll(".inv-whatif")) btn.onclick = () => openWhatIfModal(parseInt(btn.dataset.id, 10));
+  for (const tr of root.querySelectorAll(".inv-row")) {
+    tr.onclick = () => openDetailModal(parseInt(tr.dataset.id, 10));
+  }
   const empty = root.querySelector("#empty-add"); if (empty) empty.onclick = () => openForm();
 }
 
 function renderTable(rows) {
-  const filtered = rows.filter(r => !filterText || `${r.name} ${r.symbol || ""}`.toLowerCase().includes(filterText));
+  const filtered = rows
+    .filter(r => filterType === "all" || r.type === filterType)
+    .filter(r => !filterText || `${r.name} ${r.symbol || ""} ${r.city || ""}`.toLowerCase().includes(filterText));
   filtered.sort((a, b) => (a[sortKey] > b[sortKey] ? 1 : -1) * sortDir);
   const tdir = (k) => sortKey === k ? (sortDir === 1 ? " ↑" : " ↓") : "";
+  if (filtered.length === 0) {
+    return `<div class="empty-state" style="padding:30px 14px"><p>${t("investments.no_match")}</p></div>`;
+  }
   return `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;color:var(--text-muted);font-size:12px">
+      <span>${t("investments.row_count", { count: filtered.length, total: rows.length })}</span>
+      <span style="font-style:italic">${t("investments.click_row_hint")}</span>
+    </div>
     <div class="table-wrap">
       <table class="data">
         <thead>
@@ -102,16 +121,16 @@ function renderTable(rows) {
         </thead>
         <tbody>
           ${filtered.map(r => `
-            <tr>
-              <td>${escapeHtml(r.name)}</td>
+            <tr class="inv-row" data-id="${r.id}" style="cursor:pointer">
+              <td><strong>${escapeHtml(r.name)}</strong></td>
               <td>${t(`investments.types.${r.type}`)}</td>
-              <td>${escapeHtml(r.symbol || "—")}</td>
+              <td>${escapeHtml(r.symbol || (r.city || "—"))}</td>
               <td style="text-align:right">${r.quantity == null ? "—" : Number(r.quantity).toLocaleString(undefined, { maximumFractionDigits: 8 })}</td>
               <td style="text-align:right">${money(r.amount_invested)}</td>
               <td style="text-align:right">${money(r.current_value)}</td>
               <td>${r.purchase_date}</td>
               <td style="text-align:right"><span class="badge ${badgeClass(r.roi_pct)}">${pct(r.roi_pct)}</span></td>
-              <td>
+              <td onclick="event.stopPropagation()">
                 <button class="btn btn-ghost inv-edit" data-id="${r.id}">${t("investments.edit")}</button>
                 <button class="btn btn-ghost inv-whatif" data-id="${r.id}" title="${t("investments.whatif.title")}">${t("investments.whatif.button")}</button>
                 <button class="btn btn-ghost inv-delete" data-id="${r.id}">×</button>
@@ -520,12 +539,10 @@ function updateCashflowHint() {
   const annual = net * 12;
   const netColor = net >= 0 ? "var(--success)" : "var(--danger)";
   const sign = net >= 0 ? "+" : "−";
-  const absNet = Math.abs(net).toLocaleString(undefined, { maximumFractionDigits: 2 });
-  const absAnnual = Math.abs(annual).toLocaleString(undefined, { maximumFractionDigits: 2 });
   const breakdown = mortVal > 0
-    ? `<br><span style="color:var(--text-muted);font-size:11px">Rent $${incVal.toFixed(2)} − Charges $${expVal.toFixed(2)} − Mortgage $${mortVal.toFixed(2)}</span>`
+    ? `<br><span style="color:var(--text-muted);font-size:11px">Rent ${money(incVal)} − Charges ${money(expVal)} − Mortgage ${money(mortVal)}</span>`
     : "";
-  hint.innerHTML = `<span style="color:var(--text-muted)">${t("investments.real_estate.net_monthly")}: <strong style="color:${netColor}">${sign}$${absNet}</strong> · ${t("investments.real_estate.net_annual")}: <strong style="color:${netColor}">${sign}$${absAnnual}</strong></span>${breakdown}`;
+  hint.innerHTML = `<span style="color:var(--text-muted)">${t("investments.real_estate.net_monthly")}: <strong style="color:${netColor}">${sign}${money(Math.abs(net))}</strong> · ${t("investments.real_estate.net_annual")}: <strong style="color:${netColor}">${sign}${money(Math.abs(annual))}</strong></span>${breakdown}`;
 }
 
 function updateYieldHint() {
@@ -546,7 +563,7 @@ function updateYieldHint() {
   const gain = projected - invested;
   const color = gain >= 0 ? "var(--success)" : "var(--danger)";
   const sign = gain >= 0 ? "+" : "−";
-  hint.innerHTML = `<span style="color:var(--text-muted)">Projected value today (${years.toFixed(1)} yr @ ${yieldPct}%/yr): <strong style="color:${color}">$${projected.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong> (<span style="color:${color}">${sign}$${Math.abs(gain).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>)</span>`;
+  hint.innerHTML = `<span style="color:var(--text-muted)">Projected value today (${years.toFixed(1)} yr @ ${yieldPct}%/yr): <strong style="color:${color}">${money(projected)}</strong> (<span style="color:${color}">${sign}${money(Math.abs(gain))}</span>)</span>`;
 }
 
 function setupInputModeToggle() {
@@ -667,12 +684,12 @@ function updateUnitsCalc() {
   let total = null;
   if (isFinite(ppu) && ppu > 0) {
     total = qty * ppu;
-    parts.push(`Invested <strong style="color:var(--text)">$${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong>`);
+    parts.push(`Invested <strong style="color:var(--text)">${money(total)}</strong>`);
   }
   if (currentLivePrice != null) {
     const currentVal = qty * currentLivePrice;
     if (curEl) curEl.value = currentVal.toFixed(2);
-    parts.push(`now <strong style="color:var(--text)">$${currentVal.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong>`);
+    parts.push(`now <strong style="color:var(--text)">${money(currentVal)}</strong>`);
     if (total != null) {
       const gain = currentVal - total;
       const gainPct = (gain / total) * 100;
@@ -818,7 +835,7 @@ function openWhatIfModal(id) {
         </div>
         <div class="modal-body">
           <p style="color:var(--text-muted);font-size:13px;margin:0 0 16px">
-            ${t("investments.whatif.subtitle", { amount: `$${inv.amount_invested.toLocaleString()}`, date: inv.purchase_date })}
+            ${t("investments.whatif.subtitle", { amount: money(inv.amount_invested), date: inv.purchase_date })}
           </p>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
             ${WHATIF_QUICK.map(q => `<button type="button" class="btn btn-ghost whatif-quick" data-symbol="${escapeHtml(q.symbol)}" data-type="${q.asset_type}" data-name="${escapeHtml(q.name)}">${escapeHtml(q.name)}</button>`).join("")}
@@ -885,20 +902,20 @@ async function runWhatIf(inv, alt) {
           <div>
             <div class="label" style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted)">${t("investments.whatif.your_actual")}</div>
             <div style="font-family:var(--font-serif);font-size:22px">${escapeHtml(orig.name)}</div>
-            <div style="margin-top:8px">${t("investments.whatif.current_value")}: <strong>$${orig.current_value.toLocaleString()}</strong></div>
-            <div>${t("investments.whatif.gain")}: <strong class="${orig.gain >= 0 ? 'text-success' : 'text-danger'}">${orig.gain >= 0 ? "+" : ""}$${orig.gain.toLocaleString()} (${pct(orig.gain_pct)})</strong></div>
+            <div style="margin-top:8px">${t("investments.whatif.current_value")}: <strong>${money(orig.current_value)}</strong></div>
+            <div>${t("investments.whatif.gain")}: <strong class="${orig.gain >= 0 ? 'text-success' : 'text-danger'}">${orig.gain >= 0 ? "+" : ""}${money(orig.gain)} (${pct(orig.gain_pct)})</strong></div>
           </div>
           <div>
             <div class="label" style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted)">${t("investments.whatif.alternative")}</div>
             <div style="font-family:var(--font-serif);font-size:22px">${escapeHtml(alt.name)}</div>
-            <div style="margin-top:8px">${t("investments.whatif.current_value")}: <strong>$${altR.current_value.toLocaleString()}</strong></div>
-            <div>${t("investments.whatif.gain")}: <strong class="${altR.gain >= 0 ? 'text-success' : 'text-danger'}">${altR.gain >= 0 ? "+" : ""}$${altR.gain.toLocaleString()} (${pct(altR.gain_pct)})</strong></div>
+            <div style="margin-top:8px">${t("investments.whatif.current_value")}: <strong>${money(altR.current_value)}</strong></div>
+            <div>${t("investments.whatif.gain")}: <strong class="${altR.gain >= 0 ? 'text-success' : 'text-danger'}">${altR.gain >= 0 ? "+" : ""}${money(altR.gain)} (${pct(altR.gain_pct)})</strong></div>
           </div>
         </div>
         <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);text-align:center;font-size:14px">
           ${t("investments.whatif.delta")}:
           <strong class="${deltaClass}" style="font-family:var(--font-serif);font-size:22px;margin-left:6px">
-            ${deltaSign}$${Math.abs(delta.value).toLocaleString()}
+            ${deltaSign}${money(Math.abs(delta.value))}
           </strong>
           <span style="color:var(--text-muted);font-size:12px;margin-left:6px">(${pct(delta.pct_points)} pts)</span>
         </div>
@@ -1104,4 +1121,219 @@ function injectModalStyles() {
   s.id = "inv-modal-styles";
   s.textContent = css;
   document.head.appendChild(s);
+}
+
+// ---------- Detail modal (chart + news + facts for the picked investment) ----------
+let detailChart = null;
+
+async function openDetailModal(invId) {
+  const inv = cache.find(r => r.id === invId);
+  if (!inv) return;
+  const host = document.getElementById("detail-modal-host");
+  const roiClass = (inv.roi_pct || 0) >= 0 ? "var(--success)" : "var(--danger)";
+  const roiSign = (inv.roi_pct || 0) >= 0 ? "+" : "";
+
+  host.innerHTML = `
+    <div class="modal-overlay" id="detail-overlay">
+      <div class="modal-panel" style="max-width:900px">
+        <div class="modal-header">
+          <div>
+            <strong style="font-family:var(--font-serif);font-size:20px">${escapeHtml(inv.name)}</strong>
+            <div style="color:var(--text-muted);font-size:12px;margin-top:2px">
+              ${t(`investments.types.${inv.type}`)}${inv.symbol ? ` · ${escapeHtml(inv.symbol)}` : ""}
+              ${inv.city ? ` · ${escapeHtml(inv.city)} (${escapeHtml(inv.postal_code || "")})` : ""}
+            </div>
+          </div>
+          <button class="icon-btn" id="detail-close" aria-label="Close">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:14px">
+            <div class="summary-card"><div class="label">${t("investments.invested")}</div><div class="value" style="font-size:18px">${money(inv.amount_invested)}</div></div>
+            <div class="summary-card"><div class="label">${t("investments.current")}</div><div class="value" style="font-size:18px">${money(inv.current_value)}</div></div>
+            <div class="summary-card"><div class="label">${t("investments.roi")}</div><div class="value" style="font-size:18px;color:${roiClass}">${roiSign}${pct(inv.roi_pct)}</div></div>
+            <div class="summary-card"><div class="label">${t("investments.purchase_date")}</div><div class="value" style="font-size:16px">${inv.purchase_date}</div></div>
+          </div>
+          <div id="detail-body"><div style="text-align:center;padding:24px">${spinner()}</div></div>
+        </div>
+      </div>
+    </div>`;
+
+  const close = () => {
+    try { detailChart?.destroy?.(); } catch (_) {}
+    detailChart = null;
+    host.innerHTML = "";
+  };
+  document.getElementById("detail-close").onclick = close;
+  document.getElementById("detail-overlay").onclick = (ev) => { if (ev.target.id === "detail-overlay") close(); };
+
+  const body = document.getElementById("detail-body");
+
+  if (inv.type === "real_estate") {
+    await renderRealEstateDetail(body, inv);
+  } else if (inv.symbol) {
+    await renderMarketDetail(body, inv);
+  } else if (inv.type === "startup") {
+    renderStartupDetail(body, inv);
+  } else {
+    body.innerHTML = `<p style="color:var(--text-muted);text-align:center">${t("investments.detail_no_data")}</p>`;
+  }
+}
+
+async function renderMarketDetail(body, inv) {
+  body.innerHTML = `
+    <div class="card chart-card" style="margin:0;padding:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h4 style="margin:0">${t("investments.detail_price_history")}</h4>
+        <div id="detail-period-tabs" style="display:flex;gap:4px"></div>
+      </div>
+      <div class="chart-canvas-wrap" style="height:280px;margin-top:8px"><canvas id="detail-chart"></canvas></div>
+    </div>
+    <div style="height:12px"></div>
+    <div id="detail-news" class="card" style="margin:0;padding:14px">
+      <h4 style="margin:0 0 8px 0">${t("investments.detail_news")}</h4>
+      <div id="detail-news-body" style="color:var(--text-muted);font-size:13px">${spinner()}</div>
+    </div>
+  `;
+
+  const periods = ["1mo", "3mo", "6mo", "1y", "5y"];
+  const tabs = document.getElementById("detail-period-tabs");
+  tabs.innerHTML = periods.map(p => `<button class="btn btn-ghost detail-period" data-p="${p}" style="font-size:11px;padding:4px 8px">${p.toUpperCase()}</button>`).join("");
+  const renderChart = async (period) => {
+    for (const btn of tabs.querySelectorAll(".detail-period")) {
+      btn.classList.toggle("btn-primary", btn.dataset.p === period);
+      btn.classList.toggle("btn-ghost", btn.dataset.p !== period);
+    }
+    try {
+      const at = inv.type === "etf" ? "etf" : (inv.type === "crypto" ? "crypto" : "stock");
+      const data = await API.request(`/markets/asset/${encodeURIComponent(inv.symbol)}?asset_type=${at}&period=${period}`);
+      const candles = data?.candles || [];
+      const series = candles.map(c => ({ date: new Date(c.time * 1000).toISOString().slice(0, 10), close: c.close }));
+      drawDetailChart(series, inv);
+    } catch (e) {
+      const ctx = document.getElementById("detail-chart")?.parentElement;
+      if (ctx) ctx.innerHTML = `<div style="color:var(--text-muted);text-align:center;padding:30px">${t("investments.detail_chart_unavailable")}</div>`;
+    }
+  };
+  for (const btn of tabs.querySelectorAll(".detail-period")) {
+    btn.onclick = () => renderChart(btn.dataset.p);
+  }
+  await renderChart("1y");
+
+  // News (best-effort — fail silently)
+  try {
+    const news = await API.request(`/markets/asset/${encodeURIComponent(inv.symbol)}/news`);
+    const items = news?.items || news?.articles || news || [];
+    const nbody = document.getElementById("detail-news-body");
+    if (!items.length) { nbody.innerHTML = `<em>${t("investments.detail_no_news")}</em>`; return; }
+    nbody.innerHTML = items.slice(0, 6).map(n => `
+      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <a href="${escapeHtml(n.url || n.link || '#')}" target="_blank" rel="noopener" style="color:var(--text);font-weight:500;text-decoration:none">${escapeHtml(n.title || n.headline || "—")}</a>
+        <div style="color:var(--text-muted);font-size:11px;margin-top:2px">${escapeHtml(n.publisher || n.source || "")} · ${escapeHtml((n.published_at || n.date || "").slice(0, 10))}</div>
+      </div>`).join("");
+  } catch (_) {
+    const nbody = document.getElementById("detail-news-body");
+    if (nbody) nbody.innerHTML = `<em>${t("investments.detail_no_news")}</em>`;
+  }
+}
+
+function drawDetailChart(series, inv) {
+  const ctx = document.getElementById("detail-chart");
+  if (!ctx || !window.Chart) return;
+  try { detailChart?.destroy?.(); } catch (_) {}
+  const labels = series.map(p => p.date || p.timestamp);
+  const data = series.map(p => p.close ?? p.price ?? p.value);
+  detailChart = new window.Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: inv.symbol,
+        data,
+        borderColor: "#8a7558",
+        backgroundColor: "rgba(138,117,88,0.08)",
+        borderWidth: 1.6, fill: true, tension: 0.25,
+        pointRadius: 0, pointHoverRadius: 4,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: false } },
+    },
+  });
+}
+
+async function renderRealEstateDetail(body, inv) {
+  const cityLabel = inv.city ? `${inv.city}${inv.postal_code ? " (" + inv.postal_code + ")" : ""}` : t("investments.detail_no_city");
+  const rent = inv.monthly_rental_income || 0;
+  const charges = inv.monthly_rental_charges || 0;
+  const mort = inv.monthly_mortgage_payment || 0;
+  const net = rent - charges - mort;
+  const netColor = net >= 0 ? "var(--success)" : "var(--danger)";
+  body.innerHTML = `
+    <div class="card" style="margin:0;padding:14px">
+      <h4 style="margin:0 0 10px 0">${t("investments.real_estate.title") || "Real estate"}</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px">
+        <div><span style="color:var(--text-muted)">${t("investments.real_estate.address") || "Address"}:</span> <strong>${escapeHtml(inv.address || "—")}</strong></div>
+        <div><span style="color:var(--text-muted)">${t("investments.real_estate.city") || "City"}:</span> <strong>${escapeHtml(cityLabel)}</strong></div>
+        <div><span style="color:var(--text-muted)">${t("investments.real_estate.surface") || "Surface"}:</span> <strong>${inv.surface_sqm ? inv.surface_sqm + " m²" : "—"}</strong></div>
+        <div><span style="color:var(--text-muted)">${t("investments.real_estate.subtype") || "Type"}:</span> <strong>${escapeHtml(inv.property_subtype || "—")}</strong></div>
+      </div>
+      <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:12px;font-size:13px">
+        <div><span style="color:var(--text-muted)">${t("investments.real_estate.rent") || "Rent"}:</span> <strong>${money(rent)}/mo</strong></div>
+        <div><span style="color:var(--text-muted)">${t("investments.real_estate.charges") || "Charges"}:</span> <strong>${money(charges)}/mo</strong></div>
+        ${mort > 0 ? `<div><span style="color:var(--text-muted)">${t("investments.real_estate.mortgage") || "Mortgage"}:</span> <strong>${money(mort)}/mo</strong></div>` : ""}
+        <div style="margin-top:6px"><span style="color:var(--text-muted)">${t("investments.real_estate.net_monthly")}:</span> <strong style="color:${netColor}">${money(net)}</strong> · <span style="color:var(--text-muted)">${t("investments.real_estate.net_annual")}:</span> <strong style="color:${netColor}">${money(net * 12)}</strong></div>
+      </div>
+      <div id="dvf-host" style="margin-top:8px;color:var(--text-muted);font-size:13px">${spinner()} ${t("investments.detail_loading_comparables")}</div>
+    </div>
+  `;
+  // Try DVF comparables if we have enough info (postal_code or city/country=FR)
+  const dvfHost = document.getElementById("dvf-host");
+  if (inv.country === "FR" && (inv.postal_code || inv.city) && inv.surface_sqm) {
+    try {
+      const data = await API.request("/investments/estimate-value", {
+        method: "POST",
+        body: {
+          postal_code: inv.postal_code, city: inv.city, country: "FR",
+          surface_sqm: inv.surface_sqm, property_subtype: inv.property_subtype || "apartment",
+        },
+      });
+      if (data?.estimated_value != null) {
+        const delta = data.estimated_value - inv.current_value;
+        const dc = delta >= 0 ? "var(--success)" : "var(--danger)";
+        dvfHost.innerHTML = `
+          <div style="font-weight:500;color:var(--text);margin-bottom:6px">${t("investments.detail_market_estimate")}</div>
+          <div>${t("investments.detail_estimate_value")}: <strong>${money(data.estimated_value)}</strong>
+            <span style="color:${dc};margin-left:8px">(${delta >= 0 ? "+" : ""}${money(delta)} ${t("investments.detail_vs_book")})</span></div>
+          ${data.price_per_sqm ? `<div style="margin-top:4px;font-size:12px">${t("investments.detail_price_sqm")}: <strong>${money(data.price_per_sqm)}/m²</strong> · ${data.comparable_count || 0} ${t("investments.detail_comparables")}</div>` : ""}
+        `;
+      } else {
+        dvfHost.innerHTML = `<em>${t("investments.detail_no_comparables")}</em>`;
+      }
+    } catch (_) {
+      dvfHost.innerHTML = `<em>${t("investments.detail_no_comparables")}</em>`;
+    }
+  } else {
+    dvfHost.innerHTML = `<em>${t("investments.detail_no_comparables")}</em>`;
+  }
+}
+
+function renderStartupDetail(body, inv) {
+  const yieldPct = inv.annual_yield_pct;
+  const years = (Date.now() - new Date(inv.purchase_date).getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+  const projected = yieldPct ? inv.amount_invested * Math.pow(1 + yieldPct / 100, years) : null;
+  body.innerHTML = `
+    <div class="card" style="margin:0;padding:14px">
+      <h4 style="margin:0 0 10px 0">${t("investments.types.startup")}</h4>
+      <div style="font-size:13px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><span style="color:var(--text-muted)">${t("investments.purchase_date")}:</span> <strong>${inv.purchase_date}</strong></div>
+        <div><span style="color:var(--text-muted)">${t("investments.detail_holding_years")}:</span> <strong>${years.toFixed(1)}</strong></div>
+        ${yieldPct != null ? `<div><span style="color:var(--text-muted)">${t("investments.detail_expected_yield")}:</span> <strong>${yieldPct}%/yr</strong></div>` : ""}
+        ${projected != null ? `<div><span style="color:var(--text-muted)">${t("investments.detail_projected_today")}:</span> <strong>${money(projected)}</strong></div>` : ""}
+      </div>
+      ${inv.notes ? `<div style="margin-top:14px;padding:10px;background:var(--surface);border-radius:6px;font-size:13px;color:var(--text-muted);font-style:italic">"${escapeHtml(inv.notes)}"</div>` : ""}
+      <div style="margin-top:14px;font-size:12px;color:var(--text-muted)">${t("investments.detail_startup_disclaimer")}</div>
+    </div>
+  `;
 }

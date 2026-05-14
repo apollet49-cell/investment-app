@@ -78,7 +78,7 @@ function rowHtml(t) {
     <td><span class="badge" style="background:rgba(138,117,88,0.12);color:${typeColor};text-transform:uppercase;font-size:10px">${t.type}</span></td>
     <td>${escapeHtml(t.investment_name || "—")}</td>
     <td style="text-align:right;font-variant-numeric:tabular-nums">${t.quantity != null ? Number(t.quantity).toLocaleString(undefined, { maximumFractionDigits: 8 }) : "—"}</td>
-    <td style="text-align:right;font-variant-numeric:tabular-nums">${t.price_per_unit != null ? "$" + Number(t.price_per_unit).toLocaleString(undefined, { maximumFractionDigits: 4 }) : "—"}</td>
+    <td style="text-align:right;font-variant-numeric:tabular-nums">${t.price_per_unit != null ? money(Number(t.price_per_unit)) : "—"}</td>
     <td style="text-align:right"><strong>${money(t.amount)}</strong>${t.fees ? `<div style="color:var(--text-muted);font-size:10px">fees ${money(t.fees)}</div>` : ""}</td>
     <td style="color:var(--text-muted);font-size:12px;max-width:200px">${escapeHtml(t.notes || "")}</td>
     <td><button class="btn btn-ghost txn-del" data-id="${t.id}" title="${t("transactions.delete")}">×</button></td>
