@@ -84,16 +84,34 @@ const ROUTES = [
   { hash: "#/settings", titleKey: "settings.title", load: () => import("/static/views/settings.js") },
 ];
 
+// Inline SVG icons (Feather/Lucide style, 1.5px stroke, currentColor so they
+// follow the link's text color). Single source of truth — referenced by name
+// in SIDEBAR_LINKS below.
+const ICONS = {
+  dashboard:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>`,
+  markets:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 4 9 14 14 0 0 1-4 9 14 14 0 0 1-4-9 14 14 0 0 1 4-9z"/></svg>`,
+  watchlist:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 14.85 8 21 8.9 16.5 13.5 17.7 20 12 16.85 6.3 20 7.5 13.5 3 8.9 9.15 8 12 2"/></svg>`,
+  investments: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><path d="M3 13h18"/></svg>`,
+  calculator:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8"/><path d="M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"/></svg>`,
+  scenarios:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="15 7 21 7 21 13"/></svg>`,
+  chat:        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.2L3 21l1.8-6.4A8 8 0 1 1 21 12z"/></svg>`,
+  reports:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>`,
+  settings:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v3M12 20v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M1 12h3M20 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>`,
+  sun:         `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>`,
+  moon:        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>`,
+  logout:      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+};
+
 const SIDEBAR_LINKS = [
-  { hash: "#/dashboard", icon: "📊", labelKey: "nav.dashboard" },
-  { hash: "#/markets", icon: "🌐", labelKey: "nav.markets" },
-  { hash: "#/watchlist", icon: "⭐", labelKey: "nav.watchlist" },
-  { hash: "#/investments", icon: "💼", labelKey: "nav.investments" },
-  { hash: "#/calculator", icon: "🧮", labelKey: "nav.calculator" },
-  { hash: "#/scenarios", icon: "📈", labelKey: "nav.scenarios" },
-  { hash: "#/chat", icon: "💬", labelKey: "nav.chat" },
-  { hash: "#/reports", icon: "📑", labelKey: "nav.reports" },
-  { hash: "#/settings", icon: "⚙️", labelKey: "nav.settings" },
+  { hash: "#/dashboard",   icon: "dashboard",   labelKey: "nav.dashboard" },
+  { hash: "#/markets",     icon: "markets",     labelKey: "nav.markets" },
+  { hash: "#/watchlist",   icon: "watchlist",   labelKey: "nav.watchlist" },
+  { hash: "#/investments", icon: "investments", labelKey: "nav.investments" },
+  { hash: "#/calculator",  icon: "calculator",  labelKey: "nav.calculator" },
+  { hash: "#/scenarios",   icon: "scenarios",   labelKey: "nav.scenarios" },
+  { hash: "#/chat",        icon: "chat",        labelKey: "nav.chat" },
+  { hash: "#/reports",     icon: "reports",     labelKey: "nav.reports" },
+  { hash: "#/settings",    icon: "settings",    labelKey: "nav.settings" },
 ];
 
 function destroyCharts() {
@@ -193,9 +211,15 @@ function buildSidebar() {
   const nav = document.getElementById("sidebar-nav");
   nav.innerHTML = SIDEBAR_LINKS.map(l => `
     <a class="sidebar-link" data-hash="${l.hash}" href="${l.hash}">
-      <span class="ico">${l.icon}</span><span>${t(l.labelKey)}</span>
+      <span class="ico">${ICONS[l.icon]}</span><span class="lbl">${t(l.labelKey)}</span>
     </a>
   `).join("");
+  // Update the theme toggle + logout button icons too (they live in the footer
+  // and aren't otherwise regenerated, so set them once here on first build).
+  const tt = document.getElementById("theme-toggle");
+  if (tt) tt.innerHTML = ICONS[state.theme === "dark" ? "sun" : "moon"];
+  const lo = document.getElementById("logout-btn");
+  if (lo) lo.innerHTML = ICONS.logout;
   const ls = document.getElementById("lang-switch");
   ls.innerHTML = availableLangs().map(l => `<button data-lang="${l}" class="${l === getLang() ? "active" : ""}">${l.toUpperCase()}</button>`).join("");
   ls.querySelectorAll("button").forEach(b => {
@@ -207,6 +231,11 @@ function setTheme(theme) {
   state.theme = theme;
   document.documentElement.setAttribute("data-theme", theme);
   localStorage.setItem("theme", theme);
+  // Swap the toggle icon to match the new theme (sun in dark mode, moon in light).
+  const tt = document.getElementById("theme-toggle");
+  if (tt && typeof ICONS !== "undefined") {
+    tt.innerHTML = ICONS[theme === "dark" ? "sun" : "moon"];
+  }
 }
 
 async function bootApp() {
