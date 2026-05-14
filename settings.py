@@ -43,5 +43,34 @@ class Settings(BaseSettings):
             raise ValueError(f"{info.field_name} is required (see README for how to obtain)")
         return v
 
+    @field_validator("JWT_SECRET")
+    @classmethod
+    def jwt_secret_strong(cls, v: str) -> str:
+        # HS256 with a short secret is offline-brute-forceable in seconds.
+        # 32 chars is the practical minimum for a base64-ish secret.
+        if len(v.strip()) < 32:
+            raise ValueError(
+                "JWT_SECRET must be at least 32 characters. Generate one with: "
+                "python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+            )
+        return v
+
+    @field_validator("APP_ENCRYPTION_KEY")
+    @classmethod
+    def fernet_key_shape(cls, v: str) -> str:
+        # Fernet expects exactly 32 url-safe base64-encoded bytes. Catching
+        # this at boot beats discovering it on the first decrypt call.
+        import base64
+        try:
+            decoded = base64.urlsafe_b64decode(v.strip())
+        except Exception:
+            raise ValueError(
+                "APP_ENCRYPTION_KEY must be valid url-safe base64. Generate one with: "
+                "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            )
+        if len(decoded) != 32:
+            raise ValueError("APP_ENCRYPTION_KEY must decode to exactly 32 bytes (Fernet requirement)")
+        return v
+
 
 settings = Settings()

@@ -18,12 +18,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models import Investment, PortfolioSnapshot, User
+from services.clock import today_utc
 
 log = logging.getLogger(__name__)
 
 
 def take_snapshot(db: Session, user: User, when: date | None = None) -> PortfolioSnapshot:
-    when = when or date.today()
+    when = when or today_utc()
     rows = db.query(Investment).filter(Investment.user_id == user.id).all()
     total_value = round(sum((r.current_value or 0) for r in rows), 2)
     total_invested = round(sum((r.amount_invested or 0) for r in rows), 2)

@@ -5,12 +5,18 @@ pydantic[email]==2.9.2
 email-validator==2.2.0
 eval-type-backport==0.2.0
 pydantic-settings==2.6.1
-python-jose[cryptography]==3.3.0
+# PyJWT replaces python-jose 3.3.0 (unmaintained since 2021; CVE-2024-33663
+# algorithm-confusion and CVE-2024-33664 DoS via crafted JWT). PyJWT's API
+# is similar enough for the small auth.py change.
+PyJWT==2.9.0
 passlib==1.7.4
 bcrypt==4.0.1
-python-multipart==0.0.12
+# python-multipart bumped past CVE-2024-53981 (DoS via malformed multipart
+# boundary). 0.0.18 is the fixed version.
+python-multipart==0.0.18
 python-dotenv==1.0.1
-cryptography==43.0.3
+# cryptography kept current (OpenSSL 3.x). 44.0.1 covers known issues.
+cryptography==44.0.1
 anthropic==0.39.0
 reportlab==4.2.5
 matplotlib==3.9.2

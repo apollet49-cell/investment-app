@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+from jwt.exceptions import InvalidTokenError
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
@@ -57,13 +58,16 @@ async def get_current_user(
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         sub = payload.get("sub")
-        if not sub:
-            raise JWTError("missing sub")
+        # Explicit shape check: sub must be a numeric string. Defends against
+        # an attacker that crafts a token with a malformed sub even if the
+        # signature is correct (somehow).
+        if not isinstance(sub, str) or not sub.isdigit():
+            raise InvalidTokenError("malformed sub")
         user = db.get(User, int(sub))
         if not user:
-            raise JWTError("user not found")
+            raise InvalidTokenError("user not found")
         return user
-    except (JWTError, ValueError):
+    except InvalidTokenError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid or expired token")
 
 

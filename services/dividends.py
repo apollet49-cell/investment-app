@@ -16,6 +16,8 @@ from typing import Optional
 import yfinance as yf
 from cachetools import TTLCache
 
+from services.clock import today_utc
+
 log = logging.getLogger("dividends")
 
 _meta_cache: TTLCache = TTLCache(maxsize=512, ttl=3600)
@@ -51,7 +53,7 @@ async def fetch_dividends(symbol: str) -> Optional[list[dict]]:
 
 def total_dividends_ytd(transactions) -> float:
     """Sum dividend transactions for the current calendar year."""
-    today = date.today()
+    today = today_utc()
     return sum(
         t.amount for t in transactions
         if t.type == "dividend" and t.transaction_date.year == today.year

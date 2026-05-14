@@ -18,6 +18,8 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Iterable, Optional
 
+from services.clock import today_utc
+
 
 def _xirr(cashflows: list[tuple[date, float]], guess: float = 0.1) -> Optional[float]:
     """Newton's method to find the rate that zeroes NPV of dated cashflows.
@@ -90,7 +92,7 @@ def compute_xirr_from_transactions(
     Sign convention: buys/fees are money OUT (negative), sells/dividends are
     money IN (positive), and the current portfolio value is a final positive
     cashflow (as if you sold everything today)."""
-    as_of = as_of or date.today()
+    as_of = as_of or today_utc()
     cashflows: list[tuple[date, float]] = []
     for tx in transactions:
         amt = float(tx.amount or 0)

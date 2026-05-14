@@ -14,6 +14,7 @@ from schemas import DashboardSummary, InvestmentOut
 from services.alerts_engine import evaluate_alerts
 from services.carbon import compute as compute_carbon
 from services.diversification import compute_score as compute_diversification
+from services.clock import today_utc
 from services.live_value import refresh_current_values
 from services.market_data import market_service
 from services.performance import (
@@ -71,7 +72,7 @@ async def summary(current: User = Depends(get_current_user), db: Session = Depen
         by_type[r.type] += r.current_value
 
     # Naive value-over-time: linearly interpolate from purchase to today per investment, then sum monthly.
-    today = date.today()
+    today = today_utc()
     # Real month boundaries (subtract 1 month at a time) rather than crude
     # `today - 30*i` which drifts on long horizons and breaks for February.
     def _months_ago(d: date, n: int) -> date:
@@ -183,7 +184,7 @@ async def performance(
         "xirr_pct": round(xirr * 100, 2) if xirr is not None else None,
         "twr_pct": round(twr * 100, 2) if twr is not None else None,
         "period_start": period_start,
-        "period_end": date.today().isoformat(),
+        "period_end": today_utc().isoformat(),
         "transaction_count": len(txs),
         "snapshot_count": len(snaps),
     }
@@ -199,7 +200,7 @@ async def history(
     """Daily portfolio value (from snapshots) + a normalised benchmark line
     over the same window. Both are rebased to 100 at the earliest snapshot
     so they're directly comparable."""
-    cutoff = date.today() - timedelta(days=days)
+    cutoff = today_utc() - timedelta(days=days)
 
     # Ensure we have at least today's snapshot — useful for fresh users who
     # haven't waited for the nightly job to run yet. Off-loaded to a worker

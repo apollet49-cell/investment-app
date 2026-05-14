@@ -19,7 +19,7 @@ os.environ.setdefault("INVESTAPP_DISABLE_LIVE_REFRESH", "1")
 
 # Valid Fernet key (32 url-safe-base64-encoded bytes). Required by crypto.py.
 os.environ.setdefault("APP_ENCRYPTION_KEY", "x6bMRJR4jD9SMX7fSeomDbTkEfx-cyreg3IcDzG1rTE=")
-os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
+os.environ.setdefault("JWT_SECRET", "test-jwt-secret-must-be-at-least-32-chars-long-for-validator")
 os.environ.setdefault("ALPHA_VANTAGE_KEY", "dummy")
 os.environ.setdefault("OPEN_EXCHANGE_RATES_KEY", "dummy")
 os.environ.setdefault("FRED_KEY", "dummy")
