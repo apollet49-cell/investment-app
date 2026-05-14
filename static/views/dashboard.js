@@ -1,4 +1,4 @@
-import { API, state, money, pct, spinner, toast } from "/static/app.js";
+import { API, state, money, pct, spinner, toast, escapeHtml } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 // Muted earth-tone palette to match the beige / taupe theme.
@@ -33,32 +33,35 @@ export async function render(root) {
       <button data-id="${a.id}" class="dismiss-alert">✕</button>
     </div>`).join("");
 
+  const bp = data.best_performer;
+  const bpRoiClass = bp ? (bp.roi_pct >= 0 ? "positive" : "negative") : "";
+
   root.innerHTML = `
     ${alerts}
     <div class="summary-grid">
       ${summaryCard(t("dashboard.total_invested"), money(data.total_invested))}
       ${summaryCard(t("dashboard.current_value"), money(data.current_value))}
       ${summaryCard(t("dashboard.total_roi"), pct(data.total_roi_pct), roiClass)}
-      ${summaryCard(t("dashboard.best_performer"),
-        data.best_performer ? `${data.best_performer.name} (${pct(data.best_performer.roi_pct)})` : "—",
-        data.best_performer && data.best_performer.roi_pct >= 0 ? "positive" : "")}
+      ${bp
+        ? bestPerformerCard(t("dashboard.best_performer"), bp.name, pct(bp.roi_pct), bpRoiClass)
+        : summaryCard(t("dashboard.best_performer"), "—")}
     </div>
     <div class="chart-grid">
-      <div class="card">
+      <div class="card chart-card">
         <div class="chart-header">
           <h3>${t("dashboard.portfolio_over_time")}</h3>
           <span class="live-badge"><span class="live-dot"></span>${t("dashboard.live")}</span>
         </div>
-        <canvas id="chart-portfolio" height="120"></canvas>
+        <div class="chart-canvas-wrap"><canvas id="chart-portfolio"></canvas></div>
       </div>
-      <div class="card">
+      <div class="card chart-card">
         <h3>${t("dashboard.asset_allocation")}</h3>
-        <canvas id="chart-allocation" height="200"></canvas>
+        <div class="chart-canvas-wrap"><canvas id="chart-allocation"></canvas></div>
       </div>
     </div>
-    <div class="card">
+    <div class="card chart-card">
       <h3>${t("dashboard.monthly_returns")}</h3>
-      <canvas id="chart-monthly" height="80"></canvas>
+      <div class="chart-canvas-wrap compact"><canvas id="chart-monthly"></canvas></div>
     </div>
   `;
 
@@ -77,6 +80,14 @@ export async function render(root) {
 
 function summaryCard(label, value, cls = "") {
   return `<div class="summary-card"><div class="label">${label}</div><div class="value ${cls}">${value}</div></div>`;
+}
+
+function bestPerformerCard(label, name, roiText, roiClass) {
+  return `<div class="summary-card">
+    <div class="label">${label}</div>
+    <div class="value compact">${escapeHtml(name)}</div>
+    <div class="sub ${roiClass}" style="font-weight:500;font-size:13px;margin-top:4px">${roiText}</div>
+  </div>`;
 }
 
 function emptyState() {

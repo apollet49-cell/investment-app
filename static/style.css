@@ -303,23 +303,41 @@ a { color: var(--primary-strong); }
 }
 .summary-card .value {
   font-family: var(--font-serif);
-  font-size: 32px;
+  font-size: 30px;
   font-weight: 400;
   margin-top: 10px;
   letter-spacing: -0.015em;
   font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.summary-card .value.compact {
+  font-size: 22px;       /* room for long asset names like "Bitcoin USD" */
+  letter-spacing: -0.005em;
 }
 .summary-card .value.positive { color: var(--success); }
 .summary-card .value.negative { color: var(--danger); }
 .summary-card .sub { color: var(--text-muted); font-size: 12px; margin-top: 6px; }
+.summary-card .sub.positive { color: var(--success); }
+.summary-card .sub.negative { color: var(--danger); }
 
 .chart-grid {
   display: grid;
   gap: 16px;
   grid-template-columns: 2fr 1fr;
-  margin-bottom: 22px;
+  margin-bottom: 16px;
 }
-.chart-grid .card { min-height: 280px; }
+/* Chart cards used to grow unbounded because Chart.js + maintainAspectRatio:false
+   fills its container, and the container had only a min-height. Now we give the
+   canvas a fixed-height wrapper, which is the documented Chart.js pattern. */
+.chart-card { padding: 22px 24px; }
+.chart-canvas-wrap {
+  position: relative;
+  width: 100%;
+  height: 240px;
+  margin-top: 14px;
+}
+.chart-canvas-wrap.compact { height: 180px; }
+.chart-canvas-wrap canvas { display: block; }
 @media (max-width: 900px) {
   .chart-grid { grid-template-columns: 1fr; }
   .app-shell { grid-template-columns: 64px 1fr; }
