@@ -130,7 +130,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "47";
+const VIEW_VERSION = "48";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -230,7 +230,10 @@ async function renderRoute() {
   const route = ROUTES.find(r => r.hash === hash) || ROUTES[0];
   document.getElementById("page-title").textContent = t(route.titleKey);
   for (const a of document.querySelectorAll(".sidebar-link")) {
-    a.classList.toggle("active", a.dataset.hash === route.hash);
+    const isActive = a.dataset.hash === route.hash;
+    a.classList.toggle("active", isActive);
+    if (isActive) a.setAttribute("aria-current", "page");
+    else a.removeAttribute("aria-current");
   }
   runViewCleanup();
   destroyCharts();
@@ -538,8 +541,12 @@ function setSidebarOpen(open) {
   sb.classList.toggle("open", open);
   bd?.classList.toggle("open", open);
   btn?.setAttribute("aria-expanded", String(open));
-  // Lock body scroll while the sidebar is open on mobile
-  document.body.style.overflow = open ? "hidden" : "";
+  // Mark body so CSS can hide the chat FAB + lock .main scroll while the
+  // mobile sidebar is open (DOM placement means `.sidebar.open ~ .chat-fab`
+  // wouldn't match — we use a body class instead).
+  document.body.classList.toggle("sidebar-open", open);
+  const main = document.querySelector(".main");
+  if (main) main.style.overflow = open ? "hidden" : "";
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -553,13 +560,14 @@ document.addEventListener("DOMContentLoaded", () => {
     setSidebarOpen(!sb?.classList.contains("open"));
   });
   document.getElementById("sidebar-backdrop")?.addEventListener("click", () => setSidebarOpen(false));
-  // Auto-close sidebar when the user picks a link on mobile
-  document.getElementById("sidebar-nav")?.addEventListener("click", (ev) => {
-    if (ev.target.closest("a")) setSidebarOpen(false);
-  });
-  document.getElementById("sidebar-nav-bottom")?.addEventListener("click", (ev) => {
-    if (ev.target.closest("a")) setSidebarOpen(false);
-  });
+  // Auto-close sidebar when the user picks a link OR clicks any control
+  // (theme toggle, logout) on mobile.
+  const closeOnSidebarInteraction = (ev) => {
+    if (ev.target.closest("a") || ev.target.closest("button")) setSidebarOpen(false);
+  };
+  document.getElementById("sidebar-nav")?.addEventListener("click", closeOnSidebarInteraction);
+  document.getElementById("sidebar-nav-bottom")?.addEventListener("click", closeOnSidebarInteraction);
+  document.querySelector(".sidebar-footer")?.addEventListener("click", closeOnSidebarInteraction);
   document.getElementById("chat-fab").onclick = () => toggleChatPanel(true);
   document.getElementById("chat-close").onclick = () => toggleChatPanel(false);
   document.getElementById("chat-clear").onclick = async () => {

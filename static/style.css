@@ -640,7 +640,9 @@ a { color: var(--primary-strong); }
     border-radius: 0;
   }
   .chat-fab { bottom: 18px; right: 18px; }
-  .sidebar-backdrop.open ~ .chat-fab { display: none; }
+  /* Hide the chat FAB when the sidebar is open (DOM siblings don't allow a
+     direct CSS selector, so we toggle a body class from JS instead). */
+  body.sidebar-open .chat-fab { display: none; }
 
   /* Auth / landing on phone: stack vertically, hero above auth card */
   .landing { gap: 18px; padding: 8px; }
