@@ -2,7 +2,9 @@ import { API, money, spinner, toast, escapeHtml } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 // Default canonical types — pre-populated rows in the editor.
-const DEFAULT_TYPES = ["stock", "etf", "crypto", "bond", "real_estate", "cash"];
+// Must match INVESTMENT_TYPES in backend models.py — "cash" is intentionally
+// absent until cash holdings become a real first-class asset type.
+const DEFAULT_TYPES = ["stock", "etf", "crypto", "bond", "real_estate", "startup"];
 
 let currentAlloc = {};   // {type: current_value}
 let currentTotal = 0;

@@ -430,18 +430,28 @@ def _parse_date(s: str) -> date:
     )
 
 
+class SeedDemoRequest(BaseModel):
+    # Explicit acknowledgement that the caller is OK with destructive wipe.
+    # The frontend sends `{"confirm_wipe": true}` after a confirm() prompt;
+    # a CSRF replay without this body returns 400 instead of nuking data.
+    confirm_wipe: bool = False
+
+
 @router.post("/seed-demo")
 async def seed_demo(
+    payload: SeedDemoRequest,
     current: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
     """Populate the current user's account with a realistic demo portfolio
     (~21 investments across all types, 50+ transactions, DCA plans, alerts,
-    watchlist, 18 months of daily snapshots). Idempotent: re-running wipes
-    the user's existing data first.
+    watchlist, 18 months of daily snapshots).
 
-    Used by the empty-state "Try with sample portfolio" button so a brand
-    new user can explore the app without manually entering everything."""
+    Wipes any existing data for this user, so the request body MUST include
+    `confirm_wipe: true` — protects against CSRF / accidental call from a
+    third-party page silently nuking a real user's portfolio."""
+    if not payload.confirm_wipe:
+        raise HTTPException(status_code=400, detail="confirm_wipe=true required to replace existing data")
     from services.demo_seed import seed_user
     result = seed_user(db, current)
     return {"ok": True, **result}

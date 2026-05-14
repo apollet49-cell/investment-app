@@ -66,6 +66,7 @@ export async function loadFxRate() {
   if (cur === "USD") {
     state.fxRate = 1.0;
     state.fxFetchedAt = Date.now();
+    state.fxFailed = false;
     return 1.0;
   }
   try {
@@ -73,12 +74,14 @@ export async function loadFxRate() {
     if (data?.rate && isFinite(data.rate) && data.rate > 0) {
       state.fxRate = data.rate;
       state.fxFetchedAt = Date.now();
+      state.fxFailed = false;
       return data.rate;
     }
   } catch (e) {
     console.warn(`FX rate USD→${cur} failed, falling back to 1.0:`, e.message);
   }
   state.fxRate = 1.0;
+  state.fxFailed = true;
   return 1.0;
 }
 
@@ -103,7 +106,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "38";
+const VIEW_VERSION = "39";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },

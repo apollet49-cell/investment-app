@@ -27,24 +27,37 @@ TRADABLE_TYPES = {"stock", "etf", "crypto"}
 # Currencies that yfinance may return for stock prices, with the conversion
 # factor needed to reach the *major* currency unit (e.g. pence → pound = ÷100).
 _PENCE_CURRENCIES = {"GBX", "GBP_PENCE", "PENCE", "GBP."}
-# Currency aliases we recognise as "this is already the major unit".
-_KNOWN_MAJOR = {"USD", "EUR", "GBP", "CHF", "JPY", "CAD", "AUD", "HKD", "SGD", "SEK", "NOK", "DKK"}
+# Currency aliases recognised as "this is already the major unit". We attempt
+# FX conversion for ANY currency in this set. The list is intentionally wide
+# (~25 ISO-4217 codes) because silently treating an Indian rupee or Brazilian
+# real price as USD over-inflates positions by 80×+. Unknown currencies log
+# a warning and fall back to raw value as a clear signal.
+_KNOWN_MAJOR = {
+    "USD", "EUR", "GBP", "CHF", "JPY", "CAD", "AUD", "NZD",
+    "HKD", "SGD", "TWD", "KRW", "CNY", "CNH", "INR", "IDR", "THB", "MYR", "PHP", "VND",
+    "SEK", "NOK", "DKK", "PLN", "CZK", "HUF", "RON", "BGN",
+    "BRL", "MXN", "ARS", "CLP", "COP", "PEN",
+    "ZAR", "EGP", "MAD", "NGN",
+    "TRY", "ILS", "AED", "SAR", "QAR", "KWD",
+}
 
 
 async def _to_usd(amount: float, from_ccy: str) -> float:
     """Convert amount in `from_ccy` to USD using market_service's FX cache.
-    Returns the original amount if the currency is unknown or FX lookup fails
-    (better to show approximate USD than fail silently)."""
+    Returns the original amount if FX lookup fails (warning logged).
+    Unknown currencies log a warning so silent inflation can be caught."""
     cc = from_ccy.upper()
     if cc in ("", "USD"):
         return amount
     if cc not in _KNOWN_MAJOR:
-        return amount  # unknown — best-effort
+        log.warning("unknown currency %s — value left as raw (may be over/under-stated)", cc)
+        return amount
     try:
         data = await market_service.get_forex_rate(cc, "USD")
         rate = data.get("rate") if data else None
         if rate and rate > 0:
             return amount * float(rate)
+        log.warning("FX %s→USD lookup returned no rate — value left as raw", cc)
     except Exception as e:
         log.warning("FX %s→USD lookup failed: %s", cc, e)
     return amount

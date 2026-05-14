@@ -1,6 +1,10 @@
 import { API, state, money, pct, spinner, toast, escapeHtml, onViewCleanup } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
+// Persist the active dashboard tab across renders (auto-refresh re-renders
+// every 60s; without this the user gets snapped back to "allocation").
+let activeTab = "allocation";
+
 // Muted earth-tone palette to match the beige / taupe theme.
 const TYPE_COLORS = {
   stock: "#8a7558",        // taupe
@@ -96,13 +100,13 @@ export async function render(root) {
 
     <div class="card" style="padding:0">
       <div class="dash-tabs" role="tablist" style="display:flex;gap:2px;border-bottom:1px solid var(--border);overflow-x:auto">
-        <button class="dash-tab active" data-tab="allocation" style="padding:12px 18px;background:transparent;border:none;border-bottom:2px solid var(--primary);font-weight:500;color:var(--text);cursor:pointer;font-size:13px">${t("dashboard.tab_allocation")}</button>
-        <button class="dash-tab" data-tab="performance" style="padding:12px 18px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text-muted);cursor:pointer;font-size:13px">${t("dashboard.tab_performance")}</button>
-        <button class="dash-tab" data-tab="risk" style="padding:12px 18px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text-muted);cursor:pointer;font-size:13px">${t("dashboard.tab_risk")}</button>
-        <button class="dash-tab" data-tab="income" style="padding:12px 18px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text-muted);cursor:pointer;font-size:13px">${t("dashboard.tab_income")}</button>
+        ${["allocation","performance","risk","income"].map(tab => {
+          const isActive = tab === activeTab;
+          return `<button class="dash-tab${isActive ? ' active' : ''}" data-tab="${tab}" style="padding:12px 18px;background:transparent;border:none;border-bottom:2px solid ${isActive ? 'var(--primary)' : 'transparent'};font-weight:${isActive ? '500' : '400'};color:${isActive ? 'var(--text)' : 'var(--text-muted)'};cursor:pointer;font-size:13px">${t(`dashboard.tab_${tab}`)}</button>`;
+        }).join("")}
       </div>
       <div style="padding:18px">
-        <div class="dash-panel" data-panel="allocation">
+        <div class="dash-panel" data-panel="allocation" style="display:${activeTab === 'allocation' ? '' : 'none'}">
           <div class="chart-grid">
             <div class="chart-card" style="padding:0;border:none">
               <h4 style="margin:0 0 10px 0">${t("dashboard.asset_allocation")}</h4>
@@ -114,7 +118,7 @@ export async function render(root) {
             </div>
           </div>
         </div>
-        <div class="dash-panel" data-panel="performance" style="display:none">
+        <div class="dash-panel" data-panel="performance" style="display:${activeTab === 'performance' ? '' : 'none'}">
           <h4 style="margin:0 0 10px 0">${t("dashboard.monthly_returns")}</h4>
           <div class="chart-canvas-wrap compact"><canvas id="chart-monthly"></canvas></div>
           ${bp ? `<div style="margin-top:14px;padding:12px;background:var(--surface);border-radius:8px">
@@ -123,7 +127,7 @@ export async function render(root) {
             <div style="color:${bp.roi_pct >= 0 ? 'var(--success)' : 'var(--danger)'};font-weight:500;margin-top:4px">${pct(bp.roi_pct)}</div>
           </div>` : ""}
         </div>
-        <div class="dash-panel" data-panel="risk" style="display:none">
+        <div class="dash-panel" data-panel="risk" style="display:${activeTab === 'risk' ? '' : 'none'}">
           <div class="chart-grid">
             <div style="padding:0">
               <h4 style="margin:0 0 10px 0">${t("dashboard.stress_tests")}</h4>
@@ -134,7 +138,7 @@ export async function render(root) {
             </div>
           </div>
         </div>
-        <div class="dash-panel" data-panel="income" style="display:none">
+        <div class="dash-panel" data-panel="income" style="display:${activeTab === 'income' ? '' : 'none'}">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
             <h4 style="margin:0">${t("dashboard.dividend_calendar")}</h4>
             <span style="color:var(--text-muted);font-size:12px" id="dividend-annual-summary"></span>
@@ -145,9 +149,11 @@ export async function render(root) {
     </div>
   `;
 
-  // Wire dashboard tabs
+  // Wire dashboard tabs — persists active tab in module-scoped variable so
+  // the 60s auto-refresh doesn't snap users back to "allocation".
   for (const btn of root.querySelectorAll(".dash-tab")) {
     btn.onclick = () => {
+      activeTab = btn.dataset.tab;
       for (const b of root.querySelectorAll(".dash-tab")) {
         const active = b === btn;
         b.classList.toggle("active", active);
@@ -156,8 +162,15 @@ export async function render(root) {
         b.style.fontWeight = active ? "500" : "400";
       }
       for (const p of root.querySelectorAll(".dash-panel")) {
-        p.style.display = p.dataset.panel === btn.dataset.tab ? "" : "none";
+        p.style.display = p.dataset.panel === activeTab ? "" : "none";
       }
+      // Chart.js measures the canvas parent at construction time. If the
+      // monthly chart was built while its panel had display:none, the canvas
+      // is 0×0 — calling resize() now that the panel is visible re-measures.
+      try {
+        if (activeTab === "performance") state.charts.monthly?.resize?.();
+        if (activeTab === "allocation") state.charts.allocation?.resize?.();
+      } catch (_) {}
     };
   }
 
@@ -195,10 +208,15 @@ async function loadFireYears(isCancelled) {
   const yEl = document.getElementById("fire-years");
   const sEl = document.getElementById("fire-sub");
   if (!yEl || !sEl) return;
+  // If FX rate fetch failed for a non-USD user, the conversion would silently
+  // use 1.0 and give a misleading "years to FIRE". Surface that to the user
+  // instead — they should refresh after FX comes back.
+  if (state.fxFailed) {
+    yEl.textContent = "—";
+    sEl.textContent = t("dashboard.fx_failed");
+    return;
+  }
   try {
-    // Defaults expressed in the user's currency (€2500/€1500 for EUR users,
-    // $2500/$1500 for USD users). We convert to USD before posting since the
-    // backend works in USD. state.fxRate is USD→user.currency, so we divide.
     const fx = state.fxRate || 1.0;
     const expensesUsd = Math.round(2500 / fx);
     const savingsUsd = Math.round(1500 / fx);
@@ -382,7 +400,7 @@ async function loadDemoData() {
   btn.disabled = true;
   btn.textContent = t("dashboard.try_demo_loading");
   try {
-    await API.request("/investments/seed-demo", { method: "POST" });
+    await API.request("/investments/seed-demo", { method: "POST", body: { confirm_wipe: true } });
     toast(t("dashboard.try_demo_done"), "success");
     // Re-render the dashboard from scratch so the new data shows up.
     setTimeout(() => location.reload(), 600);
