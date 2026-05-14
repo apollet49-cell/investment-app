@@ -513,9 +513,9 @@ a { color: var(--primary-strong); }
 
   /* Topbar: keep title legible, drop the user-chip to save space
      (logout icon stays on the right; currency is shown in the dashboard
-     KPI numbers themselves). */
+     KPI numbers themselves). Respect iPhone notch safe-area. */
   .topbar {
-    padding: 10px 12px 10px 8px;
+    padding: max(10px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 10px max(8px, env(safe-area-inset-left));
     gap: 6px;
     min-height: 56px;
   }
@@ -655,6 +655,58 @@ a { color: var(--primary-strong); }
 @media (max-width: 380px) {
   .summary-grid { grid-template-columns: 1fr !important; }
   .topbar h1 { font-size: 17px; }
+}
+
+/* ---------- Mobile fixes for view-injected styles ---------- */
+/* These rules target classes that views (markets.js, investments.js) inject
+   via document.createElement('style'). We add them here at the same media
+   level so they apply uniformly across pages. */
+@media (max-width: 640px) {
+  /* Markets: tab row scrolls horizontally instead of wrapping awkwardly.
+     Smaller padding so 5 tabs (Stocks/Crypto/ETFs/Movers/Screener) fit. */
+  .markets-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+  .markets-tabs::-webkit-scrollbar { display: none; }
+  .markets-tab {
+    padding: 12px 14px !important;
+    font-size: 13px !important;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  /* Asset detail slide-over: take full screen instead of 96vw with side bar */
+  .detail-panel {
+    width: 100vw !important;
+    max-width: 100vw !important;
+  }
+  .detail-header { padding: 12px 14px !important; }
+  .detail-body { padding: 14px !important; }
+  .detail-stats {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  /* Investments what-if comparison: stack the two columns on phone */
+  .modal-body > div[style*="grid-template-columns:1fr 1fr"],
+  .modal-body > div[style*="grid-template-columns: 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+  /* Real-estate / startup detail info grids: 1 column on phone for breathing room */
+  div[style*="grid-template-columns:1fr 1fr"][style*="font-size:13px"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Compare view: chips wrap on small screens */
+  .compare-chip { font-size: 11px; padding: 4px 8px; }
+
+  /* Chat page: full-height messages list */
+  #chat-page-messages { min-height: 380px; }
+
+  /* Reports: download buttons stack to full width */
+  .card .btn-block { width: 100%; }
 }
 
 .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
