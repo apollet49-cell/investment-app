@@ -163,7 +163,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "52";
+const VIEW_VERSION = "53";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -458,7 +458,14 @@ async function bootApp() {
   loadPosthog();
   if (!window.location.hash) window.location.hash = "#/dashboard";
   renderRoute();
-  setupSSE();
+  // SSE was being opened eagerly on every login, but Render closes idle
+  // EventSource connections after a short while and the browser reconnects
+  // every 5s (per `retry: 5000`) — causing network churn the user sees as
+  // "the page reloads every 5 seconds". No view currently consumes the
+  // SSE events (market:prices / market:indices have no listeners), so we
+  // skip the connection entirely. Re-enable from a view via setupSSE()
+  // if/when a live-tick UI lands.
+  // setupSSE();
   // Preload every view module in the background after the first render so
   // subsequent navigations skip the dynamic-import wait. Cached in
   // _preloadedModules; renderRoute reads from there before falling back to

@@ -97,14 +97,20 @@ async def stream(request: Request) -> StreamingResponse:
 
     async def gen():
         try:
-            yield "retry: 5000\n\n"  # tell EventSource to reconnect after 5s
+            # retry=30s avoids a tight reconnect loop if proxies kill the
+            # connection (5s was the previous value — caused the "page
+            # reloads every 5 seconds" feel for end-users).
+            yield "retry: 30000\n\n"
             yield ": connected\n\n"
             while True:
                 try:
-                    payload = await asyncio.wait_for(queue.get(), timeout=15)
+                    # 5s heartbeat keeps the connection above most proxy
+                    # idle timeouts (Cloudflare / Render → 30s+); the
+                    # previous 15s was sometimes too slow.
+                    payload = await asyncio.wait_for(queue.get(), timeout=5)
                     yield f"data: {payload}\n\n"
                 except asyncio.TimeoutError:
-                    yield ": ping\n\n"  # heartbeat
+                    yield ": ping\n\n"  # heartbeat keeps proxy alive
         except asyncio.CancelledError:
             pass
         finally:
