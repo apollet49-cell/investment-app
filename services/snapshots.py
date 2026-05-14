@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models import Investment, PortfolioSnapshot, User
@@ -43,9 +44,25 @@ def take_snapshot(db: Session, user: User, when: date | None = None) -> Portfoli
         total_invested=total_invested,
     )
     db.add(snap)
-    db.commit()
-    db.refresh(snap)
-    return snap
+    try:
+        db.commit()
+        db.refresh(snap)
+        return snap
+    except IntegrityError:
+        # Lost the race against a concurrent take_snapshot for the same
+        # (user, date). The unique constraint prevented the duplicate;
+        # re-fetch and update the row that won the race.
+        db.rollback()
+        winner = (
+            db.query(PortfolioSnapshot)
+            .filter(PortfolioSnapshot.user_id == user.id,
+                    PortfolioSnapshot.snapshot_date == when)
+            .one()
+        )
+        winner.total_value = total_value
+        winner.total_invested = total_invested
+        db.commit()
+        return winner
 
 
 def take_all_snapshots(session_factory) -> int:

@@ -80,3 +80,26 @@ def init_db() -> None:
                 conn.execute(text(ddl))
             except Exception:
                 pass  # column probably added by a concurrent worker
+
+    # Add the unique constraint on portfolio_snapshots(user_id, snapshot_date)
+    # for older DBs that pre-date the constraint. Best-effort: failures are
+    # silently swallowed (constraint may already exist, or the DB may not
+    # support adding it after the fact for SQLite).
+    try:
+        existing_indexes = {ix["name"] for ix in insp.get_indexes("portfolio_snapshots")}
+        existing_uq = {uc["name"] for uc in insp.get_unique_constraints("portfolio_snapshots")}
+        if "uq_snapshot_user_date" not in existing_indexes and "uq_snapshot_user_date" not in existing_uq:
+            with engine.begin() as conn:
+                # Postgres syntax; SQLite ignores if-not-exists on uniqueness.
+                if _db_url.startswith("postgresql"):
+                    conn.execute(text(
+                        "ALTER TABLE portfolio_snapshots ADD CONSTRAINT "
+                        "uq_snapshot_user_date UNIQUE (user_id, snapshot_date)"
+                    ))
+                else:
+                    conn.execute(text(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS uq_snapshot_user_date "
+                        "ON portfolio_snapshots (user_id, snapshot_date)"
+                    ))
+    except Exception:
+        pass  # constraint may already exist or table not yet present

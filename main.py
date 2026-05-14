@@ -67,22 +67,33 @@ async def lifespan(app: FastAPI):
     init_db()
     log.info("Database initialised")
 
+    # Always provide an SSEHub on app.state so endpoints that touch it
+    # don't AttributeError when the scheduler is disabled (tests, hermetic
+    # runs). The hub just won't receive any broadcasts.
+    from services.sse import SSEHub
+    app.state.sse = SSEHub()
+
     # Tests (and other hermetic environments) opt out of the scheduler so
-    # they don't hit real yfinance / AlphaVantage endpoints.
+    # they don't hit real yfinance / AlphaVantage endpoints. We log loudly
+    # if this is set in prod — usually a typo or misconfig.
     if os.getenv("INVESTAPP_DISABLE_SCHEDULER") == "1":
-        log.info("Scheduler disabled via INVESTAPP_DISABLE_SCHEDULER=1")
+        if app_settings.SENTRY_ENV == "production":
+            log.warning(
+                "⚠️ INVESTAPP_DISABLE_SCHEDULER=1 in production — "
+                "snapshots, SSE broadcasts, and price refresh are disabled."
+            )
+        else:
+            log.info("Scheduler disabled via INVESTAPP_DISABLE_SCHEDULER=1")
         yield
         return
 
-    # Phase B: scheduler + SSE state
-    from services.sse import SSEHub
+    # Phase B: scheduler state
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from services.market_data import market_service
     from services.alerts_engine import refresh_all_alerts
     from services.snapshots import take_all_snapshots
     from database import SessionLocal
 
-    app.state.sse = SSEHub()
     app.state.scheduler = AsyncIOScheduler()
 
     async def refresh_portfolios():

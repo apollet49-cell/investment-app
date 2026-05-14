@@ -70,7 +70,19 @@ async def _fetch_price_in_usd(symbol: str, asset_type: str) -> Optional[float]:
     convert pounds to USD. For Euronext (EUR), Xetra (EUR), SIX (CHF), TSE
     (JPY) etc., we just FX-convert the native price to USD. yfinance returns
     the source currency in the `currency` field; we trust it but fall back
-    to a per-suffix heuristic when it's missing or wrong (LSE only)."""
+    to a per-suffix heuristic when it's missing or wrong (LSE only).
+
+    Each fetch is hard-bounded to 4s. Python threads can't be cancelled, but
+    a per-call timeout keeps the parent gather's wait_for from accumulating
+    silently-running threads beyond their useful deadline."""
+    try:
+        return await asyncio.wait_for(_fetch_price_inner(symbol, asset_type), timeout=4.0)
+    except asyncio.TimeoutError:
+        log.warning("live price fetch for %s timed out", symbol)
+        return None
+
+
+async def _fetch_price_inner(symbol: str, asset_type: str) -> Optional[float]:
     try:
         if asset_type == "crypto" and "-" not in symbol:
             data = await market_service.get_crypto_price(symbol.lower())

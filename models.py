@@ -13,6 +13,7 @@ from sqlalchemy import (
     LargeBinary,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -201,8 +202,12 @@ class PortfolioSnapshot(Base):
     """Daily snapshot of the user's portfolio. Captured by a scheduled job
     so the dashboard chart shows real historical value (not a linear
     interpolation between purchase date and today). One row per user per
-    date — re-running the job for the same day updates the existing row."""
+    date — enforced by the unique constraint so concurrent take_snapshot
+    calls can't race in two duplicates."""
     __tablename__ = "portfolio_snapshots"
+    __table_args__ = (
+        UniqueConstraint("user_id", "snapshot_date", name="uq_snapshot_user_date"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
