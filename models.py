@@ -24,6 +24,7 @@ SUPPORTED_CURRENCIES = ("USD", "EUR", "GBP", "CHF")
 RISK_LEVELS = ("low", "medium", "high")
 ALERT_TYPES = ("roi_below", "drawdown_above")
 ALERT_SCOPES = ("portfolio", "investment")
+TRANSACTION_TYPES = ("buy", "sell", "dividend", "fee", "split")
 
 
 class User(Base):
@@ -38,11 +39,18 @@ class User(Base):
     key_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
+    # Target allocation by asset type, stored as JSON: {"stock": 60, "crypto": 20, ...}
+    target_allocation_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     investments: Mapped[list["Investment"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     scenarios: Mapped[list["Scenario"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     chat_messages: Mapped[list["ChatMessage"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     alerts: Mapped[list["Alert"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     watchlist: Mapped[list["WatchlistItem"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    transactions: Mapped[list["Transaction"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    dca_plans: Mapped[list["DCAPlan"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    transactions: Mapped[list["Transaction"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    dca_plans: Mapped[list["DCAPlan"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
 class Investment(Base):
@@ -128,6 +136,56 @@ class Alert(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="alerts")
+
+
+TRANSACTION_TYPES = ("buy", "sell", "dividend", "fee", "split")
+
+
+class Transaction(Base):
+    """Audit log of every buy/sell/dividend/fee on an investment. Coexists
+    with the manual Investment.amount_invested/quantity fields — the
+    transactions table is the detailed source of truth for tax accounting
+    while the Investment row stays as a fast summary."""
+    __tablename__ = "transactions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    investment_id: Mapped[int] = mapped_column(Integer, ForeignKey("investments.id", ondelete="CASCADE"), index=True, nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    type: Mapped[str] = mapped_column(String(16), nullable=False)  # buy | sell | dividend | fee | split
+    transaction_date: Mapped[date] = mapped_column(Date, nullable=False)
+    quantity: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    price_per_unit: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)  # USD net amount of the transaction
+    fees: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+    user: Mapped["User"] = relationship(back_populates="transactions")
+
+
+DCA_FREQUENCIES = ("weekly", "biweekly", "monthly", "quarterly")
+
+
+class DCAPlan(Base):
+    """Scheduled Dollar Cost Averaging plan — recurring contribution into a
+    single asset. The app doesn't execute orders; it just tracks the plan
+    and visualises the trajectory so the user can see what their DCA setup
+    is doing over time."""
+    __tablename__ = "dca_plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    symbol: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    asset_type: Mapped[str] = mapped_column(String(16), nullable=False, default="etf")
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    frequency: Mapped[str] = mapped_column(String(16), nullable=False, default="monthly")
+    day_of_month: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+    user: Mapped["User"] = relationship(back_populates="dca_plans")
 
 
 class WatchlistItem(Base):

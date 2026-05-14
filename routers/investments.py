@@ -228,6 +228,68 @@ async def what_if(
     }
 
 
+@router.post("/{inv_id}/sync-dividends")
+async def sync_dividends(
+    inv_id: int,
+    current: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Fetch dividend history from yfinance for this investment's symbol and
+    create dividend Transactions for every payment since the purchase date.
+    Idempotent: skips dates that already have a dividend transaction."""
+    from services.dividends import fetch_dividends
+    from models import Transaction
+
+    inv = db.get(Investment, inv_id)
+    if not inv or inv.user_id != current.id:
+        raise HTTPException(status_code=404, detail="investment not found")
+    if not inv.symbol:
+        raise HTTPException(status_code=400, detail="investment has no symbol — cannot fetch dividends")
+    if inv.type not in {"stock", "etf"}:
+        raise HTTPException(status_code=400, detail="dividends only supported for stocks and ETFs")
+    if not inv.quantity or inv.quantity <= 0:
+        raise HTTPException(status_code=400, detail="set the quantity on this investment first")
+
+    payments = await fetch_dividends(inv.symbol)
+    if payments is None:
+        raise HTTPException(status_code=502, detail="dividend data source unavailable")
+
+    existing_dates = {
+        t.transaction_date for t in db.query(Transaction)
+        .filter(Transaction.investment_id == inv_id, Transaction.type == "dividend").all()
+    }
+    inserted = 0
+    skipped = 0
+    for p in payments:
+        if p["date"] < inv.purchase_date:
+            continue  # paid before we held the asset
+        if p["date"] in existing_dates:
+            skipped += 1
+            continue
+        amount = inv.quantity * p["dividend_per_share"]
+        if amount <= 0:
+            continue
+        t = Transaction(
+            investment_id=inv_id,
+            user_id=current.id,
+            type="dividend",
+            transaction_date=p["date"],
+            quantity=None,
+            price_per_unit=p["dividend_per_share"],
+            amount=round(amount, 2),
+            fees=None,
+            notes=f"Auto-imported via yfinance ({p['dividend_per_share']} per share)",
+        )
+        db.add(t)
+        inserted += 1
+    db.commit()
+    return {
+        "imported": inserted,
+        "skipped_already_present": skipped,
+        "total_payments_found": len(payments),
+    }
+
+
 @router.post("/estimate-value", response_model=PropertyValuationResponse)
 async def estimate_value_endpoint(
     payload: PropertyValuationRequest,

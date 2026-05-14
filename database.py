@@ -62,6 +62,7 @@ def init_db() -> None:
         ("investments", "property_subtype", "ALTER TABLE investments ADD COLUMN property_subtype VARCHAR(32)"),
         ("investments", "garden_sqm", "ALTER TABLE investments ADD COLUMN garden_sqm FLOAT"),
         ("investments", "account_type", "ALTER TABLE investments ADD COLUMN account_type VARCHAR(16)"),
+        ("users", "target_allocation_json", "ALTER TABLE users ADD COLUMN target_allocation_json TEXT"),
     ]
     insp = inspect(engine)
     with engine.begin() as conn:

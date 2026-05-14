@@ -92,6 +92,14 @@ export async function render(root) {
       </div>
       <div id="stress-test-body" style="margin-top:12px;text-align:center;padding:14px;color:var(--text-muted)">${spinner()}</div>
     </div>
+
+    <div class="card" id="dividend-calendar-card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0">${t("dashboard.dividend_calendar")}</h3>
+        <span style="color:var(--text-muted);font-size:12px" id="dividend-annual-summary"></span>
+      </div>
+      <div id="dividend-calendar-body" style="margin-top:12px;text-align:center;padding:14px;color:var(--text-muted)">${spinner()}</div>
+    </div>
   `;
 
   // Wire dismiss
@@ -106,6 +114,7 @@ export async function render(root) {
   buildAllocationChart(data.by_type);
   buildMonthlyChart(data.monthly_returns);
   loadStressTest();
+  loadDividendCalendar();
 
   // Wire the diversification card expand/collapse
   for (const btn of root.querySelectorAll(".div-toggle")) {
@@ -229,6 +238,41 @@ function emptyState() {
       <p>${t("dashboard.no_investments_sub")}</p>
       <button id="dash-empty-add" class="btn btn-primary">${t("dashboard.add_investment")}</button>
     </div>`;
+}
+
+async function loadDividendCalendar() {
+  const host = document.getElementById("dividend-calendar-body");
+  const summaryEl = document.getElementById("dividend-annual-summary");
+  if (!host) return;
+  try {
+    const data = await API.request("/dividends/calendar");
+    if (summaryEl && data.annual_income_estimate_usd) {
+      summaryEl.innerHTML = `${t("dashboard.dividend_estimate")}: <strong style="color:var(--text)">${money(data.annual_income_estimate_usd)}/yr</strong>`;
+    }
+    if (!data.upcoming || !data.upcoming.length) {
+      host.innerHTML = `<div style="color:var(--text-muted);font-size:13px">${t("dashboard.no_upcoming_dividends")}</div>`;
+      return;
+    }
+    host.innerHTML = `
+      <div class="table-wrap"><table class="data" style="font-size:12.5px">
+        <thead><tr>
+          <th>${t("dashboard.div_asset")}</th>
+          <th>${t("dashboard.div_next_ex")}</th>
+          <th style="text-align:right">${t("dashboard.div_yield")}</th>
+          <th style="text-align:right">${t("dashboard.div_next_payment")}</th>
+        </tr></thead>
+        <tbody>
+          ${data.upcoming.slice(0, 10).map(d => `<tr>
+            <td><strong>${escapeHtml(d.name)}</strong> <span style="color:var(--text-muted);font-size:11px">${escapeHtml(d.symbol)}</span></td>
+            <td>${d.next_ex_div || "—"}</td>
+            <td style="text-align:right">${d.annual_yield_pct != null ? d.annual_yield_pct.toFixed(2) + "%" : "—"}</td>
+            <td style="text-align:right">${d.estimated_next_payment_usd != null ? money(d.estimated_next_payment_usd) : "—"}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table></div>`;
+  } catch (e) {
+    host.innerHTML = `<div class="alert-banner error" style="margin:0">${escapeHtml(e.message)}</div>`;
+  }
 }
 
 async function loadStressTest() {

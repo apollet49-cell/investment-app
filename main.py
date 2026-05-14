@@ -15,14 +15,17 @@ from routers import (
     alerts as alerts_router,
     chatbot as chatbot_router,
     dashboard as dashboard_router,
+    dividends as dividends_router,
     exports as exports_router,
     investments as investments_router,
     market as market_router,
     markets as markets_router,
     planning as planning_router,
+    plans as plans_router,
     scenarios as scenarios_router,
     settings as settings_router,
     tax as tax_router,
+    transactions as transactions_router,
     wallet as wallet_router,
     watchlist as watchlist_router,
 )
@@ -121,6 +124,9 @@ app.include_router(watchlist_router.router)
 app.include_router(wallet_router.router)
 app.include_router(tax_router.router)
 app.include_router(planning_router.router)
+app.include_router(transactions_router.router)
+app.include_router(dividends_router.router)
+app.include_router(plans_router.router)
 
 
 @app.get("/health")

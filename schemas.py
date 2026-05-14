@@ -199,6 +199,59 @@ class AlertCreate(BaseModel):
     investment_id: Optional[int] = None
 
 
+class TransactionCreate(BaseModel):
+    type: str  # buy | sell | dividend | fee | split
+    transaction_date: date
+    quantity: Optional[float] = Field(default=None, ge=0)
+    price_per_unit: Optional[float] = Field(default=None, ge=0)
+    amount: float = Field(gt=0)
+    fees: Optional[float] = Field(default=None, ge=0)
+    notes: Optional[str] = None
+
+
+class TransactionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    investment_id: int
+    type: str
+    transaction_date: date
+    quantity: Optional[float]
+    price_per_unit: Optional[float]
+    amount: float
+    fees: Optional[float]
+    notes: Optional[str]
+    created_at: datetime
+
+
+class DCAPlanCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    symbol: Optional[str] = None
+    asset_type: str = "etf"
+    amount: float = Field(gt=0)
+    frequency: str = "monthly"
+    day_of_month: Optional[int] = Field(default=None, ge=1, le=31)
+    start_date: date
+    is_active: bool = True
+
+
+class DCAPlanOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    symbol: Optional[str]
+    asset_type: str
+    amount: float
+    frequency: str
+    day_of_month: Optional[int]
+    start_date: date
+    is_active: bool
+    created_at: datetime
+
+
+class TargetAllocationUpdate(BaseModel):
+    target_by_type: dict[str, float]
+
+
 class WatchlistItemCreate(BaseModel):
     symbol: str = Field(min_length=1, max_length=64)
     asset_type: str
