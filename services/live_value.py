@@ -21,14 +21,35 @@ TRADABLE_TYPES = {"stock", "etf", "crypto"}
 
 
 async def _fetch_one(symbol: str, asset_type: str) -> Optional[float]:
+    """Return the live price normalised to the asset's *major* currency unit
+    (pounds not pence, dollars not cents). LSE stocks are quoted in GBp/GBX
+    (pence = 1/100 of a pound) on yfinance, which would otherwise inflate
+    portfolio values 100× when multiplied by share count. We divide by 100
+    when the source currency is pence so the value matches what the user
+    typed when they bought the position."""
     try:
         if asset_type == "crypto" and "-" not in symbol:
-            # CoinGecko id (e.g. "bitcoin")
             data = await market_service.get_crypto_price(symbol.lower())
             return data.get("price_usd") if data else None
-        # yfinance ticker (stocks, ETFs, and yahoo crypto like "BTC-USD")
         data = await market_service.get_stock_price(symbol)
-        return data.get("price") if data else None
+        if not data:
+            return None
+        price = data.get("price")
+        if price is None:
+            return None
+        ccy = (data.get("currency") or "").upper()
+        # LSE/Yahoo quote London-listed stocks in pence (GBp/GBX). Divide
+        # to get pounds so quantity × price stays in the major unit.
+        if ccy in ("GBP", "") and symbol.upper().endswith(".L"):
+            # yfinance sometimes reports "GBP" for .L tickers when the value
+            # is actually in pence — the suffix is the more reliable signal.
+            # Heuristic: if the price is unreasonably high for the currency
+            # (above ~500 GBP), treat it as pence.
+            if price > 500:
+                price = price / 100.0
+        elif ccy in ("GBX", "GBP_PENCE", "PENCE", "GBP."):
+            price = price / 100.0
+        return float(price)
     except Exception as e:
         log.warning("live price fetch failed for %s (%s): %s", symbol, asset_type, e)
         return None
