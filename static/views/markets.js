@@ -1,4 +1,4 @@
-import { API, state, money, pct, spinner, toast, escapeHtml } from "/static/app.js";
+import { API, state, money, pct, spinner, toast, escapeHtml, onViewCleanup } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 let activeTab = "stocks";
@@ -22,6 +22,12 @@ export async function render(root) {
     <div id="market-detail-host"></div>
   `;
   injectStyles();
+  // Stop the auto-refresh interval when leaving the Markets view, otherwise
+  // a fetch in flight can resolve later and write market table content into
+  // whichever view-root is now active.
+  onViewCleanup(() => {
+    if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  });
   for (const b of root.querySelectorAll(".markets-tab")) {
     b.onclick = () => switchTab(b.dataset.tab);
   }
@@ -52,7 +58,13 @@ async function loadActive() {
   if (activeTab === "screener") return renderScreener(body);
   await loadAndRenderTable(body, activeTab);
   if (REFRESH_MS[activeTab]) {
-    refreshTimer = setInterval(() => loadAndRenderTable(body, activeTab, /*silent*/ true), REFRESH_MS[activeTab]);
+    // The interval is cleared on tab switch above and also on view-leave below.
+    refreshTimer = setInterval(() => {
+      // If the body element has been swapped out (e.g. user navigated away),
+      // don't fetch/write — just bail until the next tick (cleared anyway).
+      if (!document.body.contains(body)) { clearInterval(refreshTimer); return; }
+      loadAndRenderTable(body, activeTab, /*silent*/ true);
+    }, REFRESH_MS[activeTab]);
   }
 }
 

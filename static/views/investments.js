@@ -44,14 +44,20 @@ export async function render(root) {
   attachRowHandlers(root);
 
   // Auto-refresh every 60s so live market prices flow into the table without
-  // a manual reload. Cleanup hook stops the interval when the user leaves the view.
+  // a manual reload. The `cancelled` flag guards the async callback so that
+  // a fetch already in-flight when the user navigates away doesn't write
+  // investments content into a view-root now owned by another view.
+  let cancelled = false;
   const refreshTimer = setInterval(async () => {
+    if (cancelled) return;
     try {
-      cache = await API.request("/investments/");
+      const data = await API.request("/investments/");
+      if (cancelled) return;
+      cache = data;
       refresh(root);
     } catch (_) { /* network blip — try again next tick */ }
   }, 60000);
-  onViewCleanup(() => clearInterval(refreshTimer));
+  onViewCleanup(() => { cancelled = true; clearInterval(refreshTimer); });
 }
 
 function refresh(root) {

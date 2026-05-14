@@ -18,18 +18,26 @@ export async function render(root) {
     try { state.charts[k]?.destroy?.(); } catch (_) {}
     delete state.charts[k];
   }
+  // Guard against the user navigating away mid-fetch. Without this, the
+  // /dashboard/summary response can arrive after the new view has rendered,
+  // and we'd splat dashboard content into the wrong view-root.
+  let cancelled = false;
+  onViewCleanup(() => { cancelled = true; });
+
   root.innerHTML = `<div style="text-align:center;padding:40px">${spinner(true)}</div>`;
   let data;
   try {
     data = await API.request("/dashboard/summary");
   } catch (err) {
+    if (cancelled) return;
     root.innerHTML = `<div class="alert-banner error">${err.message}</div>`;
     return;
   }
+  if (cancelled) return;
 
   // Schedule the next live refresh (cleared on view change via onViewCleanup).
-  const refreshTimer = setTimeout(() => render(root), 60000);
-  onViewCleanup(() => clearTimeout(refreshTimer));
+  const refreshTimer = setTimeout(() => { if (!cancelled) render(root); }, 60000);
+  onViewCleanup(() => { cancelled = true; clearTimeout(refreshTimer); });
   if (!data.total_invested && !data.current_value) {
     root.innerHTML = emptyState();
     document.getElementById("dash-empty-add")?.addEventListener("click", () => location.hash = "#/investments");
