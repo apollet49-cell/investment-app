@@ -4,6 +4,19 @@ import { t } from "/static/i18n.js";
 const CURRENCIES = ["USD", "EUR", "GBP", "CHF"];
 
 export async function render(root) {
+  // Defensive guard: state.user should always be set when this view renders,
+  // but if for any reason it isn't (race condition, expired session, etc.),
+  // fall back to /auth/me before reading fields.
+  if (!state.user || !state.user.name) {
+    try {
+      state.user = await API.request("/auth/me");
+    } catch (err) {
+      root.innerHTML = `<div class="alert-banner error">${err.message || "Session expired — please log in again."}</div>`;
+      return;
+    }
+  }
+  const user = state.user;
+
   let alerts = [];
   try { alerts = await API.request("/alerts/"); } catch (_) {}
   const roiAlert = alerts.find(a => a.type === "roi_below" && a.scope === "portfolio");
@@ -14,19 +27,19 @@ export async function render(root) {
       <h3>${t("settings.profile")}</h3>
       <form id="settings-form">
         <div class="row">
-          <div class="col field"><label>${t("settings.name")}</label><input name="name" value="${escapeHtml(state.user.name)}"/></div>
-          <div class="col field"><label>${t("settings.email")}</label><input name="email" type="email" value="${escapeHtml(state.user.email)}"/></div>
+          <div class="col field"><label>${t("settings.name")}</label><input name="name" value="${escapeHtml(user.name || "")}"/></div>
+          <div class="col field"><label>${t("settings.email")}</label><input name="email" type="email" value="${escapeHtml(user.email || "")}"/></div>
         </div>
         <div class="row">
           <div class="col field"><label>${t("settings.currency")}</label>
-            <select name="currency">${CURRENCIES.map(c => `<option value="${c}" ${c === state.user.currency ? "selected" : ""}>${c}</option>`).join("")}</select>
+            <select name="currency">${CURRENCIES.map(c => `<option value="${c}" ${c === user.currency ? "selected" : ""}>${c}</option>`).join("")}</select>
           </div>
           <div class="col field"><label>${t("settings.new_password")}</label><input name="password" type="password" minlength="6"/></div>
         </div>
         <h3 style="margin-top:24px">${t("settings.api_keys")}</h3>
         <div class="field">
           <label>${t("settings.anthropic_key")}</label>
-          <input name="anthropic_api_key" type="password" placeholder="${state.user.has_anthropic_key ? t("settings.has_key") : t("settings.no_key")}"/>
+          <input name="anthropic_api_key" type="password" placeholder="${user.has_anthropic_key ? t("settings.has_key") : t("settings.no_key")}"/>
           <p style="color:var(--text-muted);font-size:12px;margin:6px 0 0">${t("settings.anthropic_key_help")}</p>
         </div>
         <button class="btn btn-primary" type="submit">${t("settings.save")}</button>

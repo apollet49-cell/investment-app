@@ -160,12 +160,21 @@ function renderAuthForm(mode) {
     const payload = Object.fromEntries(fd.entries());
     try {
       const data = await API.request(isLogin ? "/auth/login" : "/auth/register", { method: "POST", body: payload });
+      if (!data || !data.access_token || !data.user || !data.user.name) {
+        console.error("Unexpected auth response shape:", data);
+        throw new Error("Invalid response from server (missing user data)");
+      }
       state.token = data.access_token;
       state.user = data.user;
       localStorage.setItem("token", state.token);
       toast(t(isLogin ? "auth.success_login" : "auth.success_register"), "success");
-      bootApp();
+      // Surface bootApp errors instead of letting them become unhandled rejections.
+      bootApp().catch(err => {
+        console.error("bootApp failed after auth:", err);
+        toast(err.message || t("common.error_generic"), "error");
+      });
     } catch (err) {
+      console.error("Auth submit failed:", err);
       toast(err.message || t("common.error_generic"), "error");
     }
   };
@@ -204,16 +213,29 @@ async function bootApp() {
   // If we already have a token but no user, fetch /auth/me to validate.
   if (state.token && !state.user) {
     try {
-      state.user = await API.request("/auth/me");
-    } catch {
+      const me = await API.request("/auth/me");
+      if (!me || !me.name) {
+        console.error("/auth/me returned unexpected payload:", me);
+        throw new Error("Server returned invalid user data");
+      }
+      state.user = me;
+    } catch (err) {
+      console.error("bootApp /auth/me failed:", err);
       logout();
       return;
     }
   }
+  // Final safety: if for any reason state.user is still null at this point,
+  // route back to auth instead of crashing on `state.user.name` below.
+  if (!state.user || !state.user.name) {
+    console.warn("bootApp: state.user missing after auth flow, returning to login");
+    logout();
+    return;
+  }
   document.getElementById("auth-screen").classList.add("hidden");
   document.getElementById("app-shell").classList.remove("hidden");
   document.getElementById("chat-fab").classList.remove("hidden");
-  document.getElementById("user-chip").textContent = `${state.user.name} · ${state.user.currency}`;
+  document.getElementById("user-chip").textContent = `${state.user.name} · ${state.user.currency || "USD"}`;
   buildSidebar();
   if (!window.location.hash) window.location.hash = "#/dashboard";
   renderRoute();
@@ -338,6 +360,14 @@ export async function sendChatMessage(text, messagesEl, onDone) {
 }
 
 // ---------- Bootstrapping ----------
+// Global error logging so future bugs surface in the UI instead of being silent.
+window.addEventListener("error", (ev) => {
+  console.error("[window.error]", ev.message, "at", ev.filename + ":" + ev.lineno);
+});
+window.addEventListener("unhandledrejection", (ev) => {
+  console.error("[unhandled rejection]", ev.reason);
+});
+
 document.addEventListener("DOMContentLoaded", () => {
   setTheme(state.theme);
   document.getElementById("theme-toggle").onclick = () => setTheme(state.theme === "dark" ? "light" : "dark");
