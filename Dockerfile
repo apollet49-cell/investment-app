@@ -20,10 +20,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Now copy the app
 COPY . .
 
-# Create persistent data directory for SQLite. Hosts (Render / Fly / Railway)
-# mount their persistent volume at /data so the DB survives redeploys.
-RUN mkdir -p /data
-ENV DATABASE_URL=sqlite:////data/app.db
+# DATABASE_URL is supplied by the host (Render: from the Postgres service;
+# Fly: from `fly secrets`). Falls back to a local SQLite file for `docker run`.
+ENV DATABASE_URL=sqlite:///./app.db
 ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000

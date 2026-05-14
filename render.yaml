@@ -1,15 +1,35 @@
 # Render.com Blueprint — déploie l'app en un clic via le repo GitHub.
 # Doc : https://render.com/docs/blueprint-spec
+#
+# Architecture :
+#   - 1 web service (Docker)        : free tier (s'endort après 15 min d'inactivité)
+#   - 1 Postgres                     : free tier (90 jours puis recréation manuelle)
+#
+# Le free tier de Render ne permet plus de disque persistant, donc on remplace
+# SQLite par Postgres pour que les données survivent aux redéploiements.
+
+databases:
+  - name: investment-db
+    databaseName: investment_app
+    user: investment_app
+    plan: free
+    region: frankfurt
+
 services:
   - type: web
     name: investment-app
     runtime: docker
-    plan: free                # passer à "starter" ($7/mo) pour éviter le sleep après 15 min d'inactivité
-    region: frankfurt          # ou "oregon" / "singapore" — le plus proche de tes utilisateurs
+    plan: free
+    region: frankfurt          # même région que la DB pour réduire la latence
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /health
     envVars:
+      # URL Postgres injectée automatiquement depuis le service base de données.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: investment-db
+          property: connectionString
       # JWT secret — Render génère une valeur aléatoire sécurisée la première fois
       - key: JWT_SECRET
         generateValue: true
@@ -23,7 +43,7 @@ services:
       # Puis colle la valeur dans le dashboard Render → Environment.
       - key: APP_ENCRYPTION_KEY
         sync: false
-      # Clés API tierces — récupère-les sur les sites listés dans le README.
+      # Clés API tierces (voir README pour les liens d'inscription gratuite).
       - key: ALPHA_VANTAGE_KEY
         sync: false
       - key: OPEN_EXCHANGE_RATES_KEY
@@ -33,8 +53,3 @@ services:
       # Optionnel : clé Anthropic globale (les utilisateurs peuvent aussi mettre la leur dans Settings).
       - key: ANTHROPIC_API_KEY
         sync: false
-    # Disque persistant pour SQLite — survit aux redéploiements.
-    disk:
-      name: investment-data
-      mountPath: /data
-      sizeGB: 1
