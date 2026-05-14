@@ -1,4 +1,4 @@
-import { API, state, money, pct, spinner, toast, escapeHtml, onViewCleanup } from "/static/app.js";
+import { API, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, track } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 // Persist the active dashboard tab across renders (auto-refresh re-renders
@@ -207,6 +207,7 @@ export async function render(root) {
   loadStressTest();
   loadDividendCalendar();
   loadPerformance(() => cancelled);
+  loadRealRisk(() => cancelled);
   loadHistoryAndBenchmark(() => cancelled);
   loadFireYears(() => cancelled);
 
@@ -290,26 +291,74 @@ function bestPerformerCard(label, name, roiText, roiClass) {
 
 function riskCard(div) {
   const label = t("dashboard.risk_score");
-  if (!div || div.risk_score == null) return summaryCard(label, "—");
-  const risk = div.risk_score;
-  const clamped = Math.max(0, Math.min(100, risk));
-  const tone = risk <= 25 ? "var(--success)" : risk <= 60 ? "var(--warning)" : "var(--danger)";
-  const tier = risk <= 25 ? t("dashboard.risk_low")
-             : risk <= 60 ? t("dashboard.risk_medium")
+  // Initial placeholder — `loadRealRisk()` swaps in the real metrics
+  // (volatility, max drawdown, beta) once /dashboard/risk responds. Until
+  // then we show the concentration-based "risk_score" so the card isn't
+  // empty for the ~200ms it takes to compute.
+  const fallback = div?.risk_score;
+  if (fallback == null) {
+    return `<div class="summary-card" id="risk-card-host">
+      <div class="label">${label}</div>
+      <div class="value" id="risk-value" style="font-size:22px">—</div>
+      <div class="sub" id="risk-sub" style="font-size:11px;margin-top:6px;color:var(--text-muted)">${t("dashboard.risk_loading")}</div>
+    </div>`;
+  }
+  const clamped = Math.max(0, Math.min(100, fallback));
+  const tone = fallback <= 25 ? "var(--success)" : fallback <= 60 ? "var(--warning)" : "var(--danger)";
+  const tier = fallback <= 25 ? t("dashboard.risk_low")
+             : fallback <= 60 ? t("dashboard.risk_medium")
              : t("dashboard.risk_high");
-  const factors = (div.risk_factors || []).slice(0, 2)
-    .map(f => `<div style="font-size:11px;color:var(--text-muted);padding:2px 0">• ${escapeHtml(f)}</div>`)
-    .join("");
-  return `<div class="summary-card">
+  return `<div class="summary-card" id="risk-card-host">
     <div class="label">${label}</div>
-    <div class="value" style="color:${tone};display:flex;align-items:baseline;gap:6px">
-      ${risk.toFixed(0)}<span style="font-size:12px;color:var(--text-muted);font-family:var(--font-sans)"> / 100</span>
-      <span style="font-size:12px;color:${tone};font-family:var(--font-sans);margin-left:4px">${tier}</span>
+    <div class="value" id="risk-value" style="color:${tone};display:flex;align-items:baseline;gap:6px">
+      ${fallback.toFixed(0)}<span style="font-size:12px;color:var(--text-muted);font-family:var(--font-sans)"> / 100</span>
+      <span id="risk-tier" style="font-size:12px;color:${tone};font-family:var(--font-sans);margin-left:4px">${tier}</span>
     </div>
-    <div class="risk-gauge"><div class="marker" style="left:${clamped}%"></div></div>
+    <div class="risk-gauge"><div class="marker" id="risk-marker" style="left:${clamped}%"></div></div>
     <div class="risk-gauge-scale"><span>${t("dashboard.risk_low")}</span><span>${t("dashboard.risk_medium")}</span><span>${t("dashboard.risk_high")}</span></div>
-    ${factors ? `<div style="margin-top:8px">${factors}</div>` : ""}
+    <div class="sub" id="risk-sub" style="font-size:11px;margin-top:6px;color:var(--text-muted)">${t("dashboard.risk_loading")}</div>
   </div>`;
+}
+
+async function loadRealRisk(isCancelled) {
+  try {
+    const data = await API.request("/dashboard/risk?days=180&benchmark=^GSPC");
+    if (isCancelled()) return;
+    if (data.score == null) return; // not enough snapshots yet — keep fallback
+    const tone = data.score <= 25 ? "var(--success)"
+               : data.score <= 60 ? "var(--warning)"
+               : "var(--danger)";
+    const tierKey = data.score <= 25 ? "dashboard.risk_low"
+                  : data.score <= 60 ? "dashboard.risk_medium"
+                  : "dashboard.risk_high";
+    const vEl = document.getElementById("risk-value");
+    const mEl = document.getElementById("risk-marker");
+    const tEl = document.getElementById("risk-tier");
+    const sEl = document.getElementById("risk-sub");
+    if (vEl) {
+      vEl.innerHTML = `${data.score.toFixed(0)}<span style="font-size:12px;color:var(--text-muted);font-family:var(--font-sans)"> / 100</span>` +
+        (tEl ? "" : `<span id="risk-tier" style="font-size:12px;color:${tone};font-family:var(--font-sans);margin-left:4px">${t(tierKey)}</span>`);
+      vEl.style.color = tone;
+      vEl.style.display = "flex";
+      vEl.style.alignItems = "baseline";
+      vEl.style.gap = "6px";
+    }
+    if (tEl) {
+      tEl.textContent = t(tierKey);
+      tEl.style.color = tone;
+    }
+    if (mEl) mEl.style.left = `${Math.max(0, Math.min(100, data.score))}%`;
+    if (sEl) {
+      const parts = [];
+      if (data.volatility_pct != null) parts.push(`${t("dashboard.risk_vol")}: ${data.volatility_pct.toFixed(1)}%`);
+      if (data.max_drawdown_pct != null) parts.push(`${t("dashboard.risk_dd")}: ${data.max_drawdown_pct.toFixed(1)}%`);
+      if (data.beta != null) parts.push(`β: ${data.beta.toFixed(2)}`);
+      sEl.textContent = parts.join(" · ") || `${data.n_days} ${t("dashboard.risk_days")}`;
+    }
+  } catch (e) {
+    const sEl = document.getElementById("risk-sub");
+    if (sEl) sEl.textContent = t("dashboard.risk_unavailable");
+  }
 }
 
 function diversificationCard(div) {
@@ -420,6 +469,7 @@ async function loadDemoData() {
   btn.textContent = t("dashboard.try_demo_loading");
   try {
     await API.request("/investments/seed-demo", { method: "POST", body: { confirm_wipe: true } });
+    track("demo_seeded");
     toast(t("dashboard.try_demo_done"), "success");
     // Re-render the dashboard from scratch so the new data shows up.
     setTimeout(() => location.reload(), 600);

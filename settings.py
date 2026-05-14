@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     # with credentials is invalid per the CORS spec and browsers ignore it.
     CORS_ALLOWED_ORIGINS: str = "http://localhost:8000,http://127.0.0.1:8000,https://investment-app-kud9.onrender.com"
 
+    # PostHog product analytics — leave empty in dev. Set on Render to
+    # capture page views + feature usage. Free tier ~1M events/month.
+    POSTHOG_API_KEY: str = ""
+    POSTHOG_HOST: str = "https://eu.i.posthog.com"
+
     # Sentry DSN — paste from sentry.io project settings. Leave empty to
     # disable error reporting (e.g. in local dev and CI).
     SENTRY_DSN: str = ""

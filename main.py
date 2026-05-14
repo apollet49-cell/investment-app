@@ -200,7 +200,28 @@ app.include_router(plans_router.router)
 
 @app.get("/health")
 async def health() -> dict[str, bool]:
-    return {"ok": True}
+    # Includes a tiny DB roundtrip so an uptime monitor catches DB outages
+    # (Render Postgres free tier sleeps), not just "server is up".
+    try:
+        from database import engine
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"ok": True, "db": True}
+    except Exception:
+        return {"ok": False, "db": False}
+
+
+@app.get("/config/public")
+async def public_config() -> dict:
+    """Front-end-safe config (no secrets). Used by app.js to wire up
+    optional integrations like PostHog analytics."""
+    return {
+        "posthog": {
+            "api_key": app_settings.POSTHOG_API_KEY,
+            "host": app_settings.POSTHOG_HOST if app_settings.POSTHOG_API_KEY else "",
+        },
+    }
 
 
 @app.get("/")

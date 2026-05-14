@@ -1,4 +1,4 @@
-import { API, state, money, pct, spinner, toast, escapeHtml, onViewCleanup } from "/static/app.js";
+import { API, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, track } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 let cache = [];
@@ -173,6 +173,7 @@ function openAddModal(root) {
     };
     try {
       await API.request(`/investments/${invId}/transactions`, { method: "POST", body });
+      track("transaction_added", { type: body.type });
       toast(t("common.saved"), "success");
       closeModal();
       await render(root);

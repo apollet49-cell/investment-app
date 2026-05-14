@@ -85,6 +85,38 @@ export async function loadFxRate() {
   return 1.0;
 }
 
+// ---------- Analytics (PostHog) ----------
+// Loaded lazily from /config/public after bootApp. If POSTHOG_API_KEY isn't
+// set on the server, this becomes a no-op so dev/test runs aren't tracked.
+let _posthogReady = false;
+export function track(event, props = {}) {
+  if (!_posthogReady || !window.posthog) return;
+  try { window.posthog.capture(event, props); } catch (_) {}
+}
+async function loadPosthog() {
+  try {
+    const cfg = await fetch("/config/public").then(r => r.json()).catch(() => ({}));
+    const ph = cfg?.posthog;
+    if (!ph?.api_key) return;
+    // Minimal snippet — keeps the page light, defers full SDK loading
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    window.posthog.init(ph.api_key, {
+      api_host: ph.host,
+      person_profiles: "identified_only",
+      capture_pageview: false,        // we'll send manual pageviews per route
+      capture_pageleave: true,
+      disable_session_recording: true,
+    });
+    if (state.user?.id) {
+      window.posthog.identify(String(state.user.id), {
+        currency: state.user.currency,
+        has_anthropic_key: state.user.has_anthropic_key,
+      });
+    }
+    _posthogReady = true;
+  } catch (_) { /* analytics is best-effort */ }
+}
+
 // ---------- Authenticated download ----------
 // Browsers don't add the Authorization header on a plain `<a href>` click,
 // so any export endpoint behind get_current_user 401s on a vanilla link.
@@ -92,6 +124,7 @@ export async function loadFxRate() {
 // on a transient anchor so the browser presents the standard save dialog.
 export async function downloadAuth(path) {
   try {
+    track("export_clicked", { path });
     const res = await fetch(path, { headers: { Authorization: `Bearer ${state.token}` } });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -130,7 +163,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "51";
+const VIEW_VERSION = "52";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -241,6 +274,8 @@ async function renderRoute() {
   const hash = window.location.hash || "#/dashboard";
   const route = ROUTES.find(r => r.hash === hash) || ROUTES[0];
   document.getElementById("page-title").textContent = t(route.titleKey);
+  // Analytics: page view per route, with the hash as the path.
+  track("page_view", { route: route.hash });
   for (const a of document.querySelectorAll(".sidebar-link")) {
     const isActive = a.dataset.hash === route.hash;
     a.classList.toggle("active", isActive);
@@ -327,6 +362,7 @@ function renderAuthForm(mode) {
       state.token = data.access_token;
       state.user = data.user;
       localStorage.setItem("token", state.token);
+      track(isLogin ? "user_login" : "user_register", { currency: data.user?.currency });
       toast(t(isLogin ? "auth.success_login" : "auth.success_register"), "success");
       // Surface bootApp errors instead of letting them become unhandled rejections.
       bootApp().catch(err => {
@@ -418,6 +454,8 @@ async function bootApp() {
   buildSidebar();
   // Fetch the FX rate before rendering so money() shows the right values.
   await loadFxRate();
+  // Analytics — fire-and-forget, doesn't block render.
+  loadPosthog();
   if (!window.location.hash) window.location.hash = "#/dashboard";
   renderRoute();
   setupSSE();
@@ -501,6 +539,7 @@ export function escapeHtml(s) {
 }
 
 export async function sendChatMessage(text, messagesEl, onDone) {
+  track("chat_message_sent", { length: text.length });
   // Append user bubble immediately
   messagesEl.insertAdjacentHTML("beforeend", msgHtml({ role: "user", content: text }));
   const assistantBubble = document.createElement("div");

@@ -1,4 +1,4 @@
-import { API, money, spinner, toast, escapeHtml } from "/static/app.js";
+import { API, money, spinner, toast, escapeHtml, track } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 // Default canonical types — pre-populated rows in the editor.
@@ -168,6 +168,7 @@ async function runRebalance(root) {
       method: "POST",
       body: { target_by_type, new_contribution },
     });
+    track("rebalance_run", { mode: data?.mode, has_contribution: new_contribution > 0 });
     renderResult(host, data);
   } catch (e) {
     host.innerHTML = `<div class="alert-banner error">${escapeHtml(e.message)}</div>`;

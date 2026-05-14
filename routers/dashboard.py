@@ -17,6 +17,7 @@ from services.diversification import compute_score as compute_diversification
 from services.clock import today_utc
 from services.live_value import refresh_current_values
 from services.market_data import market_service
+from services.risk import compute_risk_metrics
 from services.performance import (
     compute_simple_roi,
     compute_twr_from_snapshots,
@@ -276,3 +277,44 @@ async def history(
         "benchmark_symbol": benchmark,
         "days": days,
     }
+
+
+@router.get("/risk")
+async def risk(
+    days: int = Query(180, ge=30, le=3650),
+    benchmark: str = Query("^GSPC"),
+    current: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Real portfolio risk metrics from daily snapshots:
+    annualised volatility, max drawdown, beta vs benchmark, Sharpe ratio,
+    and a composite score 0-100. Replaces the previous concentration-only
+    "risk score" which was just cosmetic.
+
+    Requires at least 30 daily snapshots; otherwise returns
+    `{score: null, reason: "insufficient_history"}` so the UI can fall
+    back to a "checking back in N days" message."""
+    cutoff = today_utc() - timedelta(days=days)
+    snaps = (
+        db.query(PortfolioSnapshot)
+        .filter(PortfolioSnapshot.user_id == current.id, PortfolioSnapshot.snapshot_date >= cutoff)
+        .order_by(PortfolioSnapshot.snapshot_date.asc())
+        .all()
+    )
+    portfolio_values = [s.total_value for s in snaps]
+
+    # Pull a matching benchmark series for beta (best-effort).
+    period = "6mo" if days <= 180 else "1y" if days <= 365 else "5y"
+    bench_values: list[float] = []
+    try:
+        bench_raw = await market_service.get_historical(benchmark, period=period)
+        if bench_raw and snaps:
+            snap_start = snaps[0].snapshot_date.isoformat()
+            bench_values = [float(p["close"]) for p in bench_raw if p["date"] >= snap_start]
+    except Exception:
+        pass
+
+    metrics = compute_risk_metrics(portfolio_values, bench_values or None)
+    metrics["benchmark_symbol"] = benchmark
+    metrics["window_days"] = days
+    return metrics

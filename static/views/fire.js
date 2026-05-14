@@ -1,4 +1,4 @@
-import { API, state, money, spinner, toast, escapeHtml, onViewCleanup } from "/static/app.js";
+import { API, state, money, spinner, toast, escapeHtml, onViewCleanup, track } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 let monthlyExpenses = 2000;
@@ -22,6 +22,7 @@ async function refresh(root) {
   let data;
   try {
     data = await API.request(`/planning/fire?monthly_expenses=${monthlyExpenses}&monthly_savings=${monthlySavings}&expected_return_pct=${expectedReturn}&target_multiplier=${multiplier}`);
+    track("fire_simulated", { expected_return_pct: expectedReturn });
   } catch (err) {
     if (cancelled) return;
     root.innerHTML = `<div class="alert-banner error">${escapeHtml(err.message)}</div>`;

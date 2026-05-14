@@ -1,4 +1,4 @@
-import { API, money, pct, spinner, toast, escapeHtml, onViewCleanup, downloadAuth } from "/static/app.js";
+import { API, money, pct, spinner, toast, escapeHtml, onViewCleanup, downloadAuth, track } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 const TYPES = ["stock", "real_estate", "crypto", "bond", "etf", "startup"];
@@ -454,8 +454,13 @@ function openForm(id) {
     }
 
     try {
-      if (id) await API.request(`/investments/${id}`, { method: "PUT", body: payload });
-      else await API.request("/investments/", { method: "POST", body: payload });
+      if (id) {
+        await API.request(`/investments/${id}`, { method: "PUT", body: payload });
+        track("investment_edited", { type: invType });
+      } else {
+        await API.request("/investments/", { method: "POST", body: payload });
+        track("investment_added", { type: invType });
+      }
       toast(t("common.saved"), "success");
       closeModal();
       cache = await API.request("/investments/");
