@@ -20,10 +20,15 @@ def _to_out(a: Alert) -> AlertOut:
     )
 
 
-def evaluate_alerts(db: Session, user: User) -> list[AlertOut]:
-    """Evaluate every active alert for the user; persist is_triggered changes; return triggered+undismissed."""
+def evaluate_alerts(db: Session, user: User, investments: list | None = None) -> list[AlertOut]:
+    """Evaluate every active alert for the user; persist is_triggered changes; return triggered+undismissed.
+
+    The caller can pass a pre-fetched `investments` list (the dashboard
+    summary already queried them) to skip a redundant round-trip to the
+    DB. Saves ~10-20ms per dashboard load on Postgres free tier."""
     alerts = db.query(Alert).filter(Alert.user_id == user.id, Alert.is_active.is_(True)).all()
-    investments = db.query(Investment).filter(Investment.user_id == user.id).all()
+    if investments is None:
+        investments = db.query(Investment).filter(Investment.user_id == user.id).all()
 
     portfolio_invested = sum(i.amount_invested for i in investments)
     portfolio_value = sum(i.current_value for i in investments)

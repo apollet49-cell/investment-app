@@ -149,12 +149,38 @@ export async function loadFxRate() {
     state.fxFailed = false;
     return 1.0;
   }
+  // Read cached FX from localStorage so non-USD users don't wait for a
+  // yfinance round-trip on every cold start. FX rates move slowly (~0.5%/day
+  // for major pairs); a 1h cache is fine for display formatting. We still
+  // fire a background refresh so the next render is up-to-date.
+  const lsKey = `fx:USD:${cur}`;
+  try {
+    const raw = localStorage.getItem(lsKey);
+    if (raw) {
+      const { rate, at } = JSON.parse(raw);
+      if (isFinite(rate) && rate > 0 && Date.now() - at < 60 * 60 * 1000) {
+        state.fxRate = rate;
+        state.fxFetchedAt = at;
+        state.fxFailed = false;
+        // Background refresh — don't await, so the caller proceeds.
+        API.request(`/market/forex/USD/${cur}`).then(d => {
+          if (d?.rate && isFinite(d.rate) && d.rate > 0) {
+            state.fxRate = d.rate;
+            state.fxFetchedAt = Date.now();
+            try { localStorage.setItem(lsKey, JSON.stringify({ rate: d.rate, at: Date.now() })); } catch (_) {}
+          }
+        }).catch(() => {});
+        return rate;
+      }
+    }
+  } catch (_) {}
   try {
     const data = await API.request(`/market/forex/USD/${cur}`);
     if (data?.rate && isFinite(data.rate) && data.rate > 0) {
       state.fxRate = data.rate;
       state.fxFetchedAt = Date.now();
       state.fxFailed = false;
+      try { localStorage.setItem(lsKey, JSON.stringify({ rate: data.rate, at: Date.now() })); } catch (_) {}
       return data.rate;
     }
   } catch (e) {
@@ -243,7 +269,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "56";
+const VIEW_VERSION = "57";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },

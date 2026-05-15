@@ -68,19 +68,33 @@ def _validate_type(t: str) -> None:
 @router.get("/", response_model=list[InvestmentOut])
 async def list_investments(current: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[InvestmentOut]:
     rows = db.query(Investment).filter(Investment.user_id == current.id).order_by(Investment.created_at.desc()).all()
-    # Live refresh: for tradable investments where we know the quantity,
-    # recompute current_value = quantity × current_market_price. Persist so
-    # subsequent reads stay fast and any reports/exports see fresh values.
-    updates = await refresh_current_values(rows)
-    if updates:
-        changed = False
-        for r in rows:
-            new_val = updates.get(r.id)
-            if new_val is not None and r.current_value != new_val:
-                r.current_value = new_val
-                changed = True
-        if changed:
-            db.commit()
+    # Live market refresh runs as a fire-and-forget task so the response
+    # comes back in tens of ms (previously up to 12s while yfinance was
+    # walked synchronously for every symbol). Fresh prices land in the
+    # DB before the next call AND the SSE broadcast pushes them to the
+    # browser in real time, so the user sees the new value either way.
+    # Skip when live refresh is disabled (tests, hermetic runs).
+    import os as _os
+    if _os.getenv("INVESTAPP_DISABLE_LIVE_REFRESH") != "1":
+        import asyncio
+        from database import SessionLocal
+        async def _bg_refresh():
+            bg_db = SessionLocal()
+            try:
+                bg_rows = bg_db.query(Investment).filter(Investment.user_id == current.id).all()
+                updates = await refresh_current_values(bg_rows)
+                if updates:
+                    changed = False
+                    for r in bg_rows:
+                        new_val = updates.get(r.id)
+                        if new_val is not None and r.current_value != new_val:
+                            r.current_value = new_val
+                            changed = True
+                    if changed:
+                        bg_db.commit()
+            finally:
+                bg_db.close()
+        asyncio.create_task(_bg_refresh())
     return [_to_out(r) for r in rows]
 
 

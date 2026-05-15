@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -18,14 +20,23 @@ async def calendar(
 ) -> dict:
     """Upcoming ex-dividend dates + estimated payouts across the user's portfolio."""
     rows = db.query(Investment).filter(Investment.user_id == current.id).all()
-    upcoming = await upcoming_calendar(rows)
-    # Aggregate annual income estimate from TTM dividends × quantity held.
+    # Fan out the dividend metadata fetches in parallel. Previously this
+    # endpoint did:
+    #   upcoming = await upcoming_calendar(rows)   # gather() inside
+    #   for r in rows: await fetch_dividend_metadata(r.symbol)
+    # Two passes over the same symbols, the second one SEQUENTIAL. With a
+    # 10-stock portfolio that's 10× one-at-a-time yfinance hits. Now we
+    # fan out both calls together so the slowest tickers determine the
+    # latency, not the sum.
+    holders = [r for r in rows if r.symbol and r.type in ("stock", "etf") and r.quantity]
+    metas, upcoming = await asyncio.gather(
+        asyncio.gather(*(fetch_dividend_metadata(r.symbol) for r in holders)),
+        upcoming_calendar(rows),
+    )
     total_annual_estimate = 0.0
-    for r in rows:
-        if r.symbol and r.type in ("stock", "etf") and r.quantity:
-            d = await fetch_dividend_metadata(r.symbol)
-            if d.get("ttm_dividend"):
-                total_annual_estimate += r.quantity * d["ttm_dividend"]
+    for r, meta in zip(holders, metas):
+        if meta.get("ttm_dividend"):
+            total_annual_estimate += r.quantity * meta["ttm_dividend"]
     return {
         "upcoming": upcoming,
         "annual_income_estimate_usd": round(total_annual_estimate, 2),

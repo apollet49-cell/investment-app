@@ -126,7 +126,7 @@ async def summary(current: User = Depends(get_current_user), db: Session = Depen
         ret = (curr - prev) / prev * 100.0
         monthly_returns.append({"month": portfolio_over_time[i]["date"], "return_pct": round(ret, 2)})
 
-    triggered = evaluate_alerts(db, current)
+    triggered = evaluate_alerts(db, current, investments=rows)
     diversification = compute_diversification(rows)
     carbon = compute_carbon(rows)
 
