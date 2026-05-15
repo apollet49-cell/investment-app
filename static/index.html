@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
   <link rel="preconnect" href="https://unpkg.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter:wght@300;400;500;600&family=Geist:wght@300;400;500;600;700;800;900&family=Geist+Mono:wght@300;400;500;600&family=Instrument+Serif:ital@0;1&display=swap" />
-  <link rel="stylesheet" href="/static/landing.css?v=77" />
+  <link rel="stylesheet" href="/static/landing.css?v=78" />
   <!-- Critical CSS — minimal first-paint for the landing v2 dark theme.
        Avoids the cream/beige flash before /static/landing.css loads.
        Full styles live in landing.css (scoped under #auth-screen.landing-v2). -->
@@ -52,7 +52,7 @@
       line-height: 1.45;
     }
   </style>
-  <link rel="stylesheet" href="/static/style.css?v=77" />
+  <link rel="stylesheet" href="/static/style.css?v=78" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='8' y='8' width='84' height='84' rx='20' fill='%236b7d5e'/><rect x='26' y='60' width='11' height='22' rx='2' fill='%23faf7f2'/><rect x='44' y='46' width='11' height='36' rx='2' fill='%23faf7f2'/><rect x='62' y='28' width='11' height='54' rx='2' fill='%23faf7f2'/><path d='M31 58 L49 44 L67 26' stroke='%23faf7f2' stroke-width='3' fill='none' stroke-linecap='round'/></svg>" />
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#6b7d5e" />
@@ -83,18 +83,62 @@
           </span>
           <span class="lv-brand-text">InvestApp</span>
         </a>
-        <nav class="lv-nav-links" aria-label="Primary">
-          <a href="#lv-honest">Honest returns</a>
-          <a href="#lv-benchmark">Benchmark</a>
-          <a href="#lv-envelopes">Tax envelopes</a>
-          <a href="#lv-review">Monthly review</a>
-          <a href="#lv-pricing">Pricing</a>
-        </nav>
+        <!-- Single dropdown trigger replaces the inline link row.
+             Apple-style: click → fullwidth panel with the 5 sections
+             listed vertically with descriptions. Click an item → scrolls
+             smoothly to the section. -->
+        <button class="lv-menu-trigger" id="lv-menu-trigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="lv-menu-panel">
+          <span>Menu</span>
+          <svg class="lv-menu-chevron" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M2 4 L6 8 L10 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
         <div class="lv-nav-cta">
           <button class="lv-link-quiet" type="button" data-action="signin">Sign in</button>
           <button class="lv-btn lv-btn-primary" type="button" data-action="demo">Try the demo</button>
         </div>
       </div>
+
+      <!-- Dropdown panel — Apple-style: slides down under the nav with
+           the 5 sections + brief descriptions. Click an item to scroll. -->
+      <div class="lv-menu-panel" id="lv-menu-panel" role="menu" aria-labelledby="lv-menu-trigger">
+        <div class="lv-menu-inner">
+          <a class="lv-menu-item" href="#lv-honest" data-menu-link>
+            <div class="lv-menu-num lv-mono">01</div>
+            <div class="lv-menu-body">
+              <div class="lv-menu-title">Honest returns</div>
+              <div class="lv-menu-desc">XIRR + TWR weighted by every cashflow. No fake ROI inflated by your last deposit.</div>
+            </div>
+          </a>
+          <a class="lv-menu-item" href="#lv-benchmark" data-menu-link>
+            <div class="lv-menu-num lv-mono">02</div>
+            <div class="lv-menu-body">
+              <div class="lv-menu-title">Benchmark vs S&amp;P</div>
+              <div class="lv-menu-desc">Are you actually beating the index in EUR? Get the number, not the vibe.</div>
+            </div>
+          </a>
+          <a class="lv-menu-item" href="#lv-envelopes" data-menu-link>
+            <div class="lv-menu-num lv-mono">03</div>
+            <div class="lv-menu-body">
+              <div class="lv-menu-title">Tax envelopes</div>
+              <div class="lv-menu-desc">PEA · CTO · AV · PER side-by-side, real after-tax numbers, one screen.</div>
+            </div>
+          </a>
+          <a class="lv-menu-item" href="#lv-review" data-menu-link>
+            <div class="lv-menu-num lv-mono">04</div>
+            <div class="lv-menu-body">
+              <div class="lv-menu-title">Monthly review</div>
+              <div class="lv-menu-desc">A senior advisor reads your portfolio on the 1st of every month. Drafted by Claude.</div>
+            </div>
+          </a>
+          <a class="lv-menu-item" href="#lv-pricing" data-menu-link>
+            <div class="lv-menu-num lv-mono">05</div>
+            <div class="lv-menu-body">
+              <div class="lv-menu-title">Pricing</div>
+              <div class="lv-menu-desc">Demo free, Personal 9€/mo, Household 14€/mo. Cancel anytime, export forever.</div>
+            </div>
+          </a>
+        </div>
+      </div>
+      <div class="lv-menu-backdrop" id="lv-menu-backdrop"></div>
     </header>
 
     <div id="lv-top"></div>
@@ -571,6 +615,6 @@
     <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
   </div>
 
-  <script type="module" src="/static/app.js?v=77"></script>
+  <script type="module" src="/static/app.js?v=78"></script>
 </body>
 </html>

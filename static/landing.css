@@ -133,8 +133,98 @@ body:has(#auth-screen.landing-v2:not(.hidden)) {
 #auth-screen.landing-v2 .lv-link-quiet:hover { color: var(--lv-fg); }
 @media (max-width: 720px) {
   #auth-screen.landing-v2 .lv-nav-links { display: none; }
-  #auth-screen.landing-v2 .lv-nav-inner { grid-template-columns: auto 1fr; }
-  #auth-screen.landing-v2 .lv-nav-cta { grid-column: 2; }
+  #auth-screen.landing-v2 .lv-nav-inner { grid-template-columns: auto auto 1fr; }
+}
+
+/* ───────── Apple-style menu trigger + dropdown panel ───────── */
+#auth-screen.landing-v2 .lv-menu-trigger {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 14px; border-radius: 999px;
+  font-size: 14px; color: var(--lv-fg-2);
+  background: transparent; border: 1px solid transparent;
+  cursor: pointer; font-family: var(--lv-f-sans);
+  transition: color .15s ease, background .15s ease, border-color .15s ease;
+  justify-self: center;
+}
+#auth-screen.landing-v2 .lv-menu-trigger:hover,
+#auth-screen.landing-v2 .lv-menu-trigger[aria-expanded="true"] {
+  color: var(--lv-fg);
+  background: color-mix(in oklab, var(--lv-fg) 6%, transparent);
+}
+#auth-screen.landing-v2 .lv-menu-chevron { transition: transform .25s cubic-bezier(.4,0,.2,1); }
+#auth-screen.landing-v2 .lv-menu-trigger[aria-expanded="true"] .lv-menu-chevron { transform: rotate(180deg); }
+
+#auth-screen.landing-v2 .lv-menu-panel {
+  position: absolute; top: 100%; left: 0; right: 0;
+  background: color-mix(in oklab, var(--lv-bg) 92%, transparent);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border-bottom: 1px solid var(--lv-rule);
+  max-height: 0; overflow: hidden;
+  transition: max-height .35s cubic-bezier(.4,0,.2,1), border-color .25s ease;
+  z-index: 49;
+  border-color: transparent;
+}
+#auth-screen.landing-v2 .lv-menu-panel.is-open {
+  max-height: 560px;
+  border-bottom-color: var(--lv-rule);
+}
+#auth-screen.landing-v2 .lv-menu-inner {
+  max-width: var(--lv-cw); margin: 0 auto;
+  padding: 28px 32px 36px;
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px;
+}
+@media (max-width: 980px) { #auth-screen.landing-v2 .lv-menu-inner { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 540px) { #auth-screen.landing-v2 .lv-menu-inner { grid-template-columns: 1fr; } }
+
+#auth-screen.landing-v2 .lv-menu-item {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 18px 18px 22px;
+  border-radius: 12px;
+  text-decoration: none;
+  color: var(--lv-fg);
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background .15s ease, border-color .15s ease, transform .15s ease;
+  opacity: 0;
+  transform: translateY(8px);
+}
+#auth-screen.landing-v2 .lv-menu-panel.is-open .lv-menu-item {
+  opacity: 1; transform: none;
+  transition: opacity .4s ease, transform .4s ease, background .15s ease, border-color .15s ease;
+}
+#auth-screen.landing-v2 .lv-menu-panel.is-open .lv-menu-item:nth-child(1) { transition-delay: .05s; }
+#auth-screen.landing-v2 .lv-menu-panel.is-open .lv-menu-item:nth-child(2) { transition-delay: .09s; }
+#auth-screen.landing-v2 .lv-menu-panel.is-open .lv-menu-item:nth-child(3) { transition-delay: .13s; }
+#auth-screen.landing-v2 .lv-menu-panel.is-open .lv-menu-item:nth-child(4) { transition-delay: .17s; }
+#auth-screen.landing-v2 .lv-menu-panel.is-open .lv-menu-item:nth-child(5) { transition-delay: .21s; }
+
+#auth-screen.landing-v2 .lv-menu-item:hover {
+  background: color-mix(in oklab, var(--lv-accent) 8%, var(--lv-card));
+  border-color: color-mix(in oklab, var(--lv-accent) 28%, var(--lv-rule));
+}
+#auth-screen.landing-v2 .lv-menu-num {
+  font-size: 10px; letter-spacing: 0.14em; color: var(--lv-accent);
+  margin-bottom: 6px;
+}
+#auth-screen.landing-v2 .lv-menu-title {
+  font-size: 17px; font-weight: 600; letter-spacing: -0.01em;
+  margin-bottom: 4px;
+}
+#auth-screen.landing-v2 .lv-menu-desc {
+  font-size: 12.5px; color: var(--lv-fg-3); line-height: 1.5;
+}
+
+/* Backdrop dim — covers everything below the panel when open. */
+#auth-screen.landing-v2 .lv-menu-backdrop {
+  position: fixed; left: 0; right: 0; top: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0; pointer-events: none;
+  transition: opacity .3s ease;
+  z-index: 48;
+}
+#auth-screen.landing-v2 .lv-menu-backdrop.is-open {
+  opacity: 1; pointer-events: auto;
 }
 
 /* ───────────────────── BUTTONS ───────────────────── */

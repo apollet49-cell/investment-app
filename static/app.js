@@ -546,7 +546,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "77";
+const VIEW_VERSION = "78";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -749,6 +749,41 @@ function wireLandingV2() {
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
+  }
+
+  // Apple-style dropdown menu: trigger toggles the panel + backdrop,
+  // clicking an item smooth-scrolls to its section + closes the panel,
+  // Escape and outside-click also close.
+  const menuTrigger = document.getElementById("lv-menu-trigger");
+  const menuPanel = document.getElementById("lv-menu-panel");
+  const menuBackdrop = document.getElementById("lv-menu-backdrop");
+  if (menuTrigger && menuPanel) {
+    const setMenuOpen = (open) => {
+      menuPanel.classList.toggle("is-open", open);
+      menuBackdrop?.classList.toggle("is-open", open);
+      menuTrigger.setAttribute("aria-expanded", String(open));
+    };
+    menuTrigger.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const isOpen = menuPanel.classList.contains("is-open");
+      setMenuOpen(!isOpen);
+    });
+    menuBackdrop?.addEventListener("click", () => setMenuOpen(false));
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && menuPanel.classList.contains("is-open")) setMenuOpen(false);
+    });
+    // Menu items: smooth-scroll + close
+    menuPanel.querySelectorAll("[data-menu-link]").forEach((link) => {
+      link.addEventListener("click", (ev) => {
+        const href = link.getAttribute("href");
+        if (href && href.startsWith("#")) {
+          ev.preventDefault();
+          setMenuOpen(false);
+          const target = document.querySelector(href);
+          if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
+    });
   }
 
   // Reveal-on-scroll for sections — adds .is-in when each section enters

@@ -62,12 +62,17 @@
 
 * { box-sizing: border-box; }
 
-html, body { height: 100%; margin: 0; }
+html, body { margin: 0; }
 
-/* Main pane scrolls internally (see .main below) so html itself never needs a
-   scrollbar. Hide overflow at the document level to avoid a dead scrollbar
-   track next to .main's scrollbar. */
-html { overflow: hidden; }
+/* The authenticated app shell uses an internal-scroll pattern (sidebar
+   fixed + .main pane scrolls), so when #app-shell is visible we hide
+   document-level overflow to avoid a dead scrollbar track next to
+   .main's. The landing v2 is a normal long scrolling page, so document
+   overflow stays auto when #auth-screen.landing-v2 is visible. */
+html, body { height: 100%; }
+html:has(#app-shell:not(.hidden)) { overflow: hidden; height: 100%; }
+html:has(#auth-screen.landing-v2:not(.hidden)) { overflow: auto; height: auto; }
+html:has(#auth-screen.landing-v2:not(.hidden)) body { height: auto; }
 
 body {
   font-family: var(--font-sans);
