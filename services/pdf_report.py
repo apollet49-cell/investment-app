@@ -377,6 +377,12 @@ def generate_pdf(db: Session, user: User) -> bytes:
         by_type[r.type] = by_type.get(r.type, 0.0) + r.current_value
     top5 = sorted(rows, key=lambda r: r.current_value, reverse=True)[:5]
     best = max(rows, key=lambda r: ((r.current_value - r.amount_invested) / r.amount_invested) if r.amount_invested else -1, default=None)
+    # Top position for the Risk section
+    top_pos = max(rows, key=lambda r: r.current_value, default=None)
+    top_pos_pct = ((top_pos.current_value / total_value) * 100) if top_pos and total_value else 0
+    # Largest asset class (for concentration warning)
+    largest_class, largest_class_val = max(by_type.items(), key=lambda kv: kv[1]) if by_type else (None, 0)
+    largest_class_pct = (largest_class_val / total_value * 100) if total_value else 0
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -414,12 +420,14 @@ def generate_pdf(db: Session, user: User) -> bytes:
         "Asset allocation",
         eyebrow="01 · Composition",
     ))
-    # Side-by-side: chart on left, legend on right
-    chart_img = Image(_allocation_chart(by_type), width=9 * cm, height=7.7 * cm)
+    # Side-by-side: chart on left, legend on right. Slightly smaller
+    # height (6.0cm vs 7.7cm) frees up vertical room so the Top
+    # investments bar chart also lands on page 1.
+    chart_img = Image(_allocation_chart(by_type), width=7.5 * cm, height=6.0 * cm)
     legend = _allocation_legend_table(by_type) if by_type else Paragraph("No data", caption_style)
     side_by_side = Table(
         [[chart_img, legend]],
-        colWidths=[9.5 * cm, 7 * cm],
+        colWidths=[8 * cm, 8.5 * cm],
     )
     side_by_side.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -433,18 +441,21 @@ def generate_pdf(db: Session, user: User) -> bytes:
         dominant = max(by_type.items(), key=lambda kv: kv[1])
         pct = (dominant[1] / total_v) * 100
         cap = f"{dominant[0].replace('_', ' ').title()} is the largest sleeve at {pct:.1f}% of the portfolio."
-        story.append(Spacer(1, 8))
+        story.append(Spacer(1, 6))
         story.append(Paragraph(cap, caption_style))
 
-    story.append(Spacer(1, 16))
+    story.append(Spacer(1, 10))
 
     # ---- TOP INVESTMENTS ----
+    # Compact chart (4.8cm vs 7.3cm) so it fits on page 1 below the
+    # allocation section. The section is informational, not the focus —
+    # the holdings table on page 2 carries the detail.
     story.append(_section_header(
         "Top investments — invested vs current value",
         eyebrow="02 · Performance",
     ))
-    story.append(Image(_value_chart(rows), width=17 * cm, height=7.3 * cm))
-    story.append(Spacer(1, 4))
+    story.append(Image(_value_chart(rows), width=17 * cm, height=4.8 * cm))
+    story.append(Spacer(1, 2))
     if best and best.amount_invested:
         bp_roi = (best.current_value - best.amount_invested) / best.amount_invested * 100
         sign = "+" if bp_roi >= 0 else ""
@@ -453,7 +464,7 @@ def generate_pdf(db: Session, user: User) -> bytes:
             caption_style,
         ))
 
-    story.append(Spacer(1, 16))
+    story.append(PageBreak())
 
     # ---- TOP 5 HOLDINGS TABLE ----
     if top5:
@@ -498,8 +509,15 @@ def generate_pdf(db: Session, user: User) -> bytes:
         story.append(tbl)
         story.append(Spacer(1, 16))
 
-    # ---- ANALYSIS / AI ----
-    story.append(_section_header("Analysis", eyebrow="04 · Outlook"))
+    # ---- RISK ANALYSIS ----
+    story.append(_section_header("Risk profile", eyebrow="04 · Risk"))
+    story.append(_risk_table(rows, by_type, total_value, top_pos, top_pos_pct, largest_class, largest_class_pct))
+    story.append(Spacer(1, 8))
+    story.append(Paragraph(_risk_narrative(rows, by_type, total_value, top_pos_pct, largest_class_pct), body_style))
+    story.append(Spacer(1, 14))
+
+    # ---- ANALYSIS / OUTLOOK ----
+    story.append(_section_header("Outlook & action items", eyebrow="05 · Outlook"))
     try:
         ai_text = one_shot(
             db, user,
@@ -525,6 +543,149 @@ def generate_pdf(db: Session, user: User) -> bytes:
     # Build with the footer on every page
     doc.build(story, onFirstPage=_on_page, onLaterPages=_on_page)
     return buf.getvalue()
+
+
+# -- Risk section helpers --------------------------------------------------
+def _risk_table(rows, by_type, total_value, top_pos, top_pos_pct, largest_class, largest_class_pct) -> Table:
+    """Five rows of risk metrics, each with name / metric / signal / level.
+
+    Signal level is bucketed visually as a sage / amber / terracotta dot,
+    so a glance at the right column tells you which factors deserve
+    attention. The metric formulas are intentionally simple — this is a
+    snapshot view, not a Value-at-Risk simulation."""
+    n_positions = len([r for r in rows if r.current_value])
+    n_classes = len([k for k, v in by_type.items() if v > 0])
+
+    # Liquidity proxy: % real estate (illiquid)
+    illiquid_pct = (by_type.get("real_estate", 0) / total_value * 100) if total_value else 0
+
+    # Currency exposure proxy: any non-USD investment by type? We don't
+    # track currency per row in models, so we use a heuristic — startup
+    # + real_estate + bond often have currency-local quirks.
+    # For now we just call it out if real estate dominates.
+    fx_exposure_pct = illiquid_pct  # crude proxy
+
+    # Build the rows
+    def level(metric_pct: float, low: float, high: float) -> tuple[str, object]:
+        """Returns (label, color) for the 'signal' column."""
+        if metric_pct >= high:
+            return ("High", TERRA)
+        if metric_pct >= low:
+            return ("Moderate", HexColor("#b8945e"))  # warm amber
+        return ("Low", SAGE)
+
+    pos_level = level(top_pos_pct, 25, 40)
+    class_level = level(largest_class_pct, 50, 75)
+    diversity_pct = max(0, 100 - n_positions * 4)  # 25 positions → 0% risk
+    div_level = level(diversity_pct, 30, 60)
+    illiquid_level = level(illiquid_pct, 30, 60)
+
+    risk_rows = [
+        ["Factor", "Metric", "Reading", "Signal"],
+        [
+            "Single-position concentration",
+            f"{top_pos.name if top_pos else '—'}",
+            f"{top_pos_pct:.1f}% of net worth",
+            pos_level[0],
+        ],
+        [
+            "Asset-class concentration",
+            (largest_class or '—').replace('_', ' ').title(),
+            f"{largest_class_pct:.1f}% of net worth",
+            class_level[0],
+        ],
+        [
+            "Position diversity",
+            f"{n_positions} positions / {n_classes} classes",
+            "8-12 positions across 3+ classes is the baseline",
+            div_level[0],
+        ],
+        [
+            "Illiquidity exposure",
+            "Real estate share",
+            f"{illiquid_pct:.1f}% of net worth",
+            illiquid_level[0],
+        ],
+        [
+            "Bond cushion",
+            "Defensive allocation",
+            "Present" if by_type.get("bond", 0) > 0 else "Absent",
+            "Low" if by_type.get("bond", 0) > 0 else "Moderate",
+        ],
+    ]
+
+    # Map signal levels to their cell colors
+    level_colors = {
+        "Low": SAGE,
+        "Moderate": HexColor("#b8945e"),
+        "High": TERRA,
+    }
+
+    tbl = Table(risk_rows, colWidths=[5.5 * cm, 3.5 * cm, 4.7 * cm, 2.3 * cm])
+    style = TableStyle([
+        # Header
+        ("BACKGROUND", (0, 0), (-1, 0), SAGE),
+        ("TEXTCOLOR", (0, 0), (-1, 0), CREAM),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 9),
+        ("TOPPADDING", (0, 0), (-1, 0), 9),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), 9),
+        # Body
+        ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 1), (-1, -1), 9),
+        ("TEXTCOLOR", (0, 1), (-1, -1), INK),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [CREAM, HexColor("#f3ede2")]),
+        ("LINEBELOW", (0, 0), (-1, -1), 0.3, BORDER),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 1), (-1, -1), 7),
+        ("BOTTOMPADDING", (0, 1), (-1, -1), 7),
+        # First column slightly bolder
+        ("FONTNAME", (0, 1), (0, -1), "Helvetica-Bold"),
+        ("ALIGN", (3, 0), (3, -1), "CENTER"),
+    ])
+    # Tint the signal column by level
+    for i, row in enumerate(risk_rows[1:], start=1):
+        signal = row[3]
+        if signal in level_colors:
+            style.add("TEXTCOLOR", (3, i), (3, i), level_colors[signal])
+            style.add("FONTNAME", (3, i), (3, i), "Helvetica-Bold")
+    tbl.setStyle(style)
+    return tbl
+
+
+def _risk_narrative(rows, by_type, total_value, top_pos_pct, largest_class_pct) -> str:
+    """One-paragraph synthesis of the risk picture, highlighting the
+    single biggest factor to monitor. Keeps the table from feeling cold."""
+    bits = []
+    if top_pos_pct >= 40:
+        bits.append(
+            f"The portfolio's single largest position alone represents "
+            f"{top_pos_pct:.0f}% of net worth — a position-specific shock "
+            f"(earnings miss, regulatory event) would materially move the entire portfolio."
+        )
+    elif top_pos_pct >= 25:
+        bits.append(
+            f"Single-position concentration is moderate at {top_pos_pct:.0f}% — "
+            "high enough to warrant a regular trim discipline if it keeps growing."
+        )
+    if largest_class_pct >= 75:
+        bits.append(
+            f"Asset-class concentration is the dominant factor: {largest_class_pct:.0f}% "
+            "of net worth sits in one bucket. Correlation within that sleeve dictates the overall ride."
+        )
+    if not by_type.get("bond"):
+        bits.append(
+            "No defensive sleeve. Even 10% in short-duration bonds historically "
+            "reduces portfolio volatility ~25% — that's a cheap drawdown cushion."
+        )
+    if not bits:
+        bits.append(
+            "Risk picture is broadly balanced. Position-level and asset-class "
+            "concentrations are within typical ranges; no single factor dominates the profile."
+        )
+    return " ".join(bits)
 
 
 def _fallback_analysis(rows: list, by_type: dict[str, float], invested: float, value: float, roi_pct: float) -> str:
