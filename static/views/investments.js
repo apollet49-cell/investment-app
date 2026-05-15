@@ -1,4 +1,4 @@
-import { API, money, pct, spinner, toast, escapeHtml, onViewCleanup, downloadAuth, track } from "/static/app.js";
+import { API, cachedGet, invalidateCache, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, downloadAuth, track } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 const TYPES = ["stock", "real_estate", "crypto", "bond", "etf", "startup"];
@@ -19,9 +19,21 @@ let currentLivePrice = null;
 let historicalPrice = null;
 
 export async function render(root) {
-  root.innerHTML = `<div style="text-align:center;padding:40px">${spinner(true)}</div>`;
-  try { cache = await API.request("/investments/"); }
-  catch (err) { root.innerHTML = `<div class="alert-banner error">${escapeHtml(err.message)}</div>`; return; }
+  // Stale-while-revalidate so the table appears instantly on every visit
+  // after the first. Spinner only on the cold first paint.
+  const cacheKey = `swr:${state.token?.slice(-12) || "anon"}:/investments/`;
+  if (sessionStorage.getItem(cacheKey) === null) {
+    root.innerHTML = `<div style="text-align:center;padding:40px">${spinner(true)}</div>`;
+  }
+  try {
+    cache = await cachedGet("/investments/", (fresh) => {
+      // Background fetch returned different data — replace the table in
+      // place so the user sees the update without losing scroll/focus.
+      if (!root.isConnected) return;
+      cache = fresh;
+      refresh(root);
+    });
+  } catch (err) { root.innerHTML = `<div class="alert-banner error">${escapeHtml(err.message)}</div>`; return; }
 
   root.innerHTML = `
     <div class="toolbar">
@@ -514,6 +526,9 @@ function openForm(id) {
       toast(t("common.saved"), "success");
       closeModal();
       cache = await API.request("/investments/");
+      // Cache list + summary (which depends on it) are now stale.
+      invalidateCache("/investments/", "/dashboard/");
+      try { sessionStorage.setItem(`swr:${state.token?.slice(-12) || "anon"}:/investments/`, JSON.stringify(cache)); } catch (_) {}
       refresh(document);
     } catch (e) { toast(e.message, "error"); }
   };
@@ -1119,6 +1134,8 @@ async function deleteInv(id, root) {
   try {
     await API.request(`/investments/${id}`, { method: "DELETE" });
     cache = cache.filter(r => r.id !== id);
+    invalidateCache("/investments/", "/dashboard/");
+    try { sessionStorage.setItem(`swr:${state.token?.slice(-12) || "anon"}:/investments/`, JSON.stringify(cache)); } catch (_) {}
     toast(t("common.deleted"), "success");
     refresh(root);
   } catch (e) { toast(e.message, "error"); }
@@ -1134,6 +1151,8 @@ async function onCsvUpload(ev) {
     toast(`Imported ${res.imported}, skipped ${res.skipped}`, res.skipped ? "info" : "success");
     if (res.errors.length) console.warn("CSV import errors:", res.errors);
     cache = await API.request("/investments/");
+    invalidateCache("/investments/", "/dashboard/");
+    try { sessionStorage.setItem(`swr:${state.token?.slice(-12) || "anon"}:/investments/`, JSON.stringify(cache)); } catch (_) {}
     refresh(document);
   } catch (e) { toast(e.message, "error"); }
   ev.target.value = "";

@@ -1,4 +1,4 @@
-import { API, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, track } from "/static/app.js";
+import { API, cachedGet, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, track } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 // Persist the active dashboard tab across renders (auto-refresh re-renders
@@ -35,10 +35,23 @@ export async function render(root) {
     if (refreshTimer) clearTimeout(refreshTimer);
   });
 
-  root.innerHTML = `<div style="text-align:center;padding:40px">${spinner(true)}</div>`;
+  // Stale-while-revalidate: on every visit AFTER the first one in this
+  // session, we already have a cached /dashboard/summary in sessionStorage,
+  // so we render INSTANTLY from cache and let the background refresh fire
+  // a fresh fetch. Spinner only shows on the very first visit per session.
   let data;
+  const cacheKey = `swr:${state.token?.slice(-12) || "anon"}:/dashboard/summary`;
+  const hasCache = sessionStorage.getItem(cacheKey) !== null;
+  if (!hasCache) {
+    root.innerHTML = `<div style="text-align:center;padding:40px">${spinner(true)}</div>`;
+  }
   try {
-    data = await API.request("/dashboard/summary");
+    data = await cachedGet("/dashboard/summary", (fresh) => {
+      // Fresh data arrived in the background; re-render with it. Only
+      // triggered when fresh != cached, so identical payloads don't repaint.
+      if (cancelled) return;
+      render(root);
+    });
   } catch (err) {
     if (cancelled) return;
     root.innerHTML = `<div class="alert-banner error">${escapeHtml(err.message)}</div>`;

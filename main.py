@@ -8,6 +8,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -178,6 +179,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# GZip JSON & text responses ≥500B. The dashboard summary and investments
+# list compress ~5-8x; cuts a 40KB payload to 5KB on the wire. Static
+# files are pre-gzipped by Render's edge, so this only affects API calls.
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
 app.include_router(auth_router)
 app.include_router(investments_router.router)
 app.include_router(calculator_router.router)
@@ -230,16 +236,29 @@ async def root_index() -> FileResponse:
 
 
 # Mount static files (CSS/JS/SVG). index.html is served by `/` above.
-# A small wrapper ensures dev browsers don't aggressively cache CSS/JS so style
-# changes show up on a normal reload.
-class NoCacheStaticFiles(StaticFiles):
+#
+# Cache strategy:
+# - URLs with a ?v=N query string (versioned by VIEW_VERSION in app.js) are
+#   treated as immutable — the browser caches them for a year. Any update
+#   to those files comes with a bumped ?v=N+1, which is a brand-new URL.
+# - URLs without ?v= (e.g. /static/i18n.js loaded via static `import`) get
+#   a short 60s cache. This is short enough that a deploy propagates in a
+#   minute but long enough to make in-session navigation instant.
+# This replaces the previous no-cache-everything behaviour that forced the
+# browser to re-download app.js / style.css on every page navigation.
+class VersionedStaticFiles(StaticFiles):
     async def get_response(self, path, scope):
         response = await super().get_response(path, scope)
-        if path.endswith((".css", ".js", ".html")):
-            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-            response.headers["Pragma"] = "no-cache"
-            response.headers["Expires"] = "0"
+        if not path.endswith((".css", ".js", ".html", ".svg")):
+            return response
+        # ?v= present → immutable; treat each versioned URL as a unique
+        # resource and let the browser cache it indefinitely.
+        query = scope.get("query_string", b"")
+        if b"v=" in query:
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "public, max-age=60"
         return response
 
 
-app.mount("/static", NoCacheStaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount("/static", VersionedStaticFiles(directory=str(STATIC_DIR)), name="static")

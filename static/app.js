@@ -44,6 +44,59 @@ const API = {
 
 export { API };
 
+// Stale-while-revalidate GET helper. On the first call within a session,
+// makes a network round-trip and caches the result in sessionStorage. On
+// every subsequent call (same session), returns the cached value
+// SYNCHRONOUSLY (well, in a resolved Promise) so the view renders
+// instantly, while a background fetch refreshes the cache and invokes
+// `onUpdate(fresh)` only if the payload changed. This is what makes
+// page-to-page navigation feel snappy after the first visit.
+//
+// Cache is scoped to the JWT to avoid bleeding data between users on a
+// shared browser session. Cleared on logout via API.clearCache().
+export async function cachedGet(path, onUpdate) {
+  const key = `swr:${state.token?.slice(-12) || "anon"}:${path}`;
+  const cachedRaw = sessionStorage.getItem(key);
+  if (cachedRaw) {
+    // Fire-and-forget background refresh. If the fresh payload differs
+    // from the cached one, we hand it to onUpdate so the view can
+    // re-render with the new data.
+    API.request(path).then(fresh => {
+      const freshRaw = JSON.stringify(fresh);
+      sessionStorage.setItem(key, freshRaw);
+      if (freshRaw !== cachedRaw && typeof onUpdate === "function") {
+        try { onUpdate(fresh); } catch (_) {}
+      }
+    }).catch(() => {});
+    try { return JSON.parse(cachedRaw); } catch (_) { /* fall through */ }
+  }
+  const fresh = await API.request(path);
+  try { sessionStorage.setItem(key, JSON.stringify(fresh)); } catch (_) {}
+  return fresh;
+}
+
+export function clearSwrCache() {
+  for (const k of Object.keys(sessionStorage)) {
+    if (k.startsWith("swr:")) sessionStorage.removeItem(k);
+  }
+}
+
+// Drop one or more cached paths so the next cachedGet() goes to the
+// network. Call this after mutations (POST/PUT/DELETE) on a resource so
+// the next view doesn't render with the stale list. Accepts prefixes —
+// `invalidateCache("/investments/")` also clears `/investments/?foo=1`.
+export function invalidateCache(...pathPrefixes) {
+  const tokenSuffix = state.token?.slice(-12) || "anon";
+  const prefix = `swr:${tokenSuffix}:`;
+  for (const k of Object.keys(sessionStorage)) {
+    if (!k.startsWith(prefix)) continue;
+    const rest = k.slice(prefix.length);
+    if (pathPrefixes.some(p => rest.startsWith(p))) {
+      sessionStorage.removeItem(k);
+    }
+  }
+}
+
 // ---------- Toast / spinner ----------
 export function toast(message, type = "info", ms = 3500) {
   const host = document.getElementById("toast-host");
@@ -163,7 +216,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "54";
+const VIEW_VERSION = "55";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -382,6 +435,7 @@ function logout() {
   state.fxRate = 1.0;
   state.fxFailed = false;
   localStorage.removeItem("token");
+  clearSwrCache();
   if (state.sse) { state.sse.close(); state.sse = null; }
   // Reset view-local state that survives across logins via module scope.
   // Lazy-import to avoid loading the dashboard module on the auth screen.
