@@ -1,4 +1,4 @@
-import { API, cachedGet, loadChartJs, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, track } from "/static/app.js";
+import { API, cachedGet, loadChartJs, skeleton, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, track } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 // Persist the active dashboard tab across renders (auto-refresh re-renders
@@ -43,7 +43,9 @@ export async function render(root) {
   const cacheKey = `swr:${state.token?.slice(-12) || "anon"}:/dashboard/summary`;
   const hasCache = sessionStorage.getItem(cacheKey) !== null;
   if (!hasCache) {
-    root.innerHTML = `<div style="text-align:center;padding:40px">${spinner(true)}</div>`;
+    // Skeleton matches the dashboard layout (4 KPI cards + chart) so
+    // there's no reflow when data arrives. Way calmer than a spinner.
+    root.innerHTML = skeleton("kpi");
   }
   try {
     data = await cachedGet("/dashboard/summary", (fresh) => {
@@ -102,6 +104,7 @@ export async function render(root) {
 
   root.innerHTML = `
     ${alerts}
+    ${heroInsight(data)}
     <div class="summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
       <div class="summary-card">
         <div class="label">${t("dashboard.net_worth")}</div>
@@ -454,6 +457,83 @@ function carbonCard(carbon) {
       ${breakdownRows ? `<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin:12px 0 6px">${t("dashboard.carbon_top_emitters")}</div>${breakdownRows}` : ""}
     </div>
   </div>`;
+}
+
+// Hero "Hot Take" card — picks the single most punchy insight from the
+// portfolio summary and surfaces it at the top of the dashboard. The
+// signal is computed client-side from data already in the summary
+// payload — no extra round-trip, no LLM cost, works for everyone.
+// Insights are ordered by importance: concentration → big winner/loser
+// → asset class imbalance → crypto exposure → diversification → default.
+function heroInsight(data) {
+  const div = data.diversification || {};
+  const top = (div.top_positions || [])[0];
+  const byType = data.by_type || {};
+  const totalValue = data.current_value || 0;
+  if (!totalValue) return "";
+
+  let line = "", sub = "", tone = "neutral", icon = "✦";
+
+  // 1. Single-position concentration risk (≥40%)
+  if (top && top.weight_pct >= 40) {
+    line = t("dashboard.insight_concentration").replace("{name}", top.name).replace("{pct}", top.weight_pct.toFixed(0));
+    sub = t("dashboard.insight_concentration_sub");
+    tone = "warning"; icon = "⚠";
+  }
+  // 2. Big winner — best performer ≥50% gain
+  else if (data.best_performer && data.best_performer.roi_pct >= 50) {
+    line = t("dashboard.insight_winner").replace("{name}", data.best_performer.name).replace("{pct}", data.best_performer.roi_pct.toFixed(0));
+    sub = t("dashboard.insight_winner_sub");
+    tone = "positive"; icon = "▲";
+  }
+  // 3. Heavy crypto exposure (>25%)
+  else if (byType.crypto && (byType.crypto / totalValue) >= 0.25) {
+    const pctCrypto = ((byType.crypto / totalValue) * 100).toFixed(0);
+    line = t("dashboard.insight_crypto").replace("{pct}", pctCrypto);
+    sub = t("dashboard.insight_crypto_sub");
+    tone = "warning"; icon = "₿";
+  }
+  // 4. Asset class imbalance — one type >80%
+  else if (Object.values(byType).some(v => v / totalValue > 0.8)) {
+    const dominant = Object.entries(byType).find(([, v]) => v / totalValue > 0.8);
+    const pctDom = ((dominant[1] / totalValue) * 100).toFixed(0);
+    line = t("dashboard.insight_imbalance").replace("{type}", t(`investments.types.${dominant[0]}`)).replace("{pct}", pctDom);
+    sub = t("dashboard.insight_imbalance_sub");
+    tone = "warning"; icon = "⚖";
+  }
+  // 5. Poor diversification (<30)
+  else if (div.score != null && div.score < 30) {
+    line = t("dashboard.insight_diversification").replace("{score}", div.score.toFixed(0));
+    sub = t("dashboard.insight_diversification_sub");
+    tone = "warning"; icon = "◇";
+  }
+  // 6. Strong overall ROI (>20%)
+  else if (data.total_roi_pct >= 20) {
+    line = t("dashboard.insight_strong").replace("{pct}", data.total_roi_pct.toFixed(1));
+    sub = t("dashboard.insight_strong_sub");
+    tone = "positive"; icon = "▲";
+  }
+  // 7. Balanced & healthy (default for diversified positive portfolios)
+  else if (div.score >= 70 && data.total_roi_pct >= 0) {
+    line = t("dashboard.insight_balanced").replace("{score}", div.score.toFixed(0));
+    sub = t("dashboard.insight_balanced_sub");
+    tone = "positive"; icon = "✦";
+  }
+  // 8. Default — neutral
+  else {
+    line = t("dashboard.insight_default").replace("{count}", String((div.top_positions || []).length));
+    sub = t("dashboard.insight_default_sub");
+    tone = "neutral"; icon = "✦";
+  }
+
+  return `
+    <div class="hero-insight hero-${tone}">
+      <div class="hero-icon">${icon}</div>
+      <div class="hero-body">
+        <div class="hero-line">${escapeHtml(line)}</div>
+        <div class="hero-sub">${escapeHtml(sub)}</div>
+      </div>
+    </div>`;
 }
 
 function emptyState() {

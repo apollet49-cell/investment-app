@@ -95,6 +95,43 @@ async def login(payload: UserLogin, db: Session = Depends(get_db)) -> TokenRespo
     return TokenResponse(access_token=create_access_token(user.id), user=_user_to_out(user))
 
 
+@router.post("/demo", response_model=TokenResponse, status_code=201)
+async def demo_login(db: Session = Depends(get_db)) -> TokenResponse:
+    """Spin up a brand-new demo user with a pre-seeded portfolio. No
+    sign-up required — the landing page CTA calls this and the visitor
+    lands straight on a fully-populated dashboard. Each demo user is
+    isolated (no shared state) and cleaned up by a scheduler job after
+    24 hours so the DB doesn't fill up.
+
+    The email follows `demo+{uuid}@local.invest` so the scheduler can
+    identify demo accounts by prefix. A random password is set so the
+    account technically passes login validation but is never used (the
+    JWT is returned directly here)."""
+    import uuid
+    import secrets
+    from services.demo_seed import seed_user
+
+    suffix = uuid.uuid4().hex[:10]
+    user = User(
+        email=f"demo+{suffix}@local.invest",
+        name="Demo",
+        hashed_password=hash_password(secrets.token_urlsafe(32)),
+        currency="USD",
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    # Seed the demo portfolio so the dashboard isn't empty.
+    try:
+        seed_user(db, user)
+    except Exception as e:
+        # Don't fail the login just because seeding broke — the user
+        # can still navigate, just with an empty portfolio.
+        import logging
+        logging.getLogger("auth").warning("demo seed failed for %s: %s", user.email, e)
+    return TokenResponse(access_token=create_access_token(user.id), user=_user_to_out(user))
+
+
 @router.get("/me", response_model=UserOut)
 async def me(current: User = Depends(get_current_user)) -> UserOut:
     return _user_to_out(current)

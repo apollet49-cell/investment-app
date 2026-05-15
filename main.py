@@ -8,9 +8,18 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+
+# Brotli compression is ~20% smaller than gzip for text. brotli-asgi
+# transparently falls back to gzip if the client's Accept-Encoding doesn't
+# include "br" (older curl, some bots).
+try:
+    from brotli_asgi import BrotliMiddleware  # type: ignore
+    _HAS_BROTLI = True
+except ImportError:
+    from fastapi.middleware.gzip import GZipMiddleware
+    _HAS_BROTLI = False
 
 from database import init_db
 from settings import settings as app_settings
@@ -128,6 +137,34 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             log.exception("daily snapshots failed: %s", e)
 
+    def _cleanup_demo_users():
+        """Drop demo+*@local.invest accounts older than 24h. Demo users
+        are created on every /auth/demo call; without this job the DB
+        would balloon over time. FK cascades take their investments,
+        transactions, snapshots, etc. with them."""
+        from datetime import datetime, timedelta, timezone
+        from models import User as _U
+        bg_db = SessionLocal()
+        try:
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+            stale = bg_db.query(_U).filter(
+                _U.email.like("demo+%@local.invest"),
+                _U.created_at < cutoff,
+            ).all()
+            for u in stale:
+                bg_db.delete(u)
+            if stale:
+                bg_db.commit()
+                log.info("demo cleanup: removed %d users older than 24h", len(stale))
+        finally:
+            bg_db.close()
+
+    async def cleanup_demo_users_job():
+        try:
+            await asyncio.to_thread(_cleanup_demo_users)
+        except Exception as e:
+            log.exception("demo cleanup failed: %s", e)
+
     app.state.scheduler.add_job(refresh_portfolios, "interval", seconds=60, id="portfolios", max_instances=1)
     app.state.scheduler.add_job(refresh_forex, "interval", seconds=300, id="forex", max_instances=1)
     app.state.scheduler.add_job(refresh_indices, "interval", seconds=900, id="indices", max_instances=1)
@@ -136,8 +173,10 @@ async def lifespan(app: FastAPI):
     # (Render free tier sleeps idle services). The take_snapshot helper is
     # idempotent — running it 4× a day still produces one row per user per date.
     app.state.scheduler.add_job(daily_snapshots, "interval", hours=6, id="snapshots", max_instances=1, next_run_time=None)
+    # Demo user cleanup runs hourly so accounts > 24h vanish soon after.
+    app.state.scheduler.add_job(cleanup_demo_users_job, "interval", hours=1, id="demo_cleanup", max_instances=1)
     app.state.scheduler.start()
-    log.info("Scheduler started (portfolio 60s, forex 300s, indices 900s, macro 3600s, snapshots 6h)")
+    log.info("Scheduler started (portfolio 60s, forex 300s, indices 900s, macro 3600s, snapshots 6h, demo cleanup 1h)")
 
     # Take an initial snapshot for everyone on boot so the chart isn't empty.
     try:
@@ -179,10 +218,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# GZip JSON & text responses ≥500B. The dashboard summary and investments
-# list compress ~5-8x; cuts a 40KB payload to 5KB on the wire. Static
-# files are pre-gzipped by Render's edge, so this only affects API calls.
-app.add_middleware(GZipMiddleware, minimum_size=500)
+# Compress JSON & text responses ≥500B. Brotli when the lib is available
+# (most clients support it now); falls back to gzip. Cuts a 40KB dashboard
+# summary to ~4KB Brotli / ~5KB gzip on the wire.
+if _HAS_BROTLI:
+    app.add_middleware(BrotliMiddleware, minimum_size=500)
+else:
+    app.add_middleware(GZipMiddleware, minimum_size=500)
 
 app.include_router(auth_router)
 app.include_router(investments_router.router)

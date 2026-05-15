@@ -191,6 +191,43 @@ export function spinner(big = false) {
   return `<span class="spinner ${big ? "lg" : ""}"></span>`;
 }
 
+// Skeleton placeholders — match the final layout so the page doesn't
+// reflow when data lands. `shape` is one of:
+//   "kpi"       — 4 KPI cards in a grid (dashboard hero)
+//   "chart"     — a chart card
+//   "table"     — 8 table rows
+//   "list"      — 4 list rows
+// Use instead of spinner() for content that's visible in <1s. Beyond 1s
+// users prefer feedback that something IS loading (spinner > skeleton).
+export function skeleton(shape = "kpi") {
+  const bar = (w = "100%", h = "12px") => `<div class="sk-bar" style="width:${w};height:${h}"></div>`;
+  if (shape === "kpi") {
+    return `<div class="summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+      ${Array(4).fill(`
+        <div class="summary-card sk">
+          ${bar("60%", "11px")}
+          ${bar("80%", "26px")}
+          ${bar("50%", "11px")}
+        </div>`).join("")}
+    </div>
+    <div class="card chart-card sk-chart"></div>`;
+  }
+  if (shape === "chart") {
+    return `<div class="card chart-card sk-chart"></div>`;
+  }
+  if (shape === "table") {
+    return `<div class="card">
+      ${Array(8).fill(`<div class="sk-row">${bar("30%")}${bar("15%")}${bar("15%")}${bar("15%")}</div>`).join("")}
+    </div>`;
+  }
+  if (shape === "list") {
+    return `<div class="card">
+      ${Array(4).fill(`<div class="sk-row">${bar("50%")}${bar("30%")}</div>`).join("")}
+    </div>`;
+  }
+  return spinner(true);
+}
+
 // ---------- FX rate (USD → user currency) ----------
 // All monetary values are stored in USD on the backend; the frontend converts
 // at display time using a live rate from /market/forex/USD/{currency}.
@@ -322,7 +359,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "58";
+const VIEW_VERSION = "59";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -366,21 +403,18 @@ const ICONS = {
   logout:      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
 };
 
-// FIRE/FR-focused navigation. Patrimoine pages first, then planning, then
-// auxiliary tools. Compare and Calculator removed from the sidebar — still
-// reachable by direct URL (#/compare, #/calculator) for power users, but
-// not surfaced to keep the menu coherent. Markets stays as the asset
-// browser (more useful than Compare for the FIRE-tracker positioning).
+// FIRE-focused navigation. Cut from 12 to 8 items — Markets browser,
+// Watchlist, DCA Plans, and Compare were 70-80% complete features that
+// diluted the product story. They're still reachable by direct URL for
+// power users (and their backend code still ships) but burying them from
+// the sidebar lets the 8 surviving features feel coherent and finished.
 const SIDEBAR_LINKS = [
   { hash: "#/dashboard",   icon: "dashboard",   labelKey: "nav.dashboard" },
   { hash: "#/investments", icon: "investments", labelKey: "nav.investments" },
   { hash: "#/transactions",icon: "transactions",labelKey: "nav.transactions" },
-  { hash: "#/markets",     icon: "markets",     labelKey: "nav.markets" },
-  { hash: "#/watchlist",   icon: "watchlist",   labelKey: "nav.watchlist" },
   { hash: "#/fire",        icon: "fire",        labelKey: "nav.fire" },
   { hash: "#/tax",         icon: "tax",         labelKey: "nav.tax" },
   { hash: "#/scenarios",   icon: "scenarios",   labelKey: "nav.scenarios" },
-  { hash: "#/plans",       icon: "plans",       labelKey: "nav.plans" },
   { hash: "#/rebalance",   icon: "rebalance",   labelKey: "nav.rebalance" },
   { hash: "#/chat",        icon: "chat",        labelKey: "nav.chat" },
   { hash: "#/reports",     icon: "reports",     labelKey: "nav.reports" },
@@ -435,7 +469,7 @@ async function renderRoute() {
   document.getElementById("page-title").textContent = t(route.titleKey);
   // Analytics: page view per route, with the hash as the path.
   track("page_view", { route: route.hash });
-  for (const a of document.querySelectorAll(".sidebar-link")) {
+  for (const a of document.querySelectorAll(".sidebar-link, .tab-link")) {
     const isActive = a.dataset.hash === route.hash;
     a.classList.toggle("active", isActive);
     if (isActive) a.setAttribute("aria-current", "page");
@@ -492,6 +526,10 @@ function renderAuthForm(mode) {
         </ul>
       </div>
       <div class="auth-card">
+        <button id="demo-btn" class="btn btn-demo btn-block" type="button">
+          ${t("landing.try_demo")} →
+        </button>
+        <div class="auth-divider"><span>${t("landing.or")}</span></div>
         <h2>${t(isLogin ? "auth.login_title" : "auth.register_title")}</h2>
         <p class="subtitle">${t(isLogin ? "auth.login_subtitle" : "auth.register_subtitle")}</p>
         <form id="auth-form">
@@ -504,10 +542,26 @@ function renderAuthForm(mode) {
           ${isLogin ? t("auth.no_account") : t("auth.have_account")}
           <a id="switch-mode">${isLogin ? t("auth.register_link") : t("auth.login_link")}</a>
         </div>
-        <div class="landing-demo-hint">${t("landing.demo_hint")}</div>
       </div>
     </div>`;
   document.getElementById("switch-mode").onclick = () => renderAuthForm(isLogin ? "register" : "login");
+  document.getElementById("demo-btn").onclick = async () => {
+    const btn = document.getElementById("demo-btn");
+    btn.disabled = true;
+    btn.innerHTML = `${spinner()} ${t("landing.creating_demo")}`;
+    try {
+      const data = await API.request("/auth/demo", { method: "POST" });
+      state.token = data.access_token;
+      state.user = data.user;
+      localStorage.setItem("token", state.token);
+      track("demo_login");
+      bootApp().catch(err => toast(err.message || t("common.error_generic"), "error"));
+    } catch (err) {
+      btn.disabled = false;
+      btn.innerHTML = `${t("landing.try_demo")} →`;
+      toast(err.message || t("common.error_generic"), "error");
+    }
+  };
   document.getElementById("auth-form").onsubmit = async (ev) => {
     ev.preventDefault();
     const fd = new FormData(ev.target);
@@ -550,6 +604,17 @@ function logout() {
 }
 
 // ---------- App shell ----------
+// Mobile bottom tab bar — 5 most-used routes, Robinhood-style. The full
+// sidebar is still reachable on mobile via the hamburger, but the tabbar
+// handles the 80% case so a thumb never has to reach for the top-left.
+const MOBILE_TABBAR_LINKS = [
+  { hash: "#/dashboard",    icon: "dashboard",    labelKey: "nav.dashboard" },
+  { hash: "#/investments",  icon: "investments",  labelKey: "nav.investments" },
+  { hash: "#/transactions", icon: "transactions", labelKey: "nav.transactions" },
+  { hash: "#/fire",         icon: "fire",         labelKey: "nav.fire" },
+  { hash: "#/chat",         icon: "chat",         labelKey: "nav.chat" },
+];
+
 function buildSidebar() {
   const renderLinks = (links) => links.map(l => `
     <a class="sidebar-link" data-hash="${l.hash}" href="${l.hash}">
@@ -560,6 +625,15 @@ function buildSidebar() {
   nav.innerHTML = renderLinks(SIDEBAR_LINKS);
   const navBottom = document.getElementById("sidebar-nav-bottom");
   if (navBottom) navBottom.innerHTML = renderLinks(SIDEBAR_BOTTOM_LINKS);
+  // Mobile tabbar
+  const tabbar = document.getElementById("mobile-tabbar");
+  if (tabbar) {
+    tabbar.innerHTML = MOBILE_TABBAR_LINKS.map(l => `
+      <a class="tab-link" data-hash="${l.hash}" href="${l.hash}">
+        <span class="ico">${ICONS[l.icon]}</span><span class="lbl">${t(l.labelKey)}</span>
+      </a>
+    `).join("");
+  }
   // Update the theme toggle + logout button icons too (they live in the footer
   // and aren't otherwise regenerated, so set them once here on first build).
   const tt = document.getElementById("theme-toggle");

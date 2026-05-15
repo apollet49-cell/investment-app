@@ -1,4 +1,4 @@
-import { API, cachedGet, invalidateCache, loadChartJs, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, downloadAuth, track } from "/static/app.js";
+import { API, cachedGet, invalidateCache, loadChartJs, skeleton, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, downloadAuth, track } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 const TYPES = ["stock", "real_estate", "crypto", "bond", "etf", "startup"];
@@ -23,7 +23,7 @@ export async function render(root) {
   // after the first. Spinner only on the cold first paint.
   const cacheKey = `swr:${state.token?.slice(-12) || "anon"}:/investments/`;
   if (sessionStorage.getItem(cacheKey) === null) {
-    root.innerHTML = `<div style="text-align:center;padding:40px">${spinner(true)}</div>`;
+    root.innerHTML = skeleton("table");
   }
   try {
     cache = await cachedGet("/investments/", (fresh) => {
