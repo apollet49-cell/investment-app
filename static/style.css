@@ -453,28 +453,91 @@ a { color: var(--primary-strong); }
 .review-ai-prose p { margin: 0 0 12px; color: var(--text); }
 .review-ai-prose p:last-child { margin-bottom: 0; }
 
-/* Print styles — when user hits ⌘P, strip the chrome and let only the
-   review section be visible. Tight margins so it fits on one page. */
+/* Print styles — when the user hits ⌘P on the Monthly Review page, the
+   browser should produce a clean A4 PDF: full-width content, no sidebar
+   column reservation, no fixed nav, no scroll. Previous version still
+   had .app-shell as a 2-column grid (sidebar 232px + 1fr), so even with
+   the sidebar hidden the content was constrained to a narrow right
+   column. */
 @media print {
+  /* Hide everything chrome-related */
   .sidebar, .topbar, .mobile-tabbar, .chat-fab, .chat-panel,
-  .no-print, .review-print, #toast-host {
+  .no-print, .review-print, #toast-host, .sidebar-backdrop,
+  .hero-cta, #nav-toggle, #user-chip, #mobile-logout, #lang-switch {
     display: none !important;
   }
-  body, html, .app-shell, .main {
+  /* Flatten the grid so the main section spans the full page width */
+  html, body {
     background: white !important;
     color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .app-shell {
+    display: block !important;
+    grid-template-columns: none !important;
+    background: white !important;
+  }
+  .main {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    background: white !important;
+    overflow: visible !important;
+  }
+  .view-root {
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    overflow: visible !important;
   }
   .review-shell {
-    max-width: none;
-    padding: 0;
-    margin: 0;
+    max-width: none !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
-  .review-section { page-break-inside: avoid; }
-  .review-title { color: #2a241e; }
-  .review-stat-value { color: #2a241e; }
-  .review-actions li { background: #f7f3ea; border-color: #6b7d5e; }
-  .view-root { padding: 0 !important; }
-  @page { margin: 18mm; }
+
+  /* Section dividers and page breaks */
+  .review-header { border-bottom: 1px solid #888 !important; padding-bottom: 14px !important; margin-bottom: 24px !important; }
+  .review-section { page-break-inside: avoid; margin-top: 22px !important; }
+  .review-section h2 {
+    color: #2a241e !important;
+    border-bottom: 1px solid #888 !important;
+    padding-bottom: 5px !important;
+    font-size: 18px !important;
+  }
+  .review-title { color: #2a241e !important; font-size: 32px !important; }
+  .review-eyebrow { color: #666 !important; }
+  .review-stat-value { color: #2a241e !important; }
+  .review-stat-sub.positive { color: #4a6442 !important; }
+  .review-stat-sub.negative { color: #8b3f2c !important; }
+  .review-actions li {
+    background: #faf7f2 !important;
+    border-left: 3px solid #6b7d5e !important;
+    page-break-inside: avoid !important;
+  }
+  .review-action-num { color: #6b7d5e !important; }
+  .review-bar-fill { background: #6b7d5e !important; }
+  .hero-insight {
+    background: #faf7f2 !important;
+    border-left: 4px solid #6b7d5e !important;
+    page-break-inside: avoid !important;
+  }
+  .review-ai-prose {
+    background: #faf7f2 !important;
+    border-left: 3px solid #6b7d5e !important;
+    page-break-inside: avoid !important;
+  }
+  .review-footer { color: #888 !important; }
+
+  /* A4 page margins — generous on top/bottom for the OS header/footer */
+  @page {
+    size: A4 portrait;
+    margin: 18mm 16mm 18mm 16mm;
+  }
 }
 
 @media (max-width: 640px) {
