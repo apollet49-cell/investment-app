@@ -1047,9 +1047,12 @@ a { color: var(--primary-strong); }
     border-radius: 0;
   }
   .chat-fab { bottom: 18px; right: 18px; }
-  /* Hide the chat FAB when the sidebar is open (DOM siblings don't allow a
-     direct CSS selector, so we toggle a body class from JS instead). */
-  body.sidebar-open .chat-fab { display: none; }
+  /* Hide the chat FAB AND mobile tabbar when the sidebar is open — the
+     drawer covers the viewport so leaving the bottom tabbar visible
+     creates two competing nav surfaces. DOM siblings don't allow a
+     direct CSS selector, so we toggle a body class from JS instead. */
+  body.sidebar-open .chat-fab,
+  body.sidebar-open .mobile-tabbar { display: none; }
 
   /* Auth / landing on phone: stack vertically, hero above auth card */
   .landing { gap: 18px; padding: 8px; }

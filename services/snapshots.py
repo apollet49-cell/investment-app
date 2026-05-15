@@ -67,12 +67,48 @@ def take_snapshot(db: Session, user: User, when: date | None = None) -> Portfoli
 
 
 def take_all_snapshots(session_factory) -> int:
-    """Scheduler entry point. Opens a fresh session, snapshots every user,
-    closes the session. Returns the count of snapshots written. Errors per
-    user are logged but don't abort the loop."""
+    """Scheduler entry point. One SQL statement covers every user instead
+    of iterating N users × 3 queries each (the previous implementation
+    didn't scale past ~100 users on Postgres free tier — the scheduler
+    blocked for 30+ seconds writing snapshots, holding a DB connection
+    the whole time).
+
+    The single UPSERT aggregates each user's portfolio total via
+    SUM(...) GROUP BY user_id, then inserts/updates one row per user
+    for today's date. Idempotent: re-running the job (or running it
+    several times a day) just overwrites the same date row.
+
+    Falls back to the per-user loop when the SQL dialect doesn't support
+    the upsert syntax we use (everything except very old SQLite)."""
+    from sqlalchemy import text
     db: Session = session_factory()
-    written = 0
+    today = today_utc()
     try:
+        dialect = db.bind.dialect.name
+        if dialect in ("postgresql", "sqlite"):
+            # SQLite 3.24+ and Postgres share the ON CONFLICT DO UPDATE
+            # form thanks to the uq_snapshot_user_date constraint.
+            stmt = text("""
+                INSERT INTO portfolio_snapshots
+                  (user_id, snapshot_date, total_value, total_invested, created_at)
+                SELECT
+                  i.user_id,
+                  :today AS snapshot_date,
+                  ROUND(CAST(SUM(COALESCE(i.current_value, 0)) AS NUMERIC), 2) AS total_value,
+                  ROUND(CAST(SUM(COALESCE(i.amount_invested, 0)) AS NUMERIC), 2) AS total_invested,
+                  CURRENT_TIMESTAMP
+                FROM investments i
+                GROUP BY i.user_id
+                ON CONFLICT (user_id, snapshot_date) DO UPDATE
+                SET total_value = EXCLUDED.total_value,
+                    total_invested = EXCLUDED.total_invested
+            """)
+            result = db.execute(stmt, {"today": today.isoformat()})
+            db.commit()
+            return result.rowcount or 0
+
+        # Fallback: per-user loop for dialects that don't support our upsert.
+        written = 0
         users = db.query(User).all()
         for u in users:
             try:
@@ -80,6 +116,6 @@ def take_all_snapshots(session_factory) -> int:
                 written += 1
             except Exception:
                 log.exception("snapshot failed for user_id=%s", u.id)
+        return written
     finally:
         db.close()
-    return written
