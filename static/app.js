@@ -308,6 +308,72 @@ export function toast(message, type = "info", ms = 3500) {
   setTimeout(() => el.remove(), ms);
 }
 
+// Styled confirm modal — replaces window.confirm() everywhere. Returns
+// a Promise<boolean>. Renders a centered card with the message, two
+// buttons (Cancel + Confirm). Escape / backdrop click resolve false.
+// The Confirm button can be tinted "danger" for destructive actions.
+export function confirmModal({ message, title = "", confirmText = "Confirm", cancelText = "Cancel", danger = false } = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "confirm-overlay";
+    const safeTitle = title ? `<div class="confirm-title">${escapeHtml(title)}</div>` : "";
+    overlay.innerHTML = `
+      <div class="confirm-card" role="dialog" aria-modal="true">
+        ${safeTitle}
+        <div class="confirm-message">${escapeHtml(message)}</div>
+        <div class="confirm-actions">
+          <button class="btn btn-ghost confirm-cancel" type="button">${escapeHtml(cancelText)}</button>
+          <button class="btn ${danger ? "btn-danger" : "btn-primary"} confirm-ok" type="button">${escapeHtml(confirmText)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    // Focus the confirm button so Enter accepts; Esc cancels.
+    const okBtn = overlay.querySelector(".confirm-ok");
+    const cancelBtn = overlay.querySelector(".confirm-cancel");
+    okBtn.focus();
+    const done = (val) => {
+      overlay.removeEventListener("keydown", onKey);
+      overlay.remove();
+      resolve(val);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") done(false);
+      if (e.key === "Enter") done(true);
+    };
+    overlay.addEventListener("keydown", onKey);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) done(false);
+    });
+    okBtn.onclick = () => done(true);
+    cancelBtn.onclick = () => done(false);
+  });
+}
+
+// Count-up animation on a DOM element. Used by the dashboard KPI cards
+// so the net worth / total invested / ROI percentages animate from 0
+// to their final value over ~700ms. Feels alive without being annoying.
+// Pass `format(n)` for currency / percent / etc.; default is integer.
+export function animateNumber(el, target, { duration = 700, format = (n) => Math.round(n).toString() } = {}) {
+  if (!el || !isFinite(target)) return;
+  const start = performance.now();
+  const initial = 0;
+  // Cancel any previous animation running on this element
+  if (el._countAnim) cancelAnimationFrame(el._countAnim);
+  const tick = (now) => {
+    const t = Math.min(1, (now - start) / duration);
+    // ease-out-cubic — fast start, gentle landing
+    const eased = 1 - Math.pow(1 - t, 3);
+    const v = initial + (target - initial) * eased;
+    el.textContent = format(v);
+    if (t < 1) {
+      el._countAnim = requestAnimationFrame(tick);
+    } else {
+      delete el._countAnim;
+    }
+  };
+  el._countAnim = requestAnimationFrame(tick);
+}
+
 export function spinner(big = false) {
   return `<span class="spinner ${big ? "lg" : ""}"></span>`;
 }
@@ -480,7 +546,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "72";
+const VIEW_VERSION = "73";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -584,7 +650,11 @@ async function renderRoute() {
   const mySeq = ++_routeSeq;
   const hash = window.location.hash || "#/dashboard";
   const route = ROUTES.find(r => r.hash === hash) || ROUTES[0];
-  document.getElementById("page-title").textContent = t(route.titleKey);
+  const routeTitle = t(route.titleKey);
+  document.getElementById("page-title").textContent = routeTitle;
+  // Browser tab title — "Dashboard · InvestApp" reads naturally when
+  // the user has multiple tabs open. Default stays static on the landing.
+  document.title = `${routeTitle} · InvestApp`;
   // Analytics: page view per route, with the hash as the path.
   track("page_view", { route: route.hash });
   for (const a of document.querySelectorAll(".sidebar-link, .tab-link")) {

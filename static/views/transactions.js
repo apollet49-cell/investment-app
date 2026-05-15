@@ -1,4 +1,4 @@
-import { API, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, track } from "/static/app.js";
+import { API, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, track, confirmModal } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 let cache = [];
@@ -182,7 +182,14 @@ function openAddModal(root) {
 }
 
 async function deleteTxn(id, root) {
-  if (!confirm(t("transactions.confirm_delete"))) return;
+  const ok = await confirmModal({
+    title: t("common.confirm") || "Confirm",
+    message: t("transactions.confirm_delete"),
+    confirmText: t("common.delete") || "Delete",
+    cancelText: t("common.cancel") || "Cancel",
+    danger: true,
+  });
+  if (!ok) return;
   try {
     await API.request(`/transactions/${id}`, { method: "DELETE" });
     toast(t("common.deleted"), "success");

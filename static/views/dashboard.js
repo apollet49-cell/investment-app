@@ -1,4 +1,4 @@
-import { API, cachedGet, seedCache, loadChartJs, skeleton, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, track } from "/static/app.js";
+import { API, cachedGet, seedCache, loadChartJs, skeleton, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, track, confirmModal, animateNumber } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 // Persist the active dashboard tab across renders (auto-refresh re-renders
@@ -126,7 +126,7 @@ export async function render(root) {
     <div class="summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
       <div class="summary-card">
         <div class="label">${t("dashboard.net_worth")}</div>
-        <div class="value" style="font-size:26px">${money(data.current_value)}</div>
+        <div class="value" id="kpi-net-worth" data-target="${data.current_value}" style="font-size:26px">${money(data.current_value)}</div>
         <div class="sub ${netWorthDeltaClass}" style="font-size:12px;margin-top:6px">${netWorthDeltaSign}${money(netWorthDelta)} · ${pct(data.total_roi_pct)}</div>
       </div>
       <div class="summary-card" id="perf-card">
@@ -200,6 +200,20 @@ export async function render(root) {
       </div>
     </div>
   `;
+
+  // Count-up animation on the Net Worth KPI. Skipped on auto-refresh
+  // (when the user is just sitting on the dashboard the number shouldn't
+  // re-animate every minute) — only animates on initial / cache-fresh
+  // renders. We detect "initial" by checking if the element was already
+  // showing a non-zero value from a previous render.
+  const nwEl = document.getElementById("kpi-net-worth");
+  if (nwEl && !nwEl.dataset.animated) {
+    nwEl.dataset.animated = "1";
+    animateNumber(nwEl, data.current_value, {
+      duration: 800,
+      format: (n) => money(n),
+    });
+  }
 
   // Wire dashboard tabs — persists active tab in module-scoped variable so
   // the 60s auto-refresh doesn't snap users back to "allocation".
@@ -576,7 +590,14 @@ function emptyState() {
 async function loadDemoData() {
   const btn = document.getElementById("dash-empty-seed");
   if (!btn) return;
-  if (!confirm(t("dashboard.try_demo_confirm"))) return;
+  const ok = await confirmModal({
+    title: t("common.confirm") || "Confirm",
+    message: t("dashboard.try_demo_confirm"),
+    confirmText: t("common.continue") || "Continue",
+    cancelText: t("common.cancel") || "Cancel",
+    danger: true,
+  });
+  if (!ok) return;
   btn.disabled = true;
   btn.textContent = t("dashboard.try_demo_loading");
   try {

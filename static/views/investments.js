@@ -1,4 +1,4 @@
-import { API, cachedGet, invalidateCache, seedCache, loadChartJs, skeleton, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, downloadAuth, track } from "/static/app.js";
+import { API, cachedGet, invalidateCache, seedCache, loadChartJs, skeleton, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, downloadAuth, track, confirmModal } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 const TYPES = ["stock", "real_estate", "crypto", "bond", "etf", "startup"];
@@ -1164,7 +1164,14 @@ function closeModal() {
 }
 
 async function deleteInv(id, root) {
-  if (!confirm(t("investments.confirm_delete"))) return;
+  const ok = await confirmModal({
+    title: t("common.confirm") || "Confirm",
+    message: t("investments.confirm_delete"),
+    confirmText: t("common.delete") || "Delete",
+    cancelText: t("common.cancel") || "Cancel",
+    danger: true,
+  });
+  if (!ok) return;
   // Optimistic delete: pull the row out of the local cache + UI
   // immediately so the action feels instant. If the API call fails,
   // we restore the row and surface a toast. The cache invalidation

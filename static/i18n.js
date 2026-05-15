@@ -524,6 +524,7 @@ const en = {
     loading: "Loading…", confirm: "Confirm", cancel: "Cancel",
     error_generic: "Something went wrong. Try again.",
     save: "Save", saved: "Saved", deleted: "Deleted",
+    delete: "Delete", continue: "Continue",
   },
 };
 
@@ -1049,6 +1050,7 @@ const fr = {
     loading: "Chargement…", confirm: "Confirmer", cancel: "Annuler",
     error_generic: "Une erreur est survenue. Réessayez.",
     save: "Enregistrer", saved: "Enregistré", deleted: "Supprimé",
+    delete: "Supprimer", continue: "Continuer",
   },
 };
 
@@ -1521,6 +1523,7 @@ const zh = {
     loading: "加载中…", confirm: "确认", cancel: "取消",
     error_generic: "出错了，请重试。",
     save: "保存", saved: "已保存", deleted: "已删除",
+    delete: "删除", continue: "继续",
   },
 };
 
