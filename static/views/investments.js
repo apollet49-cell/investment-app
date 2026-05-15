@@ -515,22 +515,56 @@ function openForm(id) {
       payload.current_value = cur;
     }
 
+    // Optimistic add/edit: close the modal, paint the new row immediately
+    // with a temp id, fire the API call in the background. On success we
+    // replace the temp with the server row (real id, server-side roi_pct).
+    // On failure we rollback and surface a toast.
+    const snapshot = cache.slice();
+    if (id) {
+      // Edit — replace the row in-place with the new payload
+      cache = cache.map(r => r.id === id ? { ...r, ...payload, id } : r);
+    } else {
+      // Add — prepend with a negative temp id so the row renders right away
+      const tmpId = -Math.floor(Math.random() * 1e9) - 1;
+      const tempRow = { id: tmpId, user_id: state.user?.id, _optimistic: true, ...payload };
+      // Approximate the roi the server will compute so the column isn't blank.
+      if (payload.amount_invested > 0) {
+        tempRow.roi_pct = Math.round(((payload.current_value - payload.amount_invested) / payload.amount_invested) * 10000) / 100;
+      }
+      cache = [tempRow, ...cache];
+    }
+    closeModal();
+    refresh(document);
+
     try {
+      let saved;
       if (id) {
-        await API.request(`/investments/${id}`, { method: "PUT", body: payload });
+        saved = await API.request(`/investments/${id}`, { method: "PUT", body: payload });
         track("investment_edited", { type: invType });
       } else {
-        await API.request("/investments/", { method: "POST", body: payload });
+        saved = await API.request("/investments/", { method: "POST", body: payload });
         track("investment_added", { type: invType });
       }
       toast(t("common.saved"), "success");
-      closeModal();
-      cache = await API.request("/investments/");
-      // Cache list + summary (which depends on it) are now stale.
+      // Replace optimistic row with the server's authoritative version
+      // (server may have computed quantity from invested/price, normalised
+      // currency, etc.).
+      if (id) {
+        cache = cache.map(r => r.id === id ? saved : r);
+      } else {
+        const tmpIdx = cache.findIndex(r => r._optimistic);
+        if (tmpIdx >= 0) cache[tmpIdx] = saved;
+        else cache = [saved, ...cache];
+      }
       invalidateCache("/investments/", "/dashboard/");
       try { sessionStorage.setItem(`swr:${state.token?.slice(-12) || "anon"}:/investments/`, JSON.stringify(cache)); } catch (_) {}
       refresh(document);
-    } catch (e) { toast(e.message, "error"); }
+    } catch (e) {
+      // Rollback to pre-optimistic state.
+      cache = snapshot;
+      refresh(document);
+      toast(`${t("common.error_generic")} — ${escapeHtml(e.message)}`, "error");
+    }
   };
 }
 
