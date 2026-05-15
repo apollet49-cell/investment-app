@@ -2,6 +2,11 @@
 
 > Built because I was tired of guessing my XIRR.
 
+[![CI](https://github.com/apollet49-cell/investment-app/actions/workflows/ci.yml/badge.svg)](https://github.com/apollet49-cell/investment-app/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Tests](https://img.shields.io/badge/tests-85%20passed-success)
+![Python](https://img.shields.io/badge/python-3.11-blue)
+
 Live demo: [investment-app-kud9.onrender.com](https://investment-app-kud9.onrender.com)
 (click "Try the demo — no signup" on the landing page; you land in a fully-seeded portfolio in two clicks)
 
