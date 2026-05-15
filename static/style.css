@@ -315,6 +315,22 @@ a { color: var(--primary-strong); }
 }
 .lang-switch button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 
+/* ---------- Live price flash (Robinhood-style) ---------- */
+/* Applied to .col-current cells when SSE delivers a new price. The cell
+   briefly tints green (price up) or red (price down) and fades back to
+   transparent over 1.2s. Animations are GPU-friendly (background-color
+   transition) so 60 rows flashing at once stays smooth. */
+@keyframes flash-up {
+  0%   { background-color: rgba(107, 125, 94, 0.45); color: var(--success); }
+  100% { background-color: transparent; color: inherit; }
+}
+@keyframes flash-down {
+  0%   { background-color: rgba(165, 101, 81, 0.45); color: var(--danger); }
+  100% { background-color: transparent; color: inherit; }
+}
+.flash-up   { animation: flash-up 1.2s ease-out; }
+.flash-down { animation: flash-down 1.2s ease-out; }
+
 /* ---------- Compact icon-only action buttons (used in tables) ---------- */
 .btn-icon {
   display: inline-flex;
@@ -1033,12 +1049,6 @@ table.data td { font-variant-numeric: tabular-nums; }
   color: var(--primary-strong);
   letter-spacing: -0.01em;
 }
-
-/* ---------- Flash animation for live prices ---------- */
-@keyframes flash-up   { from { background: rgba(107, 125, 94, 0.4); } to { background: transparent; } }
-@keyframes flash-down { from { background: rgba(165, 101, 81, 0.4); } to { background: transparent; } }
-.flash-up   { animation: flash-up 1.2s ease-out; }
-.flash-down { animation: flash-down 1.2s ease-out; }
 
 .toolbar { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
 .toolbar input, .toolbar select {

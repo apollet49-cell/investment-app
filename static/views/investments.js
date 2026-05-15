@@ -66,6 +66,56 @@ export async function render(root) {
     } catch (_) { /* network blip — try again next tick */ }
   }, 60000);
   onViewCleanup(() => { cancelled = true; clearInterval(refreshTimer); });
+
+  // ---------- Live price flashes (Robinhood-style) ----------
+  // Register this user's symbols with the backend market_data watcher
+  // (POSTing once kicks off the SSE broadcasts for those tickers).
+  API.request("/market/portfolio-live").catch(() => {});
+
+  // Listen for SSE price broadcasts. Each event carries an array of
+  // {symbol, price, currency, ...}. We find the matching row(s) by
+  // data-symbol attribute, recompute current_value = price × quantity,
+  // and animate a green/red flash on the cell — fading back over 1.2s.
+  const onPrices = (ev) => {
+    const prices = ev.detail?.prices || [];
+    for (const p of prices) {
+      applyPriceUpdate(p);
+    }
+  };
+  window.addEventListener("market:prices", onPrices);
+  onViewCleanup(() => window.removeEventListener("market:prices", onPrices));
+}
+
+function applyPriceUpdate(p) {
+  const sym = (p?.symbol || "").toUpperCase();
+  if (!sym || !isFinite(p?.price)) return;
+  const rows = document.querySelectorAll(`tr.inv-row[data-symbol="${cssEscape(sym)}"]`);
+  if (!rows.length) return;
+  for (const tr of rows) {
+    const qty = parseFloat(tr.dataset.qty || "0");
+    if (!qty) continue;
+    const newValue = qty * p.price;
+    const cell = tr.querySelector(".col-current");
+    if (!cell) continue;
+    const prevValue = parseFloat(cell.dataset.value || "0");
+    // Skip imperceptible moves (rounding noise on stable prices).
+    const eps = Math.max(prevValue * 0.0005, 0.01);
+    if (Math.abs(newValue - prevValue) < eps) continue;
+    cell.dataset.value = newValue;
+    cell.innerHTML = `<strong>${money(newValue)}</strong>`;
+    cell.classList.remove("flash-up", "flash-down");
+    // Force reflow so the new class triggers the animation
+    void cell.offsetWidth;
+    cell.classList.add(newValue > prevValue ? "flash-up" : "flash-down");
+    setTimeout(() => { cell.classList.remove("flash-up", "flash-down"); }, 1200);
+  }
+}
+
+function cssEscape(s) {
+  // Minimal escape for use inside an attribute selector — symbols like
+  // VWCE.DE contain a period that would otherwise be parsed as a class
+  // selector by querySelectorAll.
+  return String(s).replace(/[.^$*+?(){}[\]\\|/"#&]/g, "\\$&");
 }
 
 function refresh(root) {
@@ -132,7 +182,7 @@ function renderTable(rows) {
         </thead>
         <tbody>
           ${filtered.map(r => `
-            <tr class="inv-row" data-id="${r.id}" style="cursor:pointer">
+            <tr class="inv-row" data-id="${r.id}" data-symbol="${escapeHtml((r.symbol || "").toUpperCase())}" data-qty="${r.quantity || 0}" style="cursor:pointer">
               <td class="col-name">
                 <strong>${escapeHtml(r.name)}</strong>
                 <div class="col-mobile-sub">${t(`investments.types.${r.type}`)}${r.symbol ? ` · ${escapeHtml(r.symbol)}` : (r.city ? ` · ${escapeHtml(r.city)}` : "")}</div>
@@ -141,7 +191,7 @@ function renderTable(rows) {
               <td class="col-mobile-hidden">${escapeHtml(r.symbol || (r.city || "—"))}</td>
               <td class="col-mobile-hidden" style="text-align:right">${r.quantity == null ? "—" : Number(r.quantity).toLocaleString(undefined, { maximumFractionDigits: 8 })}</td>
               <td class="col-mobile-hidden" style="text-align:right">${money(r.amount_invested)}</td>
-              <td class="col-current" style="text-align:right">${money(r.current_value)}</td>
+              <td class="col-current" style="text-align:right" data-value="${r.current_value}">${money(r.current_value)}</td>
               <td class="col-mobile-hidden">${r.purchase_date}</td>
               <td class="col-roi" style="text-align:right"><span class="badge ${badgeClass(r.roi_pct)}">${pct(r.roi_pct)}</span></td>
               <td class="col-actions" onclick="event.stopPropagation()" style="white-space:nowrap">
