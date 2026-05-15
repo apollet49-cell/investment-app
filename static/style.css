@@ -1,53 +1,63 @@
-/* Hyper-minimal beige / white / taupe theme. Generous whitespace, fine borders,
-   barely-there shadows, refined typography. */
+/* Dark / sage / Geist theme — matches the landing v2 redesign.
+   The app shell (sidebar, topbar, cards, tables, buttons) shares the
+   same visual language as the landing now. Light theme available via
+   the toggle but no longer the default. */
 
 :root {
-  /* --- Palette --- */
-  --bg: #faf7f2;            /* warm off-white background */
-  --surface: #ffffff;        /* pure white cards */
-  --surface-2: #f3ede2;      /* subtle warm beige accent */
-  --text: #2a241e;           /* deep warm brown */
-  --text-muted: #8a7f72;     /* warm taupe */
-  --border: #ebe3d3;         /* fine taupe border */
-  --border-strong: #d9cfba;
-  --primary: #8a7558;        /* warm taupe brown */
-  --primary-strong: #6e5d44; /* darker taupe for hover */
-  --accent: #b8a786;         /* light taupe accent */
-  --success: #6b7d5e;        /* muted sage */
-  --warning: #b8945e;        /* warm amber */
-  --danger:  #a56551;        /* muted terracotta */
+  /* --- Palette (dark by default — same tokens as landing.css) --- */
+  --bg: #08080a;             /* deep near-black background */
+  --surface: #0e0e11;         /* card surface */
+  --surface-2: #15151a;       /* secondary surface (sub-cards, inputs) */
+  --text: #f5f5f0;            /* near-white off-white */
+  --text-muted: #8c8c87;      /* mid grey */
+  --border: rgba(255,255,255,0.08);
+  --border-strong: rgba(255,255,255,0.14);
+  --primary: oklch(0.74 0.06 130);        /* sage */
+  --primary-strong: oklch(0.68 0.07 130); /* sage hover */
+  --accent: oklch(0.74 0.06 130);
+  --accent-soft: oklch(0.74 0.06 130 / 0.16);
+  --success: oklch(0.74 0.06 130);        /* sage */
+  --warning: oklch(0.78 0.13 70);         /* warm amber */
+  --danger:  oklch(0.66 0.16 25);         /* terracotta */
 
-  --sidebar-bg: #efe7d8;     /* light beige sidebar */
-  --sidebar-fg: #5a4f42;     /* warm dark taupe text */
-  --sidebar-active: #e2d6bf; /* slightly darker beige */
+  --sidebar-bg: #0d0d10;
+  --sidebar-fg: #c8c8c2;
+  --sidebar-active: #15151a;
 
-  --shadow:    0 1px 2px rgba(74, 60, 42, 0.04);
-  --shadow-lg: 0 12px 32px rgba(74, 60, 42, 0.08);
+  --shadow:    0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 30px 80px -40px rgba(0, 0, 0, 0.6);
 
-  --radius: 4px;
-  --radius-sm: 3px;
+  --radius: 10px;
+  --radius-sm: 6px;
   --content-padding: 36px;
 
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --font-serif: "Cormorant Garamond", "EB Garamond", Georgia, serif;
+  --font-sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-serif: "Instrument Serif", "Cormorant Garamond", "EB Garamond", Georgia, serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
 }
 
-[data-theme="dark"] {
-  --bg: #1a1612;
-  --surface: #221d18;
-  --surface-2: #2c261f;
-  --text: #ece2d0;
-  --text-muted: #948776;
-  --border: #312a22;
-  --border-strong: #423a2f;
-  --primary: #b8a786;
-  --primary-strong: #a08968;
-  --accent: #c8b89a;
-  --sidebar-bg: #15110d;
-  --sidebar-fg: #b3a692;
-  --sidebar-active: #2c261f;
-  --shadow:    0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+/* Light theme — opt-in for users who prefer it. Cream/taupe earth-tones
+   from the previous design, kept for accessibility / personal preference. */
+[data-theme="light"] {
+  --bg: #f7f6f1;
+  --surface: #ffffff;
+  --surface-2: #efeee9;
+  --text: #0e0e10;
+  --text-muted: #6a6a64;
+  --border: rgba(0,0,0,0.10);
+  --border-strong: rgba(0,0,0,0.18);
+  --primary: #6b7d5e;
+  --primary-strong: #5a6b50;
+  --accent: #6b7d5e;
+  --accent-soft: rgba(107, 125, 94, 0.16);
+  --success: #6b7d5e;
+  --warning: #b8945e;
+  --danger: #a56551;
+  --sidebar-bg: #efeee9;
+  --sidebar-fg: #2f2f30;
+  --sidebar-active: #e6e5df;
+  --shadow:    0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.08);
 }
 
 * { box-sizing: border-box; }
@@ -71,17 +81,23 @@ body {
 }
 
 h1, h2, h3, h4 {
-  font-family: var(--font-serif);
-  font-weight: 400;
-  letter-spacing: -0.01em;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: -0.02em;
   margin: 0;
   color: var(--text);
 }
-h1 { font-size: 28px; }
-h2 { font-size: 22px; }
-h3 { font-size: 18px; font-weight: 500; letter-spacing: 0.005em; }
+h1 { font-size: 30px; }
+h2 { font-size: 22px; font-weight: 600; }
+h3 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+em, i { font-family: var(--font-serif); font-style: italic; font-weight: 400; letter-spacing: -0.005em; }
 
-a { color: var(--primary-strong); }
+a { color: var(--primary); transition: color 120ms ease; }
+a:hover { color: var(--primary-strong); }
+
+/* Mono-styled numbers everywhere — financial UI looks more legit with
+   tabular figures. Used on KPI values, ROI badges, table numerics. */
+.mono, .tabular { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 
 .hidden { display: none !important; }
 
@@ -104,7 +120,7 @@ a { color: var(--primary-strong); }
   padding: 56px 44px 44px;
   width: 100%;
   max-width: 440px;
-  box-shadow: 0 24px 60px rgba(74, 60, 42, 0.10);
+  box-shadow: 0 24px 60px var(--shadow-lg);
   border: 1px solid var(--border);
   position: relative;
 }
@@ -191,7 +207,7 @@ a { color: var(--primary-strong); }
   border: 1px solid var(--border);
   border-left: 4px solid var(--primary);
   border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(74, 60, 42, 0.04);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.5);
 }
 .hero-insight.hero-positive { border-left-color: var(--success); }
 .hero-insight.hero-warning  { border-left-color: var(--danger); }
@@ -646,11 +662,11 @@ a { color: var(--primary-strong); }
   gap: 10px;
   align-items: center;
   padding: 0 22px 22px;
-  font-family: var(--font-serif);
-  font-weight: 500;
+  font-family: var(--font-sans);
+  font-weight: 600;
   color: var(--text);
-  font-size: 18px;
-  letter-spacing: 0.01em;
+  font-size: 17px;
+  letter-spacing: -0.01em;
 }
 .brand-mark {
   width: 30px; height: 30px;
@@ -694,7 +710,7 @@ a { color: var(--primary-strong); }
   letter-spacing: 0.005em;
   transition: background 120ms ease, color 120ms ease;
 }
-.sidebar-link:hover { background: rgba(0, 0, 0, 0.04); color: var(--text); }
+.sidebar-link:hover { background: color-mix(in oklab, var(--text) 6%, transparent); color: var(--text); }
 .sidebar-link.active { background: var(--sidebar-active); color: var(--text); font-weight: 500; }
 .sidebar-link .ico {
   width: 18px; height: 18px;
@@ -731,7 +747,7 @@ a { color: var(--primary-strong); }
   transition: background 120ms ease;
   flex-shrink: 0;
 }
-.icon-btn:hover { background: rgba(0, 0, 0, 0.04); color: var(--text); }
+.icon-btn:hover { background: color-mix(in oklab, var(--text) 6%, transparent); color: var(--text); }
 .lang-switch { display: flex; gap: 3px; flex: 1; }
 .lang-switch button {
   background: transparent;
@@ -847,14 +863,13 @@ a { color: var(--primary-strong); }
 .summary-card {
   background: var(--surface);
   border-radius: var(--radius);
-  padding: 26px;
+  padding: 22px 22px 20px;
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
   transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
 }
 .summary-card:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(74, 60, 42, 0.06);
   border-color: var(--border-strong);
 }
 .summary-card .label {
@@ -863,23 +878,25 @@ a { color: var(--primary-strong); }
   text-transform: uppercase;
   letter-spacing: 0.12em;
   font-weight: 500;
+  font-family: var(--font-mono);
 }
 .summary-card .value {
-  font-family: var(--font-serif);
-  font-size: 30px;
-  font-weight: 400;
+  font-family: var(--font-mono);
+  font-size: 28px;
+  font-weight: 500;
   margin-top: 10px;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   line-height: 1.15;
+  color: var(--text);
 }
 .summary-card .value.compact {
-  font-size: 22px;       /* room for long asset names like "Bitcoin USD" */
-  letter-spacing: -0.005em;
+  font-size: 20px;
+  letter-spacing: -0.01em;
 }
 .summary-card .value.positive { color: var(--success); }
 .summary-card .value.negative { color: var(--danger); }
-.summary-card .sub { color: var(--text-muted); font-size: 12px; margin-top: 6px; }
+.summary-card .sub { color: var(--text-muted); font-size: 12px; margin-top: 6px; font-family: var(--font-mono); }
 .summary-card .sub.positive { color: var(--success); }
 .summary-card .sub.negative { color: var(--danger); }
 
@@ -948,7 +965,7 @@ a { color: var(--primary-strong); }
 .sidebar-backdrop {
   display: none;
   position: fixed; inset: 0;
-  background: rgba(74, 60, 42, 0.36);
+  background: rgba(0,0,0,0.6);
   z-index: 50;
 }
 .sidebar-backdrop.open { display: block; }
@@ -1262,14 +1279,15 @@ a { color: var(--primary-strong); }
   margin-bottom: 6px;
   font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
+  font-family: var(--font-mono);
 }
 .field input, .field select, .field textarea {
   width: 100%;
   padding: 11px 14px;
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  border-radius: 8px;
+  background: var(--surface-2);
   color: var(--text);
   font-size: 14px;
   font-family: inherit;
@@ -1281,26 +1299,28 @@ a { color: var(--primary-strong); }
 }
 .btn {
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  padding: 10px 20px;
+  border-radius: 999px;
+  padding: 10px 18px;
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
   font-size: 13px;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
   display: inline-flex; align-items: center; gap: 8px;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, transform 120ms ease;
+  line-height: 1;
 }
-.btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+.btn-primary { background: var(--text); color: var(--bg); border-color: var(--text); }
 .btn-primary:hover {
-  background: var(--primary-strong);
-  border-color: var(--primary-strong);
+  background: var(--text);
+  border-color: var(--text);
   transform: translateY(-1px);
-  box-shadow: 0 6px 14px rgba(110, 93, 68, 0.18);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
 }
 .btn-ghost { background: transparent; color: var(--text); border-color: var(--border-strong); }
-.btn-ghost:hover { background: var(--surface-2); border-color: var(--text-muted); }
+.btn-ghost:hover { background: color-mix(in oklab, var(--text) 5%, transparent); border-color: var(--border-strong); }
 .btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+.btn-accent { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 .btn-block { width: 100%; }
 
 /* ---------- Tables ---------- */
