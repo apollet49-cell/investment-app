@@ -7,7 +7,7 @@ from datetime import date, timedelta
 
 log = logging.getLogger("dashboard")
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from auth import get_current_user
@@ -339,6 +339,59 @@ async def risk(
     metrics["benchmark_symbol"] = benchmark
     metrics["window_days"] = days
     return metrics
+
+
+# ---- Combined endpoint -------------------------------------------------
+# Fan out the 6 individual endpoints in parallel server-side. Saves the
+# client 5 HTTP round-trips on a cold cache. Each sub-call still hits the
+# same handlers; we just gather them under one network request. Failures
+# in any single sub-call yield `null` for that key so the rest of the
+# dashboard still renders.
+
+
+@router.get("/all")
+async def all_dashboard_data(
+    current: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    request: Request = None,
+) -> dict:
+    """One-shot bundle of summary + performance + history + risk +
+    fire + dividends + stress. Used by the dashboard view to avoid the
+    6-round-trip waterfall on first visit. Each sub-call is wrapped in
+    a try block so a slow yfinance call for the benchmark doesn't kill
+    the whole bundle — the affected key just returns null."""
+    from routers.planning import fire as fire_endpoint, stress_test as stress_endpoint
+    from routers.dividends import calendar as div_calendar
+    from services.fire import compute as compute_fire_svc
+
+    async def _safe(coro_factory):
+        try:
+            return await coro_factory()
+        except Exception as e:
+            log.warning("dashboard/all sub-call failed: %s", e)
+            return None
+
+    # Default FIRE params — match what dashboard.js sends. The frontend
+    # can still call /planning/fire directly with custom params.
+    fx = 1.0
+    expenses_usd = 2500
+    savings_usd = 1500
+
+    results = await asyncio.gather(
+        _safe(lambda: summary(current=current, db=db)),
+        _safe(lambda: performance(current=current, db=db)),
+        _safe(lambda: history(days=365, benchmark="^GSPC", current=current, db=db)),
+        _safe(lambda: risk(days=180, benchmark="^GSPC", current=current, db=db)),
+        _safe(lambda: fire_endpoint(
+            monthly_expenses=expenses_usd, monthly_savings=savings_usd,
+            expected_return_pct=7.0, target_multiplier=25.0, inflation_pct=2.0,
+            current=current, db=db,
+        )),
+        _safe(lambda: stress_endpoint(current=current, db=db)),
+        _safe(lambda: div_calendar(current=current, db=db)),
+    )
+    keys = ["summary", "performance", "history", "risk", "fire", "stress", "dividends"]
+    return dict(zip(keys, results))
 
 
 # ---- AI-augmented Monthly Review prose ---------------------------------

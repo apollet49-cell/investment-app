@@ -1,4 +1,4 @@
-import { API, cachedGet, loadChartJs, skeleton, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, track } from "/static/app.js";
+import { API, cachedGet, seedCache, loadChartJs, skeleton, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, track } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 // Persist the active dashboard tab across renders (auto-refresh re-renders
@@ -39,13 +39,31 @@ export async function render(root) {
   // session, we already have a cached /dashboard/summary in sessionStorage,
   // so we render INSTANTLY from cache and let the background refresh fire
   // a fresh fetch. Spinner only shows on the very first visit per session.
+  //
+  // On cold cache (no /dashboard/summary entry), we batch-fetch /dashboard/all
+  // which returns all 7 sub-endpoints in one HTTP round-trip + warms the
+  // SWR cache for each. The secondary cards (FIRE, risk, dividends, perf,
+  // history, stress) read their cached entries instead of firing their own
+  // calls. Saves 5 round-trips on first visit.
   let data;
-  const cacheKey = `swr:${state.token?.slice(-12) || "anon"}:/dashboard/summary`;
+  const tokenSuffix = state.token?.slice(-12) || "anon";
+  const cacheKey = `swr:${tokenSuffix}:/dashboard/summary`;
   const hasCache = sessionStorage.getItem(cacheKey) !== null;
   if (!hasCache) {
-    // Skeleton matches the dashboard layout (4 KPI cards + chart) so
-    // there's no reflow when data arrives. Way calmer than a spinner.
     root.innerHTML = skeleton("kpi");
+    // Cold cache: prefetch everything in one shot so the cards don't each
+    // wait their turn on the network.
+    try {
+      const bundle = await API.request("/dashboard/all");
+      if (cancelled) return;
+      seedCache("/dashboard/summary", bundle.summary);
+      seedCache("/dashboard/performance", bundle.performance);
+      seedCache("/dashboard/history?days=365&benchmark=^GSPC", bundle.history);
+      seedCache("/dashboard/risk?days=180&benchmark=^GSPC", bundle.risk);
+      seedCache(`/planning/fire?monthly_expenses=2500&monthly_savings=1500&expected_return_pct=7&target_multiplier=25`, bundle.fire);
+      seedCache("/planning/stress-test", bundle.stress);
+      seedCache("/dividends/calendar", bundle.dividends);
+    } catch (_) { /* fall back to individual fetches below */ }
   }
   try {
     data = await cachedGet("/dashboard/summary", (fresh) => {

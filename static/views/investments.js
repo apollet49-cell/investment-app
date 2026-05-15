@@ -1,4 +1,4 @@
-import { API, cachedGet, invalidateCache, loadChartJs, skeleton, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, downloadAuth, track } from "/static/app.js";
+import { API, cachedGet, invalidateCache, seedCache, loadChartJs, skeleton, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, downloadAuth, track } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 const TYPES = ["stock", "real_estate", "crypto", "bond", "etf", "startup"];
@@ -556,8 +556,8 @@ function openForm(id) {
         if (tmpIdx >= 0) cache[tmpIdx] = saved;
         else cache = [saved, ...cache];
       }
-      invalidateCache("/investments/", "/dashboard/");
-      try { sessionStorage.setItem(`swr:${state.token?.slice(-12) || "anon"}:/investments/`, JSON.stringify(cache)); } catch (_) {}
+      invalidateCache("/dashboard/");
+      seedCache("/investments/", cache);
       refresh(document);
     } catch (e) {
       // Rollback to pre-optimistic state.

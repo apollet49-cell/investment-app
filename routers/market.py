@@ -4,7 +4,7 @@ import asyncio
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -126,3 +126,37 @@ async def stream(request: Request) -> StreamingResponse:
 @router.get("/stats")
 async def stats() -> dict:
     return market_service.cache_stats()
+
+
+@router.websocket("/ws")
+async def market_ws(websocket: WebSocket) -> None:
+    """Bi-directional WebSocket feed for the same broadcasts that the SSE
+    endpoint serves. Lower per-message overhead than SSE (no `data: ` /
+    `\\n\\n` framing, no `retry:` directive), and the connection stays
+    open through proxies that otherwise idle-kill long HTTP streams.
+
+    The frontend prefers this when available and falls back to /stream
+    (SSE) if the upgrade is blocked (older proxies, restrictive CORS).
+
+    The SSE endpoint is kept for compatibility — sw.js fallback, curl,
+    bots, and any client that doesn't speak WebSocket."""
+    await websocket.accept()
+    sse = websocket.app.state.sse
+    queue = await sse.connect()
+    # Ping every 25s — keeps the connection warm through cloud proxies
+    # (Cloudflare idle is 100s, Render is ~110s).
+    PING_EVERY = 25.0
+    try:
+        while True:
+            try:
+                payload = await asyncio.wait_for(queue.get(), timeout=PING_EVERY)
+                await websocket.send_text(payload)
+            except asyncio.TimeoutError:
+                # Send a JSON ping the client can recognise (vs an SSE comment).
+                await websocket.send_text('{"type":"ping"}')
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        log.warning("WS error: %s", e)
+    finally:
+        await sse.disconnect(queue)

@@ -44,50 +44,158 @@ const API = {
 
 export { API };
 
-// Stale-while-revalidate GET helper. On the first call within a session,
-// makes a network round-trip and caches the result in sessionStorage. On
-// every subsequent call (same session), returns the cached value
-// SYNCHRONOUSLY (well, in a resolved Promise) so the view renders
-// instantly, while a background fetch refreshes the cache and invokes
-// `onUpdate(fresh)` only if the payload changed. This is what makes
-// page-to-page navigation feel snappy after the first visit.
+// Stale-while-revalidate GET helper. Backed by IndexedDB (with an
+// in-memory + sessionStorage fast path) so the cache survives tab close
+// and full-page reloads. Each entry has a 24h TTL — beyond that we fall
+// back to network so the user doesn't see a dashboard from two weeks ago.
+//
+// Layered cache lookup:
+//   1. In-memory Map (zero-latency for the current session)
+//   2. sessionStorage (synchronous, survives soft reload)
+//   3. IndexedDB (asynchronous, survives tab close & browser restart)
+//   4. Network
 //
 // Request deduplication: when N concurrent callers ask for the same
-// uncached path (e.g. dashboard.js calling loadPerformance + loadHistoryAndBenchmark
-// in parallel, both wanting /dashboard/history), only ONE fetch goes
-// over the wire — the others await the same promise.
+// uncached path (e.g. dashboard.js calling loadPerformance +
+// loadHistoryAndBenchmark in parallel), only ONE fetch goes over the
+// wire — others await the shared promise.
 //
-// Cache is scoped to the JWT to avoid bleeding data between users on a
-// shared browser session. Cleared on logout via clearSwrCache().
+// Cache is scoped to the JWT so two users sharing a browser don't bleed.
 const _inflight = new Map();
+const _memCache = new Map();
+const SWR_TTL_MS = 24 * 60 * 60 * 1000;
+
+// Tiny IndexedDB wrapper (no library — keeps the bundle small).
+const _IDB_NAME = "investapp-swr";
+const _IDB_STORE = "swr";
+let _idbPromise = null;
+function _openIdb() {
+  if (_idbPromise) return _idbPromise;
+  if (!("indexedDB" in window)) return Promise.resolve(null);
+  _idbPromise = new Promise((resolve) => {
+    const req = indexedDB.open(_IDB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(_IDB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null); // fail-open: degrade to sessionStorage
+  });
+  return _idbPromise;
+}
+async function _idbGet(key) {
+  const db = await _openIdb();
+  if (!db) return null;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(_IDB_STORE, "readonly");
+      const req = tx.objectStore(_IDB_STORE).get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    } catch (_) { resolve(null); }
+  });
+}
+async function _idbPut(key, value) {
+  const db = await _openIdb();
+  if (!db) return;
+  try {
+    const tx = db.transaction(_IDB_STORE, "readwrite");
+    tx.objectStore(_IDB_STORE).put(value, key);
+  } catch (_) { /* quota / closed db — ignore */ }
+}
+async function _idbDeleteWhere(predicate) {
+  const db = await _openIdb();
+  if (!db) return;
+  try {
+    const tx = db.transaction(_IDB_STORE, "readwrite");
+    const store = tx.objectStore(_IDB_STORE);
+    store.openCursor().onsuccess = (e) => {
+      const cursor = e.target.result;
+      if (!cursor) return;
+      if (predicate(cursor.key)) cursor.delete();
+      cursor.continue();
+    };
+  } catch (_) {}
+}
+
+function _swrKey(path) {
+  return `swr:${state.token?.slice(-12) || "anon"}:${path}`;
+}
+
+function _isFresh(entry) {
+  return entry && entry.value !== undefined && (Date.now() - (entry.at || 0)) < SWR_TTL_MS;
+}
+
+function _readSync(key) {
+  // In-memory first (no parse), then sessionStorage (synchronous, parsed once).
+  if (_memCache.has(key)) return _memCache.get(key);
+  const raw = sessionStorage.getItem(key);
+  if (!raw) return null;
+  try {
+    const entry = JSON.parse(raw);
+    _memCache.set(key, entry);
+    return entry;
+  } catch (_) { return null; }
+}
+
+function _writeAll(key, value) {
+  const entry = { value, at: Date.now() };
+  _memCache.set(key, entry);
+  try { sessionStorage.setItem(key, JSON.stringify(entry)); } catch (_) {}
+  _idbPut(key, entry).catch(() => {});
+}
+
+// Hydrate the synchronous caches from IndexedDB at boot so the *first*
+// page load after a browser restart still gets instant repeat-visit perf.
+export async function hydrateSwrCache() {
+  const db = await _openIdb();
+  if (!db) return;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(_IDB_STORE, "readonly");
+      const store = tx.objectStore(_IDB_STORE);
+      const req = store.openCursor();
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (!cursor) return resolve();
+        const key = cursor.key;
+        const entry = cursor.value;
+        if (typeof key === "string" && key.startsWith("swr:") && _isFresh(entry)) {
+          _memCache.set(key, entry);
+          try { sessionStorage.setItem(key, JSON.stringify(entry)); } catch (_) {}
+        } else if (entry && !_isFresh(entry)) {
+          cursor.delete(); // GC stale entries
+        }
+        cursor.continue();
+      };
+      req.onerror = () => resolve();
+    } catch (_) { resolve(); }
+  });
+}
 
 export async function cachedGet(path, onUpdate) {
-  const key = `swr:${state.token?.slice(-12) || "anon"}:${path}`;
-  const cachedRaw = sessionStorage.getItem(key);
-  if (cachedRaw) {
-    // Fire-and-forget background refresh, deduped via the inflight map
-    // so concurrent SWR readers share one revalidation fetch.
+  const key = _swrKey(path);
+  const cached = _readSync(key);
+  if (_isFresh(cached)) {
+    // Fire-and-forget background refresh, deduped via the inflight map.
     if (!_inflight.has(key)) {
       const p = API.request(path).then(fresh => {
-        const freshRaw = JSON.stringify(fresh);
-        sessionStorage.setItem(key, freshRaw);
-        if (freshRaw !== cachedRaw && typeof onUpdate === "function") {
+        const same = JSON.stringify(fresh) === JSON.stringify(cached.value);
+        _writeAll(key, fresh);
+        if (!same && typeof onUpdate === "function") {
           try { onUpdate(fresh); } catch (_) {}
         }
         return fresh;
       }).catch(() => null).finally(() => _inflight.delete(key));
       _inflight.set(key, p);
     }
-    try { return JSON.parse(cachedRaw); } catch (_) { /* fall through */ }
+    return cached.value;
   }
-  // Cache miss: dedupe via inflight too.
+  // Cache miss / stale: dedupe via inflight too.
   if (_inflight.has(key)) {
     const fresh = await _inflight.get(key);
     if (fresh !== null && fresh !== undefined) return fresh;
   }
   const promise = API.request(path)
     .then(fresh => {
-      try { sessionStorage.setItem(key, JSON.stringify(fresh)); } catch (_) {}
+      _writeAll(key, fresh);
       return fresh;
     })
     .finally(() => _inflight.delete(key));
@@ -96,9 +204,11 @@ export async function cachedGet(path, onUpdate) {
 }
 
 export function clearSwrCache() {
+  _memCache.clear();
   for (const k of Object.keys(sessionStorage)) {
     if (k.startsWith("swr:")) sessionStorage.removeItem(k);
   }
+  _idbDeleteWhere(k => typeof k === "string" && k.startsWith("swr:")).catch(() => {});
 }
 
 // Fire the most-visited GETs in parallel right after login so the SWR
@@ -107,24 +217,26 @@ export function clearSwrCache() {
 // the next call. Skipped if a cache entry for that path already exists
 // (avoids re-fetching when bootApp runs on page reload).
 export function prewarmCache() {
+  // With /dashboard/all wiring the entire dashboard in one fetch, the
+  // prewarm just needs to seed the bundle once. The view will read each
+  // sub-result from the SWR cache instead of firing 6 individual calls.
   const tokenSuffix = state.token?.slice(-12) || "anon";
   const prefix = `swr:${tokenSuffix}:`;
-  const fx = state.fxRate || 1.0;
-  const paths = [
-    "/dashboard/summary",
-    "/investments/",
-    `/planning/fire?monthly_expenses=${Math.round(2500 / fx)}&monthly_savings=${Math.round(1500 / fx)}&expected_return_pct=7&target_multiplier=25`,
-    "/dashboard/risk?days=180&benchmark=^GSPC",
-    "/dashboard/performance",
-    "/dashboard/history?days=365&benchmark=^GSPC",
-    "/dividends/calendar",
-    "/planning/stress-test",
-  ];
-  for (const path of paths) {
-    if (sessionStorage.getItem(prefix + path)) continue; // already warm
-    API.request(path).then(data => {
-      try { sessionStorage.setItem(prefix + path, JSON.stringify(data)); } catch (_) {}
-    }).catch(() => {});
+  // Skip if dashboard summary is already warm from a recent visit.
+  if (sessionStorage.getItem(prefix + "/dashboard/summary")) return;
+  API.request("/dashboard/all").then(bundle => {
+    if (!bundle) return;
+    seedCache("/dashboard/summary", bundle.summary);
+    seedCache("/dashboard/performance", bundle.performance);
+    seedCache("/dashboard/history?days=365&benchmark=^GSPC", bundle.history);
+    seedCache("/dashboard/risk?days=180&benchmark=^GSPC", bundle.risk);
+    seedCache(`/planning/fire?monthly_expenses=2500&monthly_savings=1500&expected_return_pct=7&target_multiplier=25`, bundle.fire);
+    seedCache("/planning/stress-test", bundle.stress);
+    seedCache("/dividends/calendar", bundle.dividends);
+  }).catch(() => {});
+  // Investments list is separate from /dashboard/all
+  if (!sessionStorage.getItem(prefix + "/investments/")) {
+    API.request("/investments/").then(data => seedCache("/investments/", data)).catch(() => {});
   }
 }
 
@@ -168,13 +280,22 @@ export const loadLightweightCharts = () =>
 export function invalidateCache(...pathPrefixes) {
   const tokenSuffix = state.token?.slice(-12) || "anon";
   const prefix = `swr:${tokenSuffix}:`;
-  for (const k of Object.keys(sessionStorage)) {
-    if (!k.startsWith(prefix)) continue;
+  const matches = (k) => {
+    if (typeof k !== "string" || !k.startsWith(prefix)) return false;
     const rest = k.slice(prefix.length);
-    if (pathPrefixes.some(p => rest.startsWith(p))) {
-      sessionStorage.removeItem(k);
-    }
-  }
+    return pathPrefixes.some(p => rest.startsWith(p));
+  };
+  for (const k of Array.from(_memCache.keys())) if (matches(k)) _memCache.delete(k);
+  for (const k of Object.keys(sessionStorage)) if (matches(k)) sessionStorage.removeItem(k);
+  _idbDeleteWhere(matches).catch(() => {});
+}
+
+// Seed the SWR cache with a value we already have in memory (e.g. from
+// a /dashboard/all bundle response or right after a mutation). Avoids a
+// redundant network round-trip on the next cachedGet.
+export function seedCache(path, value) {
+  if (value === null || value === undefined) return;
+  _writeAll(_swrKey(path), value);
 }
 
 // ---------- Toast / spinner ----------
@@ -359,7 +480,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "64";
+const VIEW_VERSION = "65";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -724,26 +845,57 @@ async function bootApp() {
   }
 }
 
+// Live price feed. Tries WebSocket first (lower overhead, survives proxies
+// better than long SSE streams) and falls back to SSE if the upgrade fails
+// or the browser doesn't support it.
 function setupSSE() {
-  if (state.sse) { state.sse.close(); }
-  // EventSource doesn't support custom headers, so SSE is open for any local
-  // connection here. Acceptable for v1 single-user dev; upgrade to a token query
-  // param + middleware if exposing publicly.
-  try {
-    state.sse = new EventSource("/market/stream");
-    state.sse.onmessage = (ev) => {
-      try {
-        const payload = JSON.parse(ev.data);
-        if (payload.type === "prices") {
-          window.dispatchEvent(new CustomEvent("market:prices", { detail: payload.data }));
-        } else if (payload.type === "indices") {
-          window.dispatchEvent(new CustomEvent("market:indices", { detail: payload.data }));
+  if (state.sse) { try { state.sse.close(); } catch (_) {} }
+  const handleFrame = (raw) => {
+    try {
+      const payload = JSON.parse(raw);
+      if (payload.type === "prices") {
+        window.dispatchEvent(new CustomEvent("market:prices", { detail: payload.data }));
+      } else if (payload.type === "indices") {
+        window.dispatchEvent(new CustomEvent("market:indices", { detail: payload.data }));
+      }
+    } catch (_) {}
+  };
+
+  // Try WebSocket first
+  if ("WebSocket" in window) {
+    try {
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(`${proto}//${location.host}/market/ws`);
+      let opened = false;
+      ws.onopen = () => { opened = true; };
+      ws.onmessage = (ev) => handleFrame(ev.data);
+      ws.onclose = (ev) => {
+        // If the WS never opened (server has no /market/ws, or upgrade
+        // blocked), fall back to SSE. If it disconnects later, attempt
+        // reconnect via WS again — the server will route around the
+        // dead connection.
+        if (!opened) {
+          fallbackToSSE();
+        } else if (state.sse === ws) {
+          // Schedule reconnect with a small backoff.
+          state.sse = null;
+          setTimeout(setupSSE, 3000);
         }
-      } catch (_) {}
-    };
-    state.sse.onerror = () => { /* EventSource auto-reconnects */ };
-  } catch (e) {
-    console.warn("SSE not available:", e);
+      };
+      ws.onerror = () => { /* close handler will fall back */ };
+      state.sse = ws;
+      return;
+    } catch (_) { /* fall through */ }
+  }
+  fallbackToSSE();
+
+  function fallbackToSSE() {
+    try {
+      const sse = new EventSource("/market/stream");
+      sse.onmessage = (ev) => handleFrame(ev.data);
+      sse.onerror = () => { /* EventSource auto-reconnects */ };
+      state.sse = sse;
+    } catch (e) { console.warn("Live feed unavailable:", e); }
   }
 }
 
@@ -931,6 +1083,10 @@ window.addEventListener("beforeinstallprompt", (e) => {
 document.addEventListener("DOMContentLoaded", () => {
   setTheme(state.theme);
   registerServiceWorker();
+  // Pull any SWR entries persisted in IndexedDB into memory so the first
+  // post-restart navigation skips the network on a still-fresh entry.
+  // Doesn't block the boot — fires in parallel with the rest.
+  hydrateSwrCache().catch(() => {});
   document.getElementById("theme-toggle").onclick = () => setTheme(state.theme === "dark" ? "light" : "dark");
   document.getElementById("logout-btn").onclick = logout;
   document.getElementById("mobile-logout")?.addEventListener("click", logout);
