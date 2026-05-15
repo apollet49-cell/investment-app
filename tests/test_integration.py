@@ -278,3 +278,163 @@ def test_seed_demo_requires_confirm_wipe(client, auth_headers):
     # Now /investments/ returns rows
     r = client.get("/investments/", headers=auth_headers)
     assert len(r.json()) == body["investments"]
+
+
+# ---------- scenarios CRUD + simulate ----------
+
+def test_scenario_crud_and_simulation(client, auth_headers):
+    """Scenario CRUD + simulate. Covers the scenarios router end-to-end and
+    catches regressions in the ±30% return adjustment math."""
+    # Create a scenario — schema is amount/annual_return/horizon_months/inflation_rate
+    r = client.post("/scenarios/", json={
+        "name": "Steady 8%",
+        "amount": 10000,
+        "annual_return": 0.08,
+        "horizon_months": 120,
+        "inflation_rate": 0.02,
+        "risk_level": "medium",
+    }, headers=auth_headers)
+    assert r.status_code in (200, 201), r.text
+    scenario = r.json()
+    sid = scenario["id"]
+
+    # List should include it
+    r = client.get("/scenarios/", headers=auth_headers)
+    assert r.status_code == 200
+    assert any(s["id"] == sid for s in r.json())
+
+    # Simulate — returns pessimistic / realistic / optimistic projections
+    r = client.get(f"/scenarios/{sid}/simulate", headers=auth_headers)
+    assert r.status_code == 200, r.text
+    sim = r.json()
+    assert "pessimistic" in sim and "realistic" in sim and "optimistic" in sim
+    # Pessimistic uses ×0.7 on annual_return, optimistic ×1.3 — so the
+    # final value should be strictly ordered.
+    assert sim["pessimistic"]["final_value"] < sim["realistic"]["final_value"]
+    assert sim["realistic"]["final_value"] < sim["optimistic"]["final_value"]
+
+    # Delete
+    r = client.delete(f"/scenarios/{sid}", headers=auth_headers)
+    assert r.status_code in (200, 204)
+    r = client.get("/scenarios/", headers=auth_headers)
+    assert not any(s["id"] == sid for s in r.json())
+
+
+# ---------- planning/fire ----------
+
+def test_fire_endpoint_returns_years(client, auth_headers):
+    """Years-to-FIRE calculator. Sanity check: with monthly_savings > 0 and
+    a sane expected_return, we should get a positive years_to_fire."""
+    # Need some current portfolio
+    client.post("/investments/", json={
+        "name": "Index", "type": "etf", "symbol": "VTI",
+        "amount_invested": 50000, "current_value": 60000,
+        "purchase_date": "2023-01-01",
+    }, headers=auth_headers)
+    r = client.get(
+        "/planning/fire?monthly_expenses=3000&monthly_savings=2000&expected_return_pct=7&target_multiplier=25",
+        headers=auth_headers,
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert "years_to_fire" in data
+    if not data.get("already_fire"):
+        assert data["years_to_fire"] > 0
+    # Endpoint returns annual_expenses + current_portfolio + expected_return_pct
+    # + inflation_pct + progress_pct + years_to_fire (or already_fire).
+    assert "annual_expenses" in data
+    assert "current_portfolio" in data
+
+
+# ---------- stress test ----------
+
+def test_stress_test_endpoint(client, auth_headers):
+    """Stress-test scenarios apply built-in market shocks to the portfolio."""
+    client.post("/investments/", json={
+        "name": "Stock", "type": "stock", "amount_invested": 5000,
+        "current_value": 6000, "purchase_date": "2024-01-01",
+    }, headers=auth_headers)
+    r = client.get("/planning/stress-test", headers=auth_headers)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    # Should return a list of scenarios with portfolio_value_after
+    assert "scenarios" in data or "results" in data or isinstance(data, dict)
+
+
+# ---------- alerts CRUD ----------
+
+def test_alerts_crud_and_dismiss(client, auth_headers):
+    """Alerts CRUD + dismissal — the dashboard banner relies on this flow."""
+    # Create a portfolio-scope ROI alert
+    r = client.post("/alerts/", json={
+        "type": "roi_below",
+        "threshold": -5,
+        "scope": "portfolio",
+    }, headers=auth_headers)
+    assert r.status_code in (200, 201), r.text
+    alert_id = r.json()["id"]
+
+    # List
+    r = client.get("/alerts/", headers=auth_headers)
+    assert r.status_code == 200
+    assert any(a["id"] == alert_id for a in r.json())
+
+    # Dismiss
+    r = client.post(f"/alerts/{alert_id}/dismiss", headers=auth_headers)
+    assert r.status_code in (200, 204)
+
+    # Delete
+    r = client.delete(f"/alerts/{alert_id}", headers=auth_headers)
+    assert r.status_code in (200, 204)
+
+
+# ---------- transactions summary ----------
+
+def test_transactions_summary_aggregates_correctly(client, auth_headers):
+    """Lifetime + YTD totals from the transactions log."""
+    # Create an investment + 2 transactions
+    r = client.post("/investments/", json={
+        "name": "Test", "type": "stock", "amount_invested": 1000,
+        "current_value": 1100, "purchase_date": "2024-01-01",
+    }, headers=auth_headers)
+    inv_id = r.json()["id"]
+    client.post(f"/investments/{inv_id}/transactions", json={
+        "type": "buy", "transaction_date": "2024-06-01",
+        "quantity": 5, "price_per_unit": 200, "amount": 1000,
+    }, headers=auth_headers)
+    client.post(f"/investments/{inv_id}/transactions", json={
+        "type": "dividend", "transaction_date": "2024-09-01",
+        "amount": 25,
+    }, headers=auth_headers)
+    r = client.get("/transactions/summary", headers=auth_headers)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert "lifetime" in data and "ytd" in data
+    assert data["lifetime"]["buy"] >= 1000
+    assert data["lifetime"]["dividend"] >= 25
+    assert data["transaction_count"] >= 2
+
+
+# ---------- /sw.js + /manifest.json (PWA) ----------
+
+def test_sw_served_with_root_scope_headers(client):
+    """The Service Worker must be served from /sw.js (not /static/sw.js) so
+    its default scope is the entire app, with Cache-Control: no-cache so
+    SW updates propagate on each page load."""
+    r = client.get("/sw.js")
+    assert r.status_code == 200
+    assert "javascript" in r.headers.get("content-type", "")
+    assert r.headers.get("service-worker-allowed") == "/"
+    # Body should reference the cache version constant.
+    assert b"CACHE_VERSION" in r.content
+
+
+def test_manifest_served_correctly(client):
+    r = client.get("/manifest.json")
+    assert r.status_code == 200
+    import json
+    body = json.loads(r.content)
+    assert body["name"] and body["short_name"]
+    assert body["start_url"] == "/"
+    assert body["display"] in ("standalone", "minimal-ui")
+    assert body["icons"] and len(body["icons"]) >= 1

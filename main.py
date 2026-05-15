@@ -277,6 +277,24 @@ async def root_index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
+@app.get("/sw.js")
+async def service_worker() -> FileResponse:
+    """Serve the Service Worker from the root so its default scope is the
+    whole app (a SW loaded from /static/sw.js only controls /static/*).
+    Sets a no-cache header so SW updates propagate on the next page load."""
+    return FileResponse(
+        STATIC_DIR / "sw.js",
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"},
+    )
+
+
+@app.get("/manifest.json")
+async def manifest() -> FileResponse:
+    """Mirror the manifest at root for consistency with /sw.js."""
+    return FileResponse(STATIC_DIR / "manifest.json", media_type="application/manifest+json")
+
+
 # Mount static files (CSS/JS/SVG). index.html is served by `/` above.
 #
 # Cache strategy:

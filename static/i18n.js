@@ -2,7 +2,13 @@
 // Backend errors stay in English; the UI surface text is what we localise.
 
 const en = {
-  app: { title: "Investment App", logout: "Logout" },
+  app: {
+    title: "Investment App",
+    logout: "Logout",
+    install_title: "Install InvestApp",
+    install_sub: "Add to your home screen for one-tap access",
+    install_yes: "Install",
+  },
   nav: {
     dashboard: "Dashboard", markets: "Markets", compare: "Compare", watchlist: "Watchlist", investments: "Investments", calculator: "Calculator",
     scenarios: "Scenarios", transactions: "Transactions", plans: "DCA Plans", rebalance: "Rebalance",
@@ -521,7 +527,13 @@ const en = {
 };
 
 const fr = {
-  app: { title: "Application d'investissement", logout: "Déconnexion" },
+  app: {
+    title: "Application d'investissement",
+    logout: "Déconnexion",
+    install_title: "Installer InvestApp",
+    install_sub: "Ajoute-la à ton écran d'accueil pour un accès en un clic",
+    install_yes: "Installer",
+  },
   nav: {
     dashboard: "Tableau de bord", markets: "Marchés", compare: "Comparateur", watchlist: "Liste de suivi", investments: "Investissements", calculator: "Calculatrice",
     scenarios: "Scénarios", transactions: "Transactions", plans: "Plans DCA", rebalance: "Rééquilibrage",
@@ -1039,7 +1051,13 @@ const fr = {
 };
 
 const zh = {
-  app: { title: "投资分析应用", logout: "退出" },
+  app: {
+    title: "投资分析应用",
+    logout: "退出",
+    install_title: "安装 InvestApp",
+    install_sub: "添加到主屏幕，一键访问",
+    install_yes: "安装",
+  },
   nav: {
     dashboard: "仪表盘", markets: "市场", compare: "对比", watchlist: "关注列表", investments: "投资", calculator: "计算器",
     scenarios: "情景规划", transactions: "交易记录", plans: "定投计划", rebalance: "再平衡",

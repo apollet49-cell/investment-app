@@ -359,7 +359,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "61";
+const VIEW_VERSION = "62";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -875,8 +875,62 @@ function setSidebarOpen(open) {
   if (main) main.style.overflow = open ? "hidden" : "";
 }
 
+// Service Worker — caches the app shell so the app boots offline and
+// subsequent visits skip a full network round-trip. Only registers on
+// HTTPS (and localhost for dev); not registered on file:// or
+// http://example. Errors are silent — SW failure should never break
+// the app, just remove the offline ability.
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
+  navigator.serviceWorker.register("/sw.js").catch((err) => {
+    console.warn("[sw] registration failed:", err);
+  });
+}
+
+// "Add to Home Screen" install prompt. Browsers fire `beforeinstallprompt`
+// when the PWA criteria are met. We stash the event and show a one-time
+// toast inviting the user to install. Suppressed if they dismissed once
+// (we set a flag in localStorage).
+let _deferredInstallPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  if (localStorage.getItem("install_dismissed")) return;
+  _deferredInstallPrompt = e;
+  // Only nudge once per session, after the user has clicked around a bit.
+  setTimeout(() => {
+    if (!_deferredInstallPrompt) return;
+    const host = document.getElementById("toast-host");
+    if (!host) return;
+    const el = document.createElement("div");
+    el.className = "toast install-toast";
+    el.innerHTML = `
+      <div style="display:flex;gap:12px;align-items:center">
+        <div style="flex:1">
+          <strong style="display:block;margin-bottom:2px">${escapeHtml(t("app.install_title") || "Install InvestApp")}</strong>
+          <span style="font-size:12px;color:var(--text-muted)">${escapeHtml(t("app.install_sub") || "Add to your home screen for one-tap access")}</span>
+        </div>
+        <button class="btn btn-primary" id="install-yes" style="padding:6px 12px;font-size:13px">${escapeHtml(t("app.install_yes") || "Install")}</button>
+        <button class="icon-btn" id="install-no" aria-label="Dismiss">✕</button>
+      </div>`;
+    host.appendChild(el);
+    el.querySelector("#install-yes").onclick = async () => {
+      const e2 = _deferredInstallPrompt;
+      _deferredInstallPrompt = null;
+      el.remove();
+      try { await e2.prompt(); } catch (_) {}
+    };
+    el.querySelector("#install-no").onclick = () => {
+      localStorage.setItem("install_dismissed", "1");
+      _deferredInstallPrompt = null;
+      el.remove();
+    };
+  }, 30000); // 30s grace — only prompt after the user has stuck around
+});
+
 document.addEventListener("DOMContentLoaded", () => {
   setTheme(state.theme);
+  registerServiceWorker();
   document.getElementById("theme-toggle").onclick = () => setTheme(state.theme === "dark" ? "light" : "dark");
   document.getElementById("logout-btn").onclick = logout;
   document.getElementById("mobile-logout")?.addEventListener("click", logout);
