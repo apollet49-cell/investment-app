@@ -14,12 +14,23 @@ if _db_url.startswith("postgres://"):
     _db_url = _db_url.replace("postgres://", "postgresql://", 1)
 
 # SQLite needs check_same_thread=False for FastAPI's threaded request handling.
-engine = create_engine(
-    _db_url,
-    connect_args={"check_same_thread": False} if _db_url.startswith("sqlite") else {},
-    echo=False,
-    pool_pre_ping=True,  # detects dropped Postgres connections (e.g. after sleep)
-)
+# Pool sizing: the dashboard fans out 7 sub-endpoints in /dashboard/all,
+# plus the bg live-refresh task opens its own SessionLocal, plus
+# APScheduler jobs. Default pool (5 + 10 overflow) can saturate on cold-
+# start when /dashboard/all + prewarmCache + auto-refresh fire concurrently.
+# 10 + 20 gives headroom without blowing past Render's Postgres connection
+# limit (free tier 97 max). SQLite ignores pool args (uses NullPool).
+_engine_kwargs: dict = dict(echo=False, pool_pre_ping=True)
+if _db_url.startswith("sqlite"):
+    _engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    _engine_kwargs.update(
+        pool_size=10,
+        max_overflow=20,
+        pool_recycle=300,         # drop idle conns after 5 min — Render Postgres kills idle at ~10 min
+        pool_timeout=30,          # wait at most 30s for a free conn before erroring
+    )
+engine = create_engine(_db_url, **_engine_kwargs)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 # SQLite ignores `ondelete="CASCADE"` unless PRAGMA foreign_keys is ON per

@@ -11,7 +11,10 @@ from sqlalchemy.orm import Session
 from auth import get_current_user
 from database import get_db
 from models import Investment, Scenario, User
-from services.pdf_report import generate_pdf
+# services.pdf_report pulls reportlab + Pillow + matplotlib transitives
+# (~50MB worth of import time on a cold start). Defer until the user
+# actually hits /exports/pdf — the rest of the router (CSV, XLSX) doesn't
+# need it.
 
 router = APIRouter(prefix="/exports", tags=["exports"])
 
@@ -80,6 +83,7 @@ async def export_scenarios_csv(current: User = Depends(get_current_user), db: Se
 
 @router.get("/pdf")
 async def export_pdf(current: User = Depends(get_current_user), db: Session = Depends(get_db)) -> Response:
+    from services.pdf_report import generate_pdf  # lazy: see import comment above
     pdf = generate_pdf(db, current)
     filename = f"investment-report-{date.today().isoformat()}.pdf"
     return Response(
