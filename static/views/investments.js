@@ -1131,14 +1131,26 @@ function closeModal() {
 
 async function deleteInv(id, root) {
   if (!confirm(t("investments.confirm_delete"))) return;
+  // Optimistic delete: pull the row out of the local cache + UI
+  // immediately so the action feels instant. If the API call fails,
+  // we restore the row and surface a toast. The cache invalidation
+  // happens after the API call returns so concurrent navigation
+  // doesn't read a torn state.
+  const snapshot = cache;
+  const removed = cache.find(r => r.id === id);
+  cache = cache.filter(r => r.id !== id);
+  refresh(root);
   try {
     await API.request(`/investments/${id}`, { method: "DELETE" });
-    cache = cache.filter(r => r.id !== id);
     invalidateCache("/investments/", "/dashboard/");
     try { sessionStorage.setItem(`swr:${state.token?.slice(-12) || "anon"}:/investments/`, JSON.stringify(cache)); } catch (_) {}
     toast(t("common.deleted"), "success");
+  } catch (e) {
+    // Rollback — the row reappears with no apparent flicker.
+    cache = snapshot;
     refresh(root);
-  } catch (e) { toast(e.message, "error"); }
+    toast(`${t("common.error_generic")} — ${escapeHtml(e.message)}`, "error");
+  }
 }
 
 async function onCsvUpload(ev) {

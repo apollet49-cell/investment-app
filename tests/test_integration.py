@@ -55,6 +55,32 @@ def test_login_wrong_password_returns_401(client):
     assert r.status_code == 401
 
 
+def test_demo_login_creates_user_with_seeded_portfolio(client):
+    """POST /auth/demo should issue a fresh token + populate the user with
+    sample investments so the dashboard isn't empty on first paint."""
+    r = client.post("/auth/demo")
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert "access_token" in body
+    assert body["user"]["email"].startswith("demo+")
+    assert body["user"]["email"].endswith("@local.invest")
+    assert body["user"]["name"] == "Demo"
+    # The seeded portfolio must show up in /investments.
+    token = body["access_token"]
+    r2 = client.get("/investments/", headers={"Authorization": f"Bearer {token}"})
+    assert r2.status_code == 200
+    assert len(r2.json()) > 0, "demo user should have seeded investments"
+
+
+def test_demo_login_creates_independent_users(client):
+    """Each /auth/demo call gets its own user — two clicks shouldn't share
+    state (otherwise demo visitors would step on each other's data)."""
+    r1 = client.post("/auth/demo")
+    r2 = client.post("/auth/demo")
+    assert r1.json()["user"]["id"] != r2.json()["user"]["id"]
+    assert r1.json()["user"]["email"] != r2.json()["user"]["email"]
+
+
 # ---------- investments CRUD ----------
 
 def test_investment_crud_roundtrip(client, auth_headers):

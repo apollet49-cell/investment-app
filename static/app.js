@@ -359,7 +359,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "59";
+const VIEW_VERSION = "60";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -377,6 +377,7 @@ const ROUTES = [
   { hash: "#/tax", titleKey: "tax.title", load: () => import(v("/static/views/tax.js")) },
   { hash: "#/fire", titleKey: "fire.title", load: () => import(v("/static/views/fire.js")) },
   { hash: "#/settings", titleKey: "settings.title", load: () => import(v("/static/views/settings.js")) },
+  { hash: "#/review", titleKey: "review.title", load: () => import(v("/static/views/review.js")) },
 ];
 
 // Inline SVG icons (Feather/Lucide style, 1.5px stroke, currentColor so they
@@ -412,6 +413,7 @@ const SIDEBAR_LINKS = [
   { hash: "#/dashboard",   icon: "dashboard",   labelKey: "nav.dashboard" },
   { hash: "#/investments", icon: "investments", labelKey: "nav.investments" },
   { hash: "#/transactions",icon: "transactions",labelKey: "nav.transactions" },
+  { hash: "#/review",      icon: "reports",     labelKey: "review.title", badge: "NEW" },
   { hash: "#/fire",        icon: "fire",        labelKey: "nav.fire" },
   { hash: "#/tax",         icon: "tax",         labelKey: "nav.tax" },
   { hash: "#/scenarios",   icon: "scenarios",   labelKey: "nav.scenarios" },
@@ -619,6 +621,7 @@ function buildSidebar() {
   const renderLinks = (links) => links.map(l => `
     <a class="sidebar-link" data-hash="${l.hash}" href="${l.hash}">
       <span class="ico">${ICONS[l.icon]}</span><span class="lbl">${t(l.labelKey)}</span>
+      ${l.badge ? `<span class="nav-badge">${l.badge}</span>` : ""}
     </a>
   `).join("");
   const nav = document.getElementById("sidebar-nav");

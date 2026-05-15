@@ -222,6 +222,220 @@ a { color: var(--primary-strong); }
   .hero-insight .hero-sub  { font-size: 12px; }
 }
 
+/* ---------- Monthly Review (killer feature) ---------- */
+/* A print-ready single-page report — generated client-side from
+   /dashboard/summary + /performance + /risk. The user hits ⌘P and the
+   browser produces a clean PDF; print styles below strip the sidebar,
+   tabbar, and chrome so only the report prints. */
+.review-shell {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 24px 4px 80px;
+}
+.review-header {
+  margin-bottom: 36px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 22px;
+  position: relative;
+}
+.review-eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.review-title {
+  font-family: var(--font-serif);
+  font-size: 36px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: var(--primary-strong);
+  margin: 0 0 6px;
+  line-height: 1.15;
+}
+.review-meta {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.review-print {
+  position: absolute;
+  top: 0; right: 0;
+}
+.review-section {
+  margin-top: 32px;
+}
+.review-section h2 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 22px;
+  letter-spacing: -0.005em;
+  color: var(--text);
+  margin: 0 0 18px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.review-overview-grid,
+.review-risk-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  margin-bottom: 16px;
+}
+.review-stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.review-stat-value {
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.2;
+}
+.review-stat-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.review-stat-sub.positive { color: var(--success); }
+.review-stat-sub.negative { color: var(--danger); }
+.review-para {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text);
+  margin: 14px 0 0;
+}
+.review-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 14px;
+}
+.review-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 8px 0;
+  border-bottom: 1px dotted var(--border);
+}
+.review-rank {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  color: var(--primary);
+  width: 24px;
+}
+.review-name { font-weight: 500; flex: 1; }
+.review-weight { color: var(--text-muted); font-size: 13px; }
+.review-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-bottom: 14px;
+}
+.review-bar-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 55px;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+.review-bar-label { color: var(--text); }
+.review-bar-track {
+  height: 8px;
+  background: var(--surface-subtle);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.review-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary) 0%, var(--primary-strong) 100%);
+  border-radius: 4px;
+}
+.review-bar-pct {
+  text-align: right;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.review-actions {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.review-actions li {
+  display: flex;
+  gap: 14px;
+  padding: 16px 18px;
+  background: var(--surface-subtle);
+  border-left: 3px solid var(--primary);
+  border-radius: 4px;
+}
+.review-action-num {
+  font-family: var(--font-serif);
+  font-size: 24px;
+  color: var(--primary);
+  width: 28px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.review-action-title {
+  font-weight: 500;
+  font-size: 14.5px;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.review-action-detail {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.review-footer {
+  margin-top: 44px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+  text-align: center;
+}
+
+/* Print styles — when user hits ⌘P, strip the chrome and let only the
+   review section be visible. Tight margins so it fits on one page. */
+@media print {
+  .sidebar, .topbar, .mobile-tabbar, .chat-fab, .chat-panel,
+  .no-print, .review-print, #toast-host {
+    display: none !important;
+  }
+  body, html, .app-shell, .main {
+    background: white !important;
+    color: black !important;
+  }
+  .review-shell {
+    max-width: none;
+    padding: 0;
+    margin: 0;
+  }
+  .review-section { page-break-inside: avoid; }
+  .review-title { color: #2a241e; }
+  .review-stat-value { color: #2a241e; }
+  .review-actions li { background: #f7f3ea; border-color: #6b7d5e; }
+  .view-root { padding: 0 !important; }
+  @page { margin: 18mm; }
+}
+
+@media (max-width: 640px) {
+  .review-shell { padding: 16px 0 80px; }
+  .review-title { font-size: 26px; }
+  .review-overview-grid, .review-risk-summary { grid-template-columns: 1fr; }
+  .review-bar-row { grid-template-columns: 80px 1fr 50px; font-size: 12px; }
+  .review-print { position: static; margin-top: 14px; }
+}
+
 /* ---------- FIRE/FR landing layout ---------- */
 .landing {
   display: grid;
@@ -327,15 +541,24 @@ a { color: var(--primary-strong); }
 .brand-mark {
   width: 30px; height: 30px;
   display: inline-flex; align-items: center; justify-content: center;
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: 50%;
-  font-size: 0;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='none' stroke='%238a7558' stroke-width='4'/><path d='M30 60 L45 45 L55 55 L70 35' stroke='%238a7558' stroke-width='4' fill='none' stroke-linecap='round'/></svg>");
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: 18px 18px;
+  /* The mark is the SVG inline in index.html — `currentColor` on the
+     rect fills it with the sage accent. Letting it use the parent's
+     color keeps the logo themable in dark mode. */
+  color: var(--success);
   flex-shrink: 0;
+}
+.brand-mark svg { width: 30px; height: 30px; display: block; }
+
+/* NEW badge on sidebar items (used for the Monthly Review launch). */
+.nav-badge {
+  margin-left: auto;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  padding: 2px 6px;
+  background: var(--success);
+  color: #faf7f2;
+  border-radius: 3px;
+  font-weight: 500;
 }
 .sidebar-nav {
   flex: 1;
