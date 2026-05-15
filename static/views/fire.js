@@ -32,7 +32,7 @@ async function refresh(root) {
   draw(root, data);
 }
 
-function draw(root, data) {
+async function draw(root, data) {
   const progress = data.progress_pct || 0;
   const years = data.years_to_fire;
   const yearsStr = data.already_fire ? "🎉 " + t("fire.already_fire") : (years == null ? "—" : `${years.toFixed(1)}`);
