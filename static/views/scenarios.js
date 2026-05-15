@@ -1,4 +1,4 @@
-import { API, money, pct, spinner, toast, state, escapeHtml } from "/static/app.js";
+import { API, loadChartJs, money, pct, spinner, toast, state, escapeHtml } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 const RISKS = ["low", "medium", "high"];
@@ -127,9 +127,11 @@ function subCard(sub, color) {
   </div></div>`;
 }
 
-function drawChart(sim) {
+async function drawChart(sim) {
   const ctx = document.getElementById("sc-chart");
-  if (!ctx || !window.Chart) return;
+  if (!ctx) return;
+  await loadChartJs();
+  if (!document.getElementById("sc-chart")) return;
   try { state.charts.scenario?.destroy?.(); } catch (_) {}
   state.charts.scenario = new window.Chart(ctx, {
     type: "line",

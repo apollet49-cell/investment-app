@@ -1,4 +1,4 @@
-import { API, state, money, spinner, toast, escapeHtml, onViewCleanup } from "/static/app.js";
+import { API, loadChartJs, state, money, spinner, toast, escapeHtml, onViewCleanup } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 let dcaCache = [];
@@ -169,9 +169,11 @@ function kpi(label, value, cls = "") {
   return `<div class="summary-card"><div class="label">${label}</div><div class="value ${cls}" style="font-size:22px">${value}</div></div>`;
 }
 
-function drawSimChart(data) {
+async function drawSimChart(data) {
   const ctx = document.getElementById("sim-chart");
-  if (!ctx || !window.Chart) return;
+  if (!ctx) return;
+  await loadChartJs();
+  if (!document.getElementById("sim-chart")) return;
   if (state.charts.sim) { try { state.charts.sim.destroy(); } catch (_) {} }
   state.charts.sim = new window.Chart(ctx, {
     type: "line",

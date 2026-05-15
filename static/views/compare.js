@@ -1,4 +1,4 @@
-import { API, state, pct, spinner, toast, escapeHtml, onViewCleanup } from "/static/app.js";
+import { API, loadChartJs, state, pct, spinner, toast, escapeHtml, onViewCleanup } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 const PERIODS = ["1mo", "3mo", "6mo", "1y", "5y"];
@@ -124,8 +124,11 @@ async function runCompare() {
   }
 }
 
-function drawChart(series) {
+async function drawChart(series) {
   const ctx = document.getElementById("compare-chart");
+  if (!ctx) return;
+  await loadChartJs();
+  if (!document.getElementById("compare-chart")) return;
   if (state.charts.compare) { try { state.charts.compare.destroy(); } catch (_) {} }
   // Use the date axis from the longest series for the labels (every series is
   // normalised to base 100 so we don't need a shared x — just plot each in its

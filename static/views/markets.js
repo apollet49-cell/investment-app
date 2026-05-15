@@ -1,4 +1,4 @@
-import { API, state, money, pct, spinner, toast, escapeHtml, onViewCleanup } from "/static/app.js";
+import { API, loadLightweightCharts, state, money, pct, spinner, toast, escapeHtml, onViewCleanup } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 // Whitelist URL schemes when rendering external links — blocks javascript:/data:
@@ -528,12 +528,12 @@ function stat(label, val) {
   return `<div class="detail-stat"><span class="label">${label}</span><span class="value">${val}</span></div>`;
 }
 
-function drawDetailChart(d) {
+async function drawDetailChart(d) {
   const host = document.getElementById("detail-chart");
-  if (!host || !window.LightweightCharts) {
-    host.innerHTML = `<div class="alert-banner error">Lightweight Charts library not loaded.</div>`;
-    return;
-  }
+  if (!host) return;
+  host.innerHTML = `<div style="text-align:center;padding:24px">${spinner()}</div>`;
+  await loadLightweightCharts();
+  if (!document.getElementById("detail-chart")) return; // user closed modal
   host.innerHTML = "";
   const isDark = state.theme === "dark";
   const chart = window.LightweightCharts.createChart(host, {

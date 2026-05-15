@@ -1,4 +1,4 @@
-import { API, cachedGet, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, track } from "/static/app.js";
+import { API, cachedGet, loadChartJs, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, track } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 // Persist the active dashboard tab across renders (auto-refresh re-renders
@@ -565,9 +565,11 @@ async function loadStressTest() {
   }
 }
 
-function buildPortfolioChart(points) {
+async function buildPortfolioChart(points) {
   const ctx = document.getElementById("chart-portfolio");
-  if (!ctx || !window.Chart) return;
+  if (!ctx) return;
+  await loadChartJs();
+  if (!document.getElementById("chart-portfolio")) return; // user navigated away
   state.charts.portfolio = new window.Chart(ctx, {
     type: "line",
     data: {
@@ -638,7 +640,9 @@ async function loadHistoryAndBenchmark(isCancelled) {
 
   // Re-draw the portfolio chart with the real snapshot series + S&P overlay.
   const ctx = document.getElementById("chart-portfolio");
-  if (!ctx || !window.Chart) return;
+  if (!ctx) return;
+  await loadChartJs();
+  if (!document.getElementById("chart-portfolio")) return; // navigated away
   try { state.charts.portfolio?.destroy?.(); } catch (_) {}
 
   // Both series use the snapshot dates as the x-axis; map benchmark by date.
@@ -692,9 +696,11 @@ async function loadHistoryAndBenchmark(isCancelled) {
   });
 }
 
-function buildAllocationChart(byType) {
+async function buildAllocationChart(byType) {
   const ctx = document.getElementById("chart-allocation");
-  if (!ctx || !window.Chart) return;
+  if (!ctx) return;
+  await loadChartJs();
+  if (!document.getElementById("chart-allocation")) return;
   try { state.charts.allocation?.destroy?.(); } catch (_) {}
   const labels = Object.keys(byType);
   const data = Object.values(byType);
@@ -717,9 +723,11 @@ function buildAllocationChart(byType) {
   });
 }
 
-function buildMonthlyChart(rows) {
+async function buildMonthlyChart(rows) {
   const ctx = document.getElementById("chart-monthly");
-  if (!ctx || !window.Chart) return;
+  if (!ctx) return;
+  await loadChartJs();
+  if (!document.getElementById("chart-monthly")) return;
   try { state.charts.monthly?.destroy?.(); } catch (_) {}
   state.charts.monthly = new window.Chart(ctx, {
     type: "bar",

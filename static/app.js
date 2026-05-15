@@ -52,27 +52,47 @@ export { API };
 // `onUpdate(fresh)` only if the payload changed. This is what makes
 // page-to-page navigation feel snappy after the first visit.
 //
+// Request deduplication: when N concurrent callers ask for the same
+// uncached path (e.g. dashboard.js calling loadPerformance + loadHistoryAndBenchmark
+// in parallel, both wanting /dashboard/history), only ONE fetch goes
+// over the wire — the others await the same promise.
+//
 // Cache is scoped to the JWT to avoid bleeding data between users on a
-// shared browser session. Cleared on logout via API.clearCache().
+// shared browser session. Cleared on logout via clearSwrCache().
+const _inflight = new Map();
+
 export async function cachedGet(path, onUpdate) {
   const key = `swr:${state.token?.slice(-12) || "anon"}:${path}`;
   const cachedRaw = sessionStorage.getItem(key);
   if (cachedRaw) {
-    // Fire-and-forget background refresh. If the fresh payload differs
-    // from the cached one, we hand it to onUpdate so the view can
-    // re-render with the new data.
-    API.request(path).then(fresh => {
-      const freshRaw = JSON.stringify(fresh);
-      sessionStorage.setItem(key, freshRaw);
-      if (freshRaw !== cachedRaw && typeof onUpdate === "function") {
-        try { onUpdate(fresh); } catch (_) {}
-      }
-    }).catch(() => {});
+    // Fire-and-forget background refresh, deduped via the inflight map
+    // so concurrent SWR readers share one revalidation fetch.
+    if (!_inflight.has(key)) {
+      const p = API.request(path).then(fresh => {
+        const freshRaw = JSON.stringify(fresh);
+        sessionStorage.setItem(key, freshRaw);
+        if (freshRaw !== cachedRaw && typeof onUpdate === "function") {
+          try { onUpdate(fresh); } catch (_) {}
+        }
+        return fresh;
+      }).catch(() => null).finally(() => _inflight.delete(key));
+      _inflight.set(key, p);
+    }
     try { return JSON.parse(cachedRaw); } catch (_) { /* fall through */ }
   }
-  const fresh = await API.request(path);
-  try { sessionStorage.setItem(key, JSON.stringify(fresh)); } catch (_) {}
-  return fresh;
+  // Cache miss: dedupe via inflight too.
+  if (_inflight.has(key)) {
+    const fresh = await _inflight.get(key);
+    if (fresh !== null && fresh !== undefined) return fresh;
+  }
+  const promise = API.request(path)
+    .then(fresh => {
+      try { sessionStorage.setItem(key, JSON.stringify(fresh)); } catch (_) {}
+      return fresh;
+    })
+    .finally(() => _inflight.delete(key));
+  _inflight.set(key, promise);
+  return await promise;
 }
 
 export function clearSwrCache() {
@@ -107,6 +127,39 @@ export function prewarmCache() {
     }).catch(() => {});
   }
 }
+
+// Lazy script loader. Memoised Promise so concurrent callers get the same
+// load. Used to defer Chart.js and lightweight-charts (combined ~300KB
+// unzipped) from the index.html <script> tags — those pulled the libs
+// even on routes that don't draw any charts (Calculator, Settings,
+// Transactions list, Reports). Now each chart-using view does:
+//   await loadChartJs();
+//   state.charts.foo = new window.Chart(ctx, { ... });
+const _scriptCache = new Map();
+export function loadScript(src) {
+  if (_scriptCache.has(src)) return _scriptCache.get(src);
+  const p = new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) {
+      if (existing.dataset.loaded === "1") return resolve();
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", reject, { once: true });
+      return;
+    }
+    const s = document.createElement("script");
+    s.src = src;
+    s.async = true;
+    s.onload = () => { s.dataset.loaded = "1"; resolve(); };
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  _scriptCache.set(src, p);
+  return p;
+}
+export const loadChartJs = () =>
+  window.Chart ? Promise.resolve() : loadScript("https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js");
+export const loadLightweightCharts = () =>
+  window.LightweightCharts ? Promise.resolve() : loadScript("https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js");
 
 // Drop one or more cached paths so the next cachedGet() goes to the
 // network. Call this after mutations (POST/PUT/DELETE) on a resource so
@@ -269,7 +322,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "57";
+const VIEW_VERSION = "58";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },

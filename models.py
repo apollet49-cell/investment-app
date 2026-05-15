@@ -213,6 +213,11 @@ class PortfolioSnapshot(Base):
     __tablename__ = "portfolio_snapshots"
     __table_args__ = (
         UniqueConstraint("user_id", "snapshot_date", name="uq_snapshot_user_date"),
+        # Composite covers the (user_id, snapshot_date >= cutoff) queries in
+        # /dashboard/history and /dashboard/risk. Postgres can satisfy both
+        # the filter and the ORDER BY from this single index, avoiding a sort
+        # when the time-window is small.
+        Index("ix_snap_user_date", "user_id", "snapshot_date"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

@@ -1,4 +1,4 @@
-import { API, cachedGet, invalidateCache, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, downloadAuth, track } from "/static/app.js";
+import { API, cachedGet, invalidateCache, loadChartJs, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, downloadAuth, track } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 const TYPES = ["stock", "real_estate", "crypto", "bond", "etf", "startup"];
@@ -1336,9 +1336,11 @@ async function renderMarketDetail(body, inv) {
   }
 }
 
-function drawDetailChart(series, inv) {
+async function drawDetailChart(series, inv) {
   const ctx = document.getElementById("detail-chart");
-  if (!ctx || !window.Chart) return;
+  if (!ctx) return;
+  await loadChartJs();
+  if (!document.getElementById("detail-chart")) return;
   try { detailChart?.destroy?.(); } catch (_) {}
   const labels = series.map(p => p.date || p.timestamp);
   const data = series.map(p => p.close ?? p.price ?? p.value);

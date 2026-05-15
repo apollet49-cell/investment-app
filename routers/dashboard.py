@@ -127,8 +127,14 @@ async def summary(current: User = Depends(get_current_user), db: Session = Depen
         monthly_returns.append({"month": portfolio_over_time[i]["date"], "return_pct": round(ret, 2)})
 
     triggered = evaluate_alerts(db, current, investments=rows)
-    diversification = compute_diversification(rows)
-    carbon = compute_carbon(rows)
+    # diversification + carbon are pure-Python loops over `rows`; with a
+    # large portfolio they can take ~10-30ms each. Offload to a worker
+    # thread so we don't block the asyncio event loop while other users'
+    # requests are waiting (matters under concurrent load on the free tier).
+    diversification, carbon = await asyncio.gather(
+        asyncio.to_thread(compute_diversification, rows),
+        asyncio.to_thread(compute_carbon, rows),
+    )
 
     return DashboardSummary(
         total_invested=round(total_invested, 2),
@@ -216,11 +222,23 @@ async def history(
     so they're directly comparable."""
     cutoff = today_utc() - timedelta(days=days)
 
-    # Ensure we have at least today's snapshot — useful for fresh users who
-    # haven't waited for the nightly job to run yet. Off-loaded to a worker
-    # thread because SQLAlchemy is sync — running it inline would block the
-    # async event loop for tens to hundreds of ms per request.
-    await asyncio.to_thread(take_snapshot, db, current)
+    # Snapshot for today happens in the background — fire-and-forget. The
+    # chart endpoint shouldn't pay the 3-query write cost on the user's
+    # request path. If today's snapshot isn't there yet, the chart will be
+    # one day shorter; the missing point lands by the next request or the
+    # 6h scheduler tick. Previously this ran via to_thread and added ~15ms
+    # to every history call.
+    from database import SessionLocal
+    user_id = current.id
+    async def _bg_snap():
+        bg_db = SessionLocal()
+        try:
+            bg_user = bg_db.get(User, user_id)
+            if bg_user:
+                await asyncio.to_thread(take_snapshot, bg_db, bg_user)
+        finally:
+            bg_db.close()
+    asyncio.create_task(_bg_snap())
 
     snaps = (
         db.query(PortfolioSnapshot)

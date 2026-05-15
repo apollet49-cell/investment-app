@@ -1,4 +1,4 @@
-import { API, state, money, spinner, toast, escapeHtml, onViewCleanup, track } from "/static/app.js";
+import { API, loadChartJs, state, money, spinner, toast, escapeHtml, onViewCleanup, track } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 let monthlyExpenses = 2000;
@@ -114,8 +114,10 @@ function draw(root, data) {
   document.getElementById("fire-mul").oninput = (e) => { multiplier = parseFloat(e.target.value) || 25; debouncedRefresh(); };
 
   // Draw the trajectory chart
-  if (data.trajectory && data.trajectory.length && window.Chart) {
+  if (data.trajectory && data.trajectory.length) {
+    await loadChartJs();
     const ctx = document.getElementById("fire-chart");
+    if (!ctx) return; // navigated away
     try { state.charts.fire?.destroy?.(); } catch (_) {}
     state.charts.fire = new window.Chart(ctx, {
       type: "line",
