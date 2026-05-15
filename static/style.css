@@ -215,11 +215,28 @@ a { color: var(--primary-strong); }
   margin-top: 4px;
   line-height: 1.4;
 }
+.hero-insight .hero-body { flex: 1; }
+.hero-insight .hero-cta {
+  font-size: 12px;
+  color: var(--primary-strong);
+  text-decoration: none;
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  white-space: nowrap;
+  transition: background 120ms ease, transform 120ms ease;
+  flex-shrink: 0;
+}
+.hero-insight .hero-cta:hover {
+  background: var(--surface-subtle);
+  transform: translateX(2px);
+}
 @media (max-width: 640px) {
-  .hero-insight { padding: 14px 16px; gap: 12px; }
+  .hero-insight { padding: 14px 16px; gap: 12px; flex-wrap: wrap; }
   .hero-insight .hero-icon { width: 32px; height: 32px; font-size: 17px; }
   .hero-insight .hero-line { font-size: 16px; }
   .hero-insight .hero-sub  { font-size: 12px; }
+  .hero-insight .hero-cta { width: 100%; text-align: center; }
 }
 
 /* ---------- Monthly Review (killer feature) ---------- */

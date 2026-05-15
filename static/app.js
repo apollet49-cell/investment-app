@@ -359,7 +359,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "60";
+const VIEW_VERSION = "61";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -402,6 +402,7 @@ const ICONS = {
   sun:         `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>`,
   moon:        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>`,
   logout:      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+  review:      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/><path d="M12 18 L13.6 14.5 L17 13 L13.6 11.5 L12 8 L10.4 11.5 L7 13 L10.4 14.5 Z"/></svg>`,
 };
 
 // FIRE-focused navigation. Cut from 12 to 8 items — Markets browser,
@@ -413,7 +414,7 @@ const SIDEBAR_LINKS = [
   { hash: "#/dashboard",   icon: "dashboard",   labelKey: "nav.dashboard" },
   { hash: "#/investments", icon: "investments", labelKey: "nav.investments" },
   { hash: "#/transactions",icon: "transactions",labelKey: "nav.transactions" },
-  { hash: "#/review",      icon: "reports",     labelKey: "review.title", badge: "NEW" },
+  { hash: "#/review",      icon: "review",      labelKey: "review.title", badge: "NEW" },
   { hash: "#/fire",        icon: "fire",        labelKey: "nav.fire" },
   { hash: "#/tax",         icon: "tax",         labelKey: "nav.tax" },
   { hash: "#/scenarios",   icon: "scenarios",   labelKey: "nav.scenarios" },

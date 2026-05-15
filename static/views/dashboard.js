@@ -533,6 +533,7 @@ function heroInsight(data) {
         <div class="hero-line">${escapeHtml(line)}</div>
         <div class="hero-sub">${escapeHtml(sub)}</div>
       </div>
+      <a class="hero-cta" href="#/review">${t("dashboard.open_review")} →</a>
     </div>`;
 }
 
