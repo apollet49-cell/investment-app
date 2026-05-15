@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections import defaultdict
 from datetime import date, timedelta
+
+log = logging.getLogger("dashboard")
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -336,3 +339,64 @@ async def risk(
     metrics["benchmark_symbol"] = benchmark
     metrics["window_days"] = days
     return metrics
+
+
+# ---- AI-augmented Monthly Review prose ---------------------------------
+# In-memory TTL cache: each Claude call costs money, so we don't want
+# every visit to /review to fire one. 6h TTL means a user looking at the
+# review multiple times in a session pays once. Keyed by user_id +
+# portfolio_value (rounded to nearest $100) so adding a position triggers
+# a fresh generation.
+_ai_review_cache: dict[tuple[int, int], tuple[str, float]] = {}
+_AI_REVIEW_TTL = 6 * 60 * 60  # 6 hours
+
+
+@router.get("/ai-review")
+async def ai_review(current: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict:
+    """Generate a 2-3 paragraph personalized portfolio commentary via Claude.
+
+    Returns `{available: false, reason: "no_api_key"}` if the user hasn't
+    set their Anthropic key (and there's no global ANTHROPIC_API_KEY env
+    var). The Review view hides the AI section when available=false, so
+    users without a key still see the deterministic review — just without
+    the prose.
+
+    Cached for 6h per user × portfolio-value bucket so revisits don't burn
+    tokens. The cache key includes portfolio value rounded to $100 so
+    material changes invalidate, but a $0.50 price tick doesn't."""
+    from services.ai_service import _resolve_key, APIKeyMissingError, one_shot
+    import time
+
+    # Compute the bucketed cache key
+    rows = db.query(Investment).filter(Investment.user_id == current.id).all()
+    if not rows:
+        return {"available": False, "reason": "no_portfolio"}
+    portfolio_value_bucket = int(sum(r.current_value for r in rows) / 100)
+    cache_key = (current.id, portfolio_value_bucket)
+
+    if cache_key in _ai_review_cache:
+        prose, ts = _ai_review_cache[cache_key]
+        if time.time() - ts < _AI_REVIEW_TTL:
+            return {"available": True, "prose": prose, "cached": True}
+
+    # Try to resolve the key — if neither user nor env has one, bail.
+    try:
+        _resolve_key(current)
+    except APIKeyMissingError:
+        return {"available": False, "reason": "no_api_key"}
+
+    prompt = (
+        "Write a brutally honest, specific 2-paragraph monthly review of THIS portfolio. "
+        "First paragraph: what's working and why, with specific numbers. "
+        "Second paragraph: the single biggest risk or blind spot and what to do about it. "
+        "Be direct, like a candid friend, not a fund prospectus. No bullet lists, no headers, "
+        "no generic financial-advisor caveats. Maximum 180 words total."
+    )
+    try:
+        prose = await asyncio.to_thread(one_shot, db, current, prompt, None, 600)
+    except Exception as e:
+        log.warning("ai-review generation failed for user %d: %s", current.id, e)
+        return {"available": False, "reason": "generation_failed"}
+
+    _ai_review_cache[cache_key] = (prose, time.time())
+    return {"available": True, "prose": prose, "cached": False}

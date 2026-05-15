@@ -421,6 +421,34 @@ a { color: var(--primary-strong); }
   text-align: center;
 }
 
+/* AI section — only rendered when the user has an Anthropic key set.
+   Distinct visual treatment (sage left border, subtle bg) so it reads
+   as "generated content" vs the deterministic facts below. */
+.ai-pill {
+  display: inline-block;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  padding: 2px 6px;
+  background: var(--success);
+  color: #faf7f2;
+  border-radius: 3px;
+  margin-left: 8px;
+  vertical-align: middle;
+  font-weight: 500;
+  font-family: var(--font-sans);
+}
+.review-ai-prose {
+  padding: 18px 22px;
+  background: var(--surface-subtle);
+  border-left: 3px solid var(--success);
+  border-radius: 6px;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.65;
+}
+.review-ai-prose p { margin: 0 0 12px; color: var(--text); }
+.review-ai-prose p:last-child { margin-bottom: 0; }
+
 /* Print styles — when user hits ⌘P, strip the chrome and let only the
    review section be visible. Tight margins so it fits on one page. */
 @media print {

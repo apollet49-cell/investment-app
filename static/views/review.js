@@ -1,4 +1,4 @@
-import { cachedGet, state, money, pct, skeleton, escapeHtml, onViewCleanup } from "/static/app.js";
+import { API, cachedGet, state, money, pct, skeleton, escapeHtml, onViewCleanup } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 // Monthly Portfolio Review — the killer feature.
@@ -47,6 +47,11 @@ export async function render(root) {
         <button class="btn btn-ghost review-print no-print" id="review-print-btn">${t("review.print")} ⌘P</button>
       </header>
 
+      <section class="review-section" id="ai-review-section" style="display:none">
+        <h2>${t("review.section_ai_take")} <span class="ai-pill">AI</span></h2>
+        <div id="ai-review-prose" class="review-ai-prose"></div>
+      </section>
+
       <section class="review-section">
         <h2>${t("review.section_overview")}</h2>
         ${overviewBlock(summary, perf)}
@@ -78,6 +83,21 @@ export async function render(root) {
     </div>`;
 
   document.getElementById("review-print-btn")?.addEventListener("click", () => window.print());
+
+  // Fetch the AI commentary in the background. If the user hasn't set an
+  // Anthropic key the endpoint returns {available: false} and we leave
+  // the section hidden — the deterministic review below is still useful.
+  cachedGet("/dashboard/ai-review").then((res) => {
+    if (!res?.available || !res.prose) return;
+    const sec = document.getElementById("ai-review-section");
+    const prose = document.getElementById("ai-review-prose");
+    if (!sec || !prose) return;
+    prose.innerHTML = res.prose
+      .split(/\n\n+/)
+      .map(p => `<p>${escapeHtml(p.trim())}</p>`)
+      .join("");
+    sec.style.display = "";
+  }).catch(() => {});
 
   // Keyboard shortcut hint — make ⌘P actually print this view, not
   // a screenshot of the rest of the chrome.
