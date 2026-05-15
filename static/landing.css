@@ -223,8 +223,18 @@ body:has(#auth-screen.landing-v2:not(.hidden)) {
   padding: 12px 16px; min-width: 156px;
   box-shadow: 0 20px 50px -30px rgba(0,0,0,0.6);
 }
-#auth-screen.landing-v2 .lv-float-xirr { top: -10px; right: -22px; }
-#auth-screen.landing-v2 .lv-float-twr { bottom: -18px; left: -24px; }
+/* Pushed further up/down/out so they no longer overlap the chart-value
+   text and the chart-foot legend. Sit clearly above/below the card. */
+#auth-screen.landing-v2 .lv-float-xirr { top: -56px; right: -10px; }
+#auth-screen.landing-v2 .lv-float-twr  { bottom: -52px; left: -10px; }
+
+/* Below 1280px the chart-card is narrower and the floats still conflict
+   with the chart-value text. They're decorative (the same XIRR/TWR
+   numbers live in the hero bullets), so hide them rather than fight
+   a two-layout battle. */
+@media (max-width: 1280px) {
+  #auth-screen.landing-v2 .lv-float-card { display: none; }
+}
 #auth-screen.landing-v2 .lv-fc-label { font-size: 10px; letter-spacing: 0.14em; color: var(--lv-fg-3); }
 #auth-screen.landing-v2 .lv-fc-value { font-size: 28px; font-weight: 500; letter-spacing: -0.02em; color: var(--lv-accent); margin-top: 4px; }
 #auth-screen.landing-v2 .lv-fc-value .lv-pct { font-size: 0.55em; color: var(--lv-fg-3); margin-left: 2px; }
