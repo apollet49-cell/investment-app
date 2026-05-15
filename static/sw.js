@@ -10,7 +10,7 @@
  * Bump CACHE_VERSION whenever the shell changes shape. Old caches are
  * deleted on activate.
  */
-const CACHE_VERSION = "investapp-v7";
+const CACHE_VERSION = "investapp-v8";
 // Pre-cache only "/" (index.html) — it's the app entry and we want offline
 // support for the shell. NOT app.js / style.css / i18n.js: those are static
 // imports inside view modules (`import { loadChartJs } from "/static/app.js"`)

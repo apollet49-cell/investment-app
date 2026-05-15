@@ -546,7 +546,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "79";
+const VIEW_VERSION = "80";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -1004,7 +1004,15 @@ async function bootApp() {
   await loadFxRate();
   // Analytics — fire-and-forget, doesn't block render.
   loadPosthog();
-  if (!window.location.hash) window.location.hash = "#/dashboard";
+  // Normalise the hash to a valid app route before the first render.
+  // After demo/login the hash might be #lv-pricing (CTA on the landing)
+  // or empty, or an old removed route like #/markets. replaceState avoids
+  // firing a hashchange that would double-render the view.
+  const _hash = window.location.hash;
+  const _isValid = _hash && ROUTES.some(r => r.hash === _hash);
+  if (!_isValid) {
+    history.replaceState(null, "", "/#/dashboard");
+  }
   renderRoute();
   // SSE for live price flashes on the Investments view. Server-side
   // heartbeat is 5s and retry is 30s now, so the previous reconnect
