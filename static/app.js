@@ -546,7 +546,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "78";
+const VIEW_VERSION = "79";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -647,9 +647,23 @@ async function renderRoute() {
     showAuth();
     return;
   }
-  const mySeq = ++_routeSeq;
   const hash = window.location.hash || "#/dashboard";
-  const route = ROUTES.find(r => r.hash === hash) || ROUTES[0];
+  // Landing-only anchors (the dropdown menu uses #lv-honest, #lv-pricing
+  // etc. for smooth-scroll). These can fire hashchange even when the
+  // landing is hidden (e.g. an old browser session that still has those
+  // anchors in URL history). DON'T bounce the authenticated user to
+  // dashboard — silently ignore. Same for empty / "#" hashes.
+  if (hash.startsWith("#lv-") || hash === "" || hash === "#") return;
+  // Unknown routes (typos, removed features like #/markets) → silently
+  // rewrite to dashboard via hash change rather than rendering dashboard
+  // under the wrong URL. The hashchange fires renderRoute again with the
+  // correct hash and we render normally.
+  const route = ROUTES.find(r => r.hash === hash);
+  if (!route) {
+    window.location.hash = "#/dashboard";
+    return;
+  }
+  const mySeq = ++_routeSeq;
   const routeTitle = t(route.titleKey);
   document.getElementById("page-title").textContent = routeTitle;
   // Browser tab title — "Dashboard · InvestApp" reads naturally when
