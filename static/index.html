@@ -60,7 +60,7 @@
     .boot-loading span:nth-child(2) { animation-delay: 0.15s; } .boot-loading span:nth-child(3) { animation-delay: 0.3s; }
     @keyframes boot-pulse { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
   </style>
-  <link rel="stylesheet" href="/static/style.css?v=65" />
+  <link rel="stylesheet" href="/static/style.css?v=66" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='8' y='8' width='84' height='84' rx='20' fill='%236b7d5e'/><rect x='26' y='60' width='11' height='22' rx='2' fill='%23faf7f2'/><rect x='44' y='46' width='11' height='36' rx='2' fill='%23faf7f2'/><rect x='62' y='28' width='11' height='54' rx='2' fill='%23faf7f2'/><path d='M31 58 L49 44 L67 26' stroke='%23faf7f2' stroke-width='3' fill='none' stroke-linecap='round'/></svg>" />
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#6b7d5e" />
@@ -83,14 +83,14 @@
     <div id="auth-container">
       <div class="landing">
         <div class="landing-hero">
-          <div class="landing-eyebrow">InvestApp · FIRE &amp; portfolio tracker</div>
-          <h1 class="landing-title">Know whether you're really beating the market.</h1>
-          <p class="landing-subtitle">A no-bullshit portfolio tracker built around real financial math — XIRR, TWR, risk metrics, multi-currency, French tax envelopes (PEA, CTO, AV, PER) — with an AI monthly review that reads your portfolio like a senior advisor would.</p>
+          <div class="landing-eyebrow">InvestApp · A FIRE tracker I actually use</div>
+          <h1 class="landing-title">Built because I was tired of guessing my XIRR.</h1>
+          <p class="landing-subtitle">Every portfolio tracker I tried either lied to me about returns (averaging post-deposit), ignored my French tax envelopes, or made me eyeball the chart vs the S&amp;P. So I built one that doesn't.</p>
           <ul class="landing-bullets">
-            <li>Years-to-FIRE counter that updates in real time as your portfolio grows.</li>
-            <li>Honest XIRR + TWR vs S&amp;P 500 — no fake ROI inflated by your latest deposit.</li>
-            <li>Side-by-side PEA / CTO / AV / PER tax simulation in one click.</li>
-            <li>Real-estate valued from the official French DVF database, not your guess.</li>
+            <li>Honest XIRR + TWR vs S&amp;P 500 — no fake ROI inflated by your last deposit.</li>
+            <li>PEA / CTO / AV / PER side-by-side tax sim in one click.</li>
+            <li>Real-estate valued from the official DVF database, not your guess.</li>
+            <li>Monthly review that reads your portfolio like a senior advisor.</li>
           </ul>
         </div>
         <div class="auth-card">
@@ -169,24 +169,6 @@
     <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
   </div>
 
-  <button id="chat-fab" class="chat-fab hidden" title="Open AI advisor" aria-label="Open AI advisor">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.2L3 21l1.8-6.4A8 8 0 1 1 21 12z"/></svg>
-  </button>
-  <div id="chat-panel" class="chat-panel hidden" role="dialog">
-    <div class="chat-panel-header">
-      <strong id="chat-panel-title">InvestAI</strong>
-      <div>
-        <button id="chat-clear" class="icon-btn" title="Clear chat">🗑</button>
-        <button id="chat-close" class="icon-btn" title="Close">✕</button>
-      </div>
-    </div>
-    <div id="chat-panel-messages" class="chat-messages"></div>
-    <form id="chat-panel-form" class="chat-form">
-      <textarea id="chat-panel-input" rows="2" placeholder="Ask InvestAI…"></textarea>
-      <button type="submit" class="btn btn-primary">Send</button>
-    </form>
-  </div>
-
-  <script type="module" src="/static/app.js?v=65"></script>
+  <script type="module" src="/static/app.js?v=66"></script>
 </body>
 </html>

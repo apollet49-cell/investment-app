@@ -480,20 +480,15 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "65";
+const VIEW_VERSION = "66";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
-  { hash: "#/markets", titleKey: "markets.title", load: () => import(v("/static/views/markets.js")) },
-  { hash: "#/compare", titleKey: "compare.title", load: () => import(v("/static/views/compare.js")) },
-  { hash: "#/watchlist", titleKey: "watchlist.title", load: () => import(v("/static/views/watchlist.js")) },
   { hash: "#/investments", titleKey: "investments.title", load: () => import(v("/static/views/investments.js")) },
   { hash: "#/calculator", titleKey: "calculator.title", load: () => import(v("/static/views/calculator.js")) },
   { hash: "#/scenarios", titleKey: "scenarios.title", load: () => import(v("/static/views/scenarios.js")) },
   { hash: "#/transactions", titleKey: "transactions.title", load: () => import(v("/static/views/transactions.js")) },
-  { hash: "#/plans", titleKey: "plans.title", load: () => import(v("/static/views/plans.js")) },
   { hash: "#/rebalance", titleKey: "rebalance.title", load: () => import(v("/static/views/rebalance.js")) },
-  { hash: "#/chat", titleKey: "chat.title", load: () => import(v("/static/views/chat.js")) },
   { hash: "#/reports", titleKey: "reports.title", load: () => import(v("/static/views/reports.js")) },
   { hash: "#/tax", titleKey: "tax.title", load: () => import(v("/static/views/tax.js")) },
   { hash: "#/fire", titleKey: "fire.title", load: () => import(v("/static/views/fire.js")) },
@@ -540,7 +535,6 @@ const SIDEBAR_LINKS = [
   { hash: "#/tax",         icon: "tax",         labelKey: "nav.tax" },
   { hash: "#/scenarios",   icon: "scenarios",   labelKey: "nav.scenarios" },
   { hash: "#/rebalance",   icon: "rebalance",   labelKey: "nav.rebalance" },
-  { hash: "#/chat",        icon: "chat",        labelKey: "nav.chat" },
   { hash: "#/reports",     icon: "reports",     labelKey: "nav.reports" },
 ];
 // Routes that still exist (direct URL works) but are NOT shown in the sidebar.
@@ -627,8 +621,6 @@ async function renderRoute() {
 // ---------- Auth screen ----------
 function showAuth() {
   document.getElementById("app-shell").classList.add("hidden");
-  document.getElementById("chat-fab").classList.add("hidden");
-  document.getElementById("chat-panel").classList.add("hidden");
   document.getElementById("auth-screen").classList.remove("hidden");
   renderAuthForm("login");
 }
@@ -735,8 +727,8 @@ const MOBILE_TABBAR_LINKS = [
   { hash: "#/dashboard",    icon: "dashboard",    labelKey: "nav.dashboard" },
   { hash: "#/investments",  icon: "investments",  labelKey: "nav.investments" },
   { hash: "#/transactions", icon: "transactions", labelKey: "nav.transactions" },
+  { hash: "#/review",       icon: "review",       labelKey: "review.title" },
   { hash: "#/fire",         icon: "fire",         labelKey: "nav.fire" },
-  { hash: "#/chat",         icon: "chat",         labelKey: "nav.chat" },
 ];
 
 function buildSidebar() {
@@ -808,7 +800,6 @@ async function bootApp() {
   }
   document.getElementById("auth-screen").classList.add("hidden");
   document.getElementById("app-shell").classList.remove("hidden");
-  document.getElementById("chat-fab").classList.remove("hidden");
   document.getElementById("user-chip").textContent = `${state.user.name} · ${state.user.currency || "USD"}`;
   buildSidebar();
   // Fetch the FX rate before rendering so money() shows the right values.
@@ -899,107 +890,12 @@ function setupSSE() {
   }
 }
 
-// ---------- Floating chat panel ----------
-async function toggleChatPanel(open) {
-  const panel = document.getElementById("chat-panel");
-  const isOpen = !panel.classList.contains("hidden");
-  const next = open === undefined ? !isOpen : open;
-  panel.classList.toggle("hidden", !next);
-  if (next) {
-    document.getElementById("chat-panel-title").textContent = t("chat.title");
-    document.getElementById("chat-panel-input").placeholder = t("chat.placeholder");
-    await loadChatPanelHistory();
-  }
-}
-
-async function loadChatPanelHistory() {
-  const messages = document.getElementById("chat-panel-messages");
-  messages.innerHTML = `<div style="text-align:center">${spinner()}</div>`;
-  try {
-    const history = await API.request("/chat/history");
-    if (!history.length) {
-      messages.innerHTML = `<div class="empty-state"><p>${t("chat.empty")}</p></div>`;
-      return;
-    }
-    messages.innerHTML = history.map(msgHtml).join("");
-    messages.scrollTop = messages.scrollHeight;
-  } catch (err) {
-    messages.innerHTML = `<div class="msg error">${escapeHtml(err.message)}</div>`;
-  }
-}
-
-function msgHtml(m) {
-  const cls = m.role === "user" ? "user" : (m.role === "assistant" ? "assistant" : "error");
-  return `<div class="msg ${cls}">${escapeHtml(m.content)}</div>`;
-}
+// Chat removed in this release — the AI value lives in the Monthly Review
+// (deterministic insights for everyone + Claude prose when API key set).
+// A floating ChatGPT-style box wasn't differentiated enough to keep.
 
 export function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
-
-export async function sendChatMessage(text, messagesEl, onDone) {
-  track("chat_message_sent", { length: text.length });
-  // Append user bubble immediately
-  messagesEl.insertAdjacentHTML("beforeend", msgHtml({ role: "user", content: text }));
-  const assistantBubble = document.createElement("div");
-  assistantBubble.className = "msg assistant";
-  assistantBubble.innerHTML = `<div class="typing"><span></span><span></span><span></span></div>`;
-  messagesEl.appendChild(assistantBubble);
-  messagesEl.scrollTop = messagesEl.scrollHeight;
-
-  let accumulated = "";
-  try {
-    // Streaming SSE response — can't use API.request (which parses JSON).
-    // We mimic API.request's 401-→-logout behaviour manually so an expired
-    // token mid-chat redirects to login instead of just showing "Error 401".
-    const res = await fetch("/chat/message", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${state.token}` },
-      body: JSON.stringify({ message: text }),
-    });
-    if (res.status === 401) {
-      logout();
-      assistantBubble.remove();
-      return;
-    }
-    if (!res.ok || !res.body) {
-      assistantBubble.classList.remove("assistant");
-      assistantBubble.classList.add("error");
-      assistantBubble.textContent = `Error ${res.status}: ${res.statusText}`;
-      return;
-    }
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const events = buffer.split("\n\n");
-      buffer = events.pop() || "";
-      for (const ev of events) {
-        const line = ev.split("\n").find(l => l.startsWith("data:"));
-        if (!line) continue;
-        try {
-          const payload = JSON.parse(line.slice(5).trim());
-          if (payload.delta) {
-            accumulated += payload.delta;
-            assistantBubble.textContent = accumulated;
-            messagesEl.scrollTop = messagesEl.scrollHeight;
-          } else if (payload.error) {
-            assistantBubble.classList.remove("assistant");
-            assistantBubble.classList.add("error");
-            assistantBubble.textContent = payload.error;
-          }
-        } catch (_) {}
-      }
-    }
-  } catch (err) {
-    assistantBubble.classList.remove("assistant");
-    assistantBubble.classList.add("error");
-    assistantBubble.textContent = err.message || "Stream failed";
-  }
-  if (onDone) onDone(accumulated);
 }
 
 // ---------- Bootstrapping ----------
@@ -1104,22 +1000,6 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("sidebar-nav")?.addEventListener("click", closeOnSidebarInteraction);
   document.getElementById("sidebar-nav-bottom")?.addEventListener("click", closeOnSidebarInteraction);
   document.querySelector(".sidebar-footer")?.addEventListener("click", closeOnSidebarInteraction);
-  document.getElementById("chat-fab").onclick = () => toggleChatPanel(true);
-  document.getElementById("chat-close").onclick = () => toggleChatPanel(false);
-  document.getElementById("chat-clear").onclick = async () => {
-    try {
-      await API.request("/chat/history", { method: "DELETE" });
-      await loadChatPanelHistory();
-    } catch (e) { toast(e.message, "error"); }
-  };
-  document.getElementById("chat-panel-form").onsubmit = (ev) => {
-    ev.preventDefault();
-    const ta = document.getElementById("chat-panel-input");
-    const text = ta.value.trim();
-    if (!text) return;
-    ta.value = "";
-    sendChatMessage(text, document.getElementById("chat-panel-messages"));
-  };
   window.addEventListener("hashchange", () => {
     setSidebarOpen(false);
     renderRoute();

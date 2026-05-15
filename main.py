@@ -44,23 +44,22 @@ if app_settings.SENTRY_DSN:
         )
 from routers import (
     alerts as alerts_router,
-    chatbot as chatbot_router,
     dashboard as dashboard_router,
     dividends as dividends_router,
     exports as exports_router,
     investments as investments_router,
     market as market_router,
-    markets as markets_router,
     planning as planning_router,
-    plans as plans_router,
     scenarios as scenarios_router,
     settings as settings_router,
     tax as tax_router,
     transactions as transactions_router,
-    wallet as wallet_router,
-    watchlist as watchlist_router,
 )
 from routers import calculator as calculator_router
+# Routers no longer wired: chatbot, markets (browser), plans (DCA),
+# wallet, watchlist. Files remain on disk but are unreachable until
+# explicitly re-included here. Removed to focus the product story on
+# the 9 surviving features that are actually finished.
 from auth import router as auth_router
 # app_settings imported above for Sentry; kept here as documentation.
 
@@ -230,20 +229,15 @@ app.include_router(auth_router)
 app.include_router(investments_router.router)
 app.include_router(calculator_router.router)
 app.include_router(scenarios_router.router)
-app.include_router(chatbot_router.router)
 app.include_router(exports_router.router)
 app.include_router(dashboard_router.router)
 app.include_router(settings_router.router)
 app.include_router(alerts_router.router)
 app.include_router(market_router.router)
-app.include_router(markets_router.router)
-app.include_router(watchlist_router.router)
-app.include_router(wallet_router.router)
 app.include_router(tax_router.router)
 app.include_router(planning_router.router)
 app.include_router(transactions_router.router)
 app.include_router(dividends_router.router)
-app.include_router(plans_router.router)
 
 
 @app.get("/health")

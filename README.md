@@ -1,21 +1,62 @@
-# Investment Analysis App
+# InvestApp
 
-Production-shaped investment analysis with an AI advisor (Anthropic Claude) and a live market-data layer (yfinance / Alpha Vantage / CoinGecko / FRED). FastAPI backend + vanilla-JS SPA frontend, single-process, SQLite-backed.
+> Built because I was tired of guessing my XIRR.
 
-## Features
+Live demo: [investment-app-kud9.onrender.com](https://investment-app-kud9.onrender.com)
+(click "Try the demo — no signup" on the landing page; you land in a fully-seeded portfolio in two clicks)
 
-- **Auth**: JWT-based register/login. Each user only sees their own data.
-- **Investments**: CRUD + sortable/filterable table + bulk CSV import + colour-coded ROI badges.
-- **Dashboard**: Total invested / current value / ROI / best performer KPIs, portfolio-over-time line chart, allocation doughnut, monthly-returns bar chart, dismissible alert banners.
-- **Calculator**: 9 modes — ROI, Compound interest, CAGR, NPV (numpy-financial), IRR (Newton-Raphson), Break-even, Payback, Sharpe ratio, Annualized return. Each result includes the formula and step-by-step derivation.
-- **Scenario planner**: Named scenarios with automatic Pessimistic / Realistic / Optimistic sub-scenarios (annual return × {0.7, 1.0, 1.3}); inflation-adjusted real values; Chart.js comparison.
-- **AI advisor**: Anthropic `claude-sonnet-4-20250514` streamed token-by-token over SSE; portfolio aggregates injected into the system prompt; per-user history persisted with `truncated` flag for interrupted streams; floating chat button + dedicated page.
-- **Reports**: CSV exports (portfolio, scenarios) + PDF report (ReportLab + matplotlib charts + AI recommendations).
-- **Alerts**: Per-user `roi_below` / `drawdown_above` thresholds (portfolio or per-investment scope) evaluated on every dashboard load; banners auto-reset on next trigger.
-- **Live market data**: Stocks, crypto, forex, 10 major indices, macro indicators. Multi-source verification (`/market/verify/{symbol}`) with VERIFIED / SUSPICIOUS / UNVERIFIED status and confidence score. APScheduler refreshes data in the background; clients receive updates via SSE (`/market/stream`) with pulsing LIVE badge and price-flash animations.
-- **i18n**: English, French, Chinese — switch in the sidebar (persists in localStorage).
-- **Dark mode**: Toggle in the sidebar (persists in localStorage).
-- **Settings**: Profile, currency (USD/EUR/GBP/CHF), Anthropic API key (Fernet-encrypted server-side), alert thresholds.
+![demo](docs/demo.gif) <!-- TODO: record a 15s clip — landing → demo button → dashboard hot-take → /review → ⌘P to PDF -->
+
+---
+
+## Why I built this
+
+Every portfolio tracker I tried did one of three annoying things:
+
+1. **Lied about returns.** They'd average the time-weighted return *after* a fresh deposit, so adding €5k mysteriously made my "performance" look better.
+2. **Ignored my French tax envelopes.** PEA, CTO, AV, PER each have different fiscal treatment, and pretending they're one bucket gives the wrong FIRE date.
+3. **Made me eyeball the chart vs the S&P.** "Am I beating the market?" should be a number, not a vibe.
+
+So I built one that doesn't. Honest XIRR + TWR. Side-by-side tax envelope simulation. A composite risk score from real metrics (volatility, max drawdown, beta vs benchmark, Sharpe). A monthly review that reads my portfolio like a senior advisor — concentration warnings, asset-class imbalance, action items — not generic "diversify your portfolio" boilerplate.
+
+The whole thing fits in one Python process (FastAPI + Postgres) and one HTML page (vanilla ES modules, no build step).
+
+---
+
+## The three design decisions I'm proudest of
+
+### 1. Vanilla ES modules over a framework
+
+No React, no Svelte, no build step. `app.js` is a hash-router + state holder, `views/*.js` each export a `render(root)`. Module loading is `import(url)` with a `?v=N` cache-bust. The cost: no JSX, no type checking, manual DOM updates. The benefit: zero build pipeline, ~50KB of JS for the whole app (Brotli), and any browser dev tools can step through the code without sourcemaps. For a single-author project where bundle size and onboarding cost actually matter, this is the right trade.
+
+### 2. Stale-while-revalidate cache layered across mem → sessionStorage → IndexedDB
+
+Every `/dashboard/*`, `/investments/`, and `/planning/*` read goes through `cachedGet(path)` which:
+1. Returns from an in-memory `Map` if hit (zero latency).
+2. Falls back to sessionStorage (synchronous, survives soft reload).
+3. Falls back to IndexedDB (asynchronous, survives tab close + browser restart).
+4. Falls back to network.
+5. Always fires a background revalidation so the next read is fresh.
+
+Concurrent calls for the same path share one in-flight promise — no duplicate fetches on first paint. Mutations seed the cache with the server's authoritative response so there's no flicker. The dashboard renders in ~80ms on repeat visits because the network is no longer in the critical path.
+
+### 3. Deterministic insight → AI augmentation, not AI-first
+
+The dashboard's "Hot Take" card and the Monthly Review are computed from **rules**, not LLM calls. If your top holding is >40% of the portfolio, it says so. If crypto is >25%, it says so. No model, no token cost, works offline, works for everyone including demo users.
+
+The AI layer (Claude prose in `/dashboard/ai-review`) is *additive*: when a user provides their Anthropic key it generates a 2-paragraph commentary on top of the deterministic facts. Otherwise it's gracefully hidden. This means the AI feels like a power-up, not a single point of failure — and the cost stays under control (6h cache per user, keyed on portfolio bucket so $0.50 ticks don't churn).
+
+---
+
+## What I'd change with more time
+
+1. **Pre-rendered server-side dashboard.** The landing is already SSR-ish (critical CSS inlined, hero content in the initial HTML), but the dashboard still hydrates from JSON. With more time I'd ship a real SSR for the first dashboard load — eliminates the 200ms gap between FCP and interactivity.
+2. **Multi-worker via Redis pub/sub.** The Service Worker layer and the APScheduler that fans out SSE/WebSocket broadcasts both assume a single uvicorn process. For real traffic I'd move broadcast state into Redis so each worker can publish/subscribe. The architecture doc has a section on this.
+3. **More tests on the broadcast path.** 81 tests cover math, auth, CRUD, scenarios, alerts, dashboard endpoints, and PWA — but the SSE/WebSocket fan-out and the APScheduler jobs are still observed-in-prod-only. The next 10 tests would target those paths with `httpx-ws` for the WS upgrade and a fake `SessionLocal` for the scheduler.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the four load-bearing decisions (no framework / USD internal / daily snapshots / idempotent ALTER) and three explicit trade-offs (JWT in localStorage / single uvicorn / float for money).
+
+---
 
 ## Quick start
 
@@ -23,16 +64,15 @@ Production-shaped investment analysis with an AI advisor (Anthropic Claude) and 
 cd investment_app
 ./setup.sh                    # creates .venv, installs deps, generates secrets in .env
 source .venv/bin/activate
-# Edit .env and add real API keys for ALPHA_VANTAGE_KEY, OPEN_EXCHANGE_RATES_KEY, FRED_KEY
-python seed_data.py           # optional: demo user + sample data
-uvicorn main:app --reload     # then open http://localhost:8000
+# Edit .env: add ALPHA_VANTAGE_KEY, OPEN_EXCHANGE_RATES_KEY, FRED_KEY
+uvicorn main:app --reload     # http://localhost:8000
 ```
 
-Demo credentials (after `seed_data.py`): `demo@invest.app` / `demopass`.
+Then either:
+- **Click "Try the demo — no signup"** on the landing page (creates an ephemeral user with a seeded portfolio).
+- Or register with email/password and use `/investments/seed-demo` to populate.
 
-## API keys (required)
-
-The app refuses to start if any of these are missing from `.env`:
+### Required API keys
 
 | Variable | Purpose | Free signup |
 |---|---|---|
@@ -40,18 +80,20 @@ The app refuses to start if any of these are missing from `.env`:
 | `OPEN_EXCHANGE_RATES_KEY` | Forex primary source | https://openexchangerates.org/signup/free |
 | `FRED_KEY` | US macro indicators | https://fred.stlouisfed.org/docs/api/api_key.html |
 
-The Anthropic key (`ANTHROPIC_API_KEY`) is optional as a global fallback. Each user can also set their own in Settings — it is encrypted with Fernet (`APP_ENCRYPTION_KEY`) before being stored.
+`ANTHROPIC_API_KEY` is optional — the Monthly Review's AI prose section uses it; everything else works without it.
 
-CoinGecko, ECB, Yahoo Finance and World Bank are used without keys.
+### Production deploy
 
-## Architecture notes
+Render.com works out of the box. For a public deployment, **upgrade Postgres past the free tier** — free Postgres on Render sleeps after 15 minutes and the first request pays a 10s cold-start. $7/mo of Starter eliminates that hit and is the single highest-ROI change for a public-facing portfolio piece.
 
-- **Single-process v1.** APScheduler and SSE state live in `app.state`. Run `uvicorn main:app` without `--workers`. Multi-worker requires Redis pub/sub (see `services/sse.py`).
-- **Python version.** Pinned to versions compatible with Python 3.9.6 (the bundled venv). If you have 3.10+, `setup.sh` will pick it up automatically.
-- **Encryption.** Per-user Anthropic keys are encrypted with `cryptography.fernet.Fernet`. `APP_ENCRYPTION_KEY` is auto-generated by `setup.sh`. Rotating it invalidates all stored user keys; a `User.key_version` column is reserved for future migration scripts.
-- **Streaming chat.** `routers/chatbot.py` returns a `StreamingResponse(media_type="text/event-stream")`. Anthropic SDK's `messages.stream()` text-stream is forwarded as `data: {"delta": "..."}` frames. The user message is persisted before the stream starts; the assistant message is persisted in a `finally` block (with `truncated=True` if the stream ended in error).
-- **Multi-source verification.** Every fetcher (`services/market_data.py`) is `async` and never raises — failures return `None`. `services/data_verifier.py` fans out via `asyncio.gather(..., return_exceptions=True)`, drops outliers (>3σ from median), then computes confidence as `100 × (1 − std/median) × (used/attempted)`.
-- **PDF.** Matplotlib `Agg` backend renders PNGs into `BytesIO`; ReportLab embeds via `Image(buf)`. AI recommendations come from a single `messages.create()` call (non-streaming).
+---
+
+## Stack
+
+- **Backend.** FastAPI 0.115, SQLAlchemy 2.0, Pydantic 2.9, PyJWT 2.9 (replaced python-jose after CVE-2024-33663/33664), Fernet-encrypted per-user API keys, APScheduler, Brotli middleware, Sentry SDK.
+- **Frontend.** Vanilla ES modules, Chart.js + lightweight-charts (lazy-loaded), IndexedDB for cache persistence, Service Worker + manifest for PWA install, WebSocket with SSE fallback for live prices.
+- **Math.** Newton-Raphson XIRR, TWR from daily snapshots, beta-regression risk metrics, multi-source price verification with 3σ outlier rejection.
+- **Tests.** 81 pytest tests covering auth, CRUD, scenarios, calculator math, performance metrics, risk metrics, rebalancing, dashboard summary + history + risk, alerts, transactions, planning/fire, PWA artefacts, live-refresh FX normalisation.
 
 ## File layout
 
@@ -60,52 +102,20 @@ investment_app/
 ├── main.py             # FastAPI app + lifespan (DB init, scheduler, key validation)
 ├── settings.py         # Pydantic Settings (env loader)
 ├── database.py         # SQLAlchemy engine, SessionLocal, Base, get_db
-├── models.py           # User, Investment, Scenario, ChatMessage, Alert
+├── models.py           # User, Investment, Transaction, Scenario, Alert, PortfolioSnapshot
 ├── schemas.py          # Pydantic request/response models
-├── auth.py             # JWT, password hashing, get_current_user, /auth router
-├── crypto.py           # Fernet wrapper for encrypted keys
-├── routers/            # 10 routers (auth lives at top level)
-├── services/           # calculator, ai_service, market_data, data_verifier, pdf_report, alerts_engine, sse
-├── seed_data.py        # demo user + sample investments + scenarios
+├── auth.py             # JWT, password hashing, /auth/login + register + demo + me
+├── crypto.py           # Fernet wrapper for per-user API keys
+├── routers/            # dashboard, investments, scenarios, fire, tax, alerts, …
+├── services/           # calculator, ai_service, market_data, risk, performance, …
+├── tests/              # 81 pytest tests
+├── ARCHITECTURE.md     # design decisions + trade-offs
 ├── setup.sh            # bootstrap script
-├── requirements.txt
-├── .env.example
 └── static/             # SPA: index.html, style.css, app.js, i18n.js, views/*.js
 ```
 
-## Verification recipes
+## Known limitations
 
-```bash
-# Health
-curl localhost:8000/health
-# -> {"ok": true}
-
-# Auth + create
-TOKEN=$(curl -s -X POST localhost:8000/auth/login -H 'content-type: application/json' \
-  -d '{"email":"demo@invest.app","password":"demopass"}' | jq -r .access_token)
-
-# Dashboard summary
-curl -s localhost:8000/dashboard/summary -H "Authorization: Bearer $TOKEN" | jq
-
-# Calculator: NPV
-curl -s -X POST localhost:8000/calculator/npv -H 'content-type: application/json' \
-  -d '{"cashflows":[-1000,300,400,500],"rate_pct":10}' | jq .result
-# -> -21.0368  (using NPV = Σ CF_t / (1+r)^t for t=0..N-1)
-
-# Live market data (no key required for yfinance)
-curl -s localhost:8000/market/price/AAPL | jq
-
-# Multi-source verification
-curl -s "localhost:8000/market/verify/AAPL?asset_class=stock" | jq
-
-# PDF report
-curl -s localhost:8000/exports/pdf -H "Authorization: Bearer $TOKEN" -o report.pdf
-```
-
-## Known limitations (v1)
-
-- Single uvicorn worker (scheduler + SSE state are per-process).
-- `APP_ENCRYPTION_KEY` rotation needs a manual re-encrypt script.
-- Email/SMS alert delivery is out of scope; alerts surface as in-app banners only.
-- SSE is one-way; no WebSocket bidirectional push.
-- EventSource cannot send custom headers, so `/market/stream` is open to any local connection. For public deployment, gate via a token query param + middleware.
+- Single uvicorn worker (scheduler + WS/SSE broadcast state are per-process). Multi-worker requires a Redis pub/sub layer between the broadcaster and the connection list.
+- `APP_ENCRYPTION_KEY` rotation needs a manual re-encrypt script; the `User.key_version` column is reserved for it.
+- Free-tier Postgres cold-starts hurt first impressions — see "Production deploy" above.
