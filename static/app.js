@@ -81,6 +81,33 @@ export function clearSwrCache() {
   }
 }
 
+// Fire the most-visited GETs in parallel right after login so the SWR
+// cache is hot when the user navigates. Each call is fire-and-forget
+// (errors swallowed silently); cachedGet() reads from sessionStorage on
+// the next call. Skipped if a cache entry for that path already exists
+// (avoids re-fetching when bootApp runs on page reload).
+export function prewarmCache() {
+  const tokenSuffix = state.token?.slice(-12) || "anon";
+  const prefix = `swr:${tokenSuffix}:`;
+  const fx = state.fxRate || 1.0;
+  const paths = [
+    "/dashboard/summary",
+    "/investments/",
+    `/planning/fire?monthly_expenses=${Math.round(2500 / fx)}&monthly_savings=${Math.round(1500 / fx)}&expected_return_pct=7&target_multiplier=25`,
+    "/dashboard/risk?days=180&benchmark=^GSPC",
+    "/dashboard/performance",
+    "/dashboard/history?days=365&benchmark=^GSPC",
+    "/dividends/calendar",
+    "/planning/stress-test",
+  ];
+  for (const path of paths) {
+    if (sessionStorage.getItem(prefix + path)) continue; // already warm
+    API.request(path).then(data => {
+      try { sessionStorage.setItem(prefix + path, JSON.stringify(data)); } catch (_) {}
+    }).catch(() => {});
+  }
+}
+
 // Drop one or more cached paths so the next cachedGet() goes to the
 // network. Call this after mutations (POST/PUT/DELETE) on a resource so
 // the next view doesn't render with the stale list. Accepts prefixes —
@@ -216,7 +243,7 @@ export function pct(value, signed = true) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "55";
+const VIEW_VERSION = "56";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -517,6 +544,11 @@ async function bootApp() {
   // loop is gone. Custom events `market:prices` dispatched here are
   // consumed by investments.js to animate cell deltas.
   setupSSE();
+  // Cache pre-warm: fire the heavy dashboard endpoints in parallel right
+  // after login so the SWR cache is hot by the time the user clicks
+  // around. Each call writes to sessionStorage on success — the views
+  // then render instantly from cache instead of awaiting the network.
+  prewarmCache();
   // Preload every view module in the background after the first render so
   // subsequent navigations skip the dynamic-import wait. Cached in
   // _preloadedModules; renderRoute reads from there before falling back to

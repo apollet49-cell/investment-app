@@ -253,7 +253,7 @@ async function loadFireYears(isCancelled) {
     const fx = state.fxRate || 1.0;
     const expensesUsd = Math.round(2500 / fx);
     const savingsUsd = Math.round(1500 / fx);
-    const data = await API.request(`/planning/fire?monthly_expenses=${expensesUsd}&monthly_savings=${savingsUsd}&expected_return_pct=7&target_multiplier=25`);
+    const data = await cachedGet(`/planning/fire?monthly_expenses=${expensesUsd}&monthly_savings=${savingsUsd}&expected_return_pct=7&target_multiplier=25`);
     if (isCancelled()) return;
     if (data.already_fire) {
       yEl.textContent = "🎉";
@@ -335,7 +335,7 @@ function riskCard(div) {
 
 async function loadRealRisk(isCancelled) {
   try {
-    const data = await API.request("/dashboard/risk?days=180&benchmark=^GSPC");
+    const data = await cachedGet("/dashboard/risk?days=180&benchmark=^GSPC");
     if (isCancelled()) return;
     if (data.score == null) return; // not enough snapshots yet — keep fallback
     const tone = data.score <= 25 ? "var(--success)"
@@ -498,7 +498,7 @@ async function loadDividendCalendar() {
   const summaryEl = document.getElementById("dividend-annual-summary");
   if (!host) return;
   try {
-    const data = await API.request("/dividends/calendar");
+    const data = await cachedGet("/dividends/calendar");
     if (summaryEl && data.annual_income_estimate_usd) {
       summaryEl.innerHTML = `${t("dashboard.dividend_estimate")}: <strong style="color:var(--text)">${money(data.annual_income_estimate_usd)}/yr</strong>`;
     }
@@ -532,7 +532,7 @@ async function loadStressTest() {
   const host = document.getElementById("stress-test-body");
   if (!host) return;
   try {
-    const data = await API.request("/planning/stress-test");
+    const data = await cachedGet("/planning/stress-test");
     if (!data.scenarios || !data.scenarios.length) {
       host.innerHTML = `<div style="color:var(--text-muted);font-size:13px">${t("dashboard.no_positions_for_stress")}</div>`;
       return;
@@ -593,7 +593,7 @@ function buildPortfolioChart(points) {
 
 async function loadPerformance(isCancelled) {
   try {
-    const data = await API.request("/dashboard/performance");
+    const data = await cachedGet("/dashboard/performance");
     if (isCancelled()) return;
     const xirrEl = document.getElementById("perf-xirr");
     const subEl = document.getElementById("perf-sub");
@@ -608,7 +608,7 @@ async function loadPerformance(isCancelled) {
     const parts = [];
     if (data.twr_pct != null) parts.push(`${t("dashboard.twr")}: ${pct(data.twr_pct)}`);
     try {
-      const h = await API.request("/dashboard/history?days=365&benchmark=^GSPC");
+      const h = await cachedGet("/dashboard/history?days=365&benchmark=^GSPC");
       if (!isCancelled() && h?.portfolio?.length > 1 && h.benchmark?.length > 0) {
         const youEnd = h.portfolio[h.portfolio.length - 1].normalized;
         const benchEnd = h.benchmark[h.benchmark.length - 1].normalized;
@@ -629,7 +629,7 @@ async function loadPerformance(isCancelled) {
 async function loadHistoryAndBenchmark(isCancelled) {
   let history;
   try {
-    history = await API.request("/dashboard/history?days=365&benchmark=^GSPC");
+    history = await cachedGet("/dashboard/history?days=365&benchmark=^GSPC");
   } catch (e) {
     return; // keep the interpolated chart already drawn
   }
