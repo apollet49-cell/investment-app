@@ -142,6 +142,10 @@ a { color: var(--primary-strong); }
   cursor: pointer;
   transition: transform 120ms ease, box-shadow 120ms ease;
   box-shadow: 0 6px 18px rgba(107, 125, 94, 0.25);
+  /* Clear the .auth-card::before logo (absolute, top:24px, height:40px).
+     Without this margin the button overlaps the logo in the JS-rendered
+     variant of the form. */
+  margin-top: 32px;
 }
 .btn-demo:hover:not(:disabled) {
   transform: translateY(-1px);

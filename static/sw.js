@@ -10,24 +10,31 @@
  * Bump CACHE_VERSION whenever the shell changes shape. Old caches are
  * deleted on activate.
  */
-const CACHE_VERSION = "investapp-v4";
-// Shell + the views the user is most likely to hit within seconds of
-// landing. Pre-caching during install pays the bandwidth up-front
-// (when the SW is registering anyway) and makes the next 3 navigations
-// disk-speed instant. The .js URLs use the current VIEW_VERSION so a
-// deploy invalidates them naturally via cache busting.
-const SHELL_URLS = [
-  "/",
-  "/static/style.css",
-  "/static/app.js",
-  "/static/i18n.js",
-];
+const CACHE_VERSION = "investapp-v5";
+// Pre-cache only "/" (index.html) — it's the app entry and we want offline
+// support for the shell. NOT app.js / style.css / i18n.js: those are static
+// imports inside view modules (`import { loadChartJs } from "/static/app.js"`)
+// which use the un-versioned URL. If we cache the un-versioned URL, deploys
+// don't invalidate it and view modules end up importing a stale shell that
+// doesn't export new symbols — bug we shipped in v4 where the FIRE page
+// crashed with "Unexpected identifier 'loadChartJs'".
+// View modules ARE pre-cached because index.html requests them with ?v=N,
+// so a deploy bumps the URL and the cached old one becomes unreachable.
+const SHELL_URLS = ["/"];
 const VIEW_URLS = [
   "/static/views/dashboard.js",
   "/static/views/investments.js",
   "/static/views/review.js",
   "/static/views/fire.js",
   "/static/views/transactions.js",
+];
+// Un-versioned static assets that view modules import directly. We use
+// network-first for these so a deploy lands within the next request,
+// with cache as offline fallback only.
+const NETWORK_FIRST_PATHS = [
+  "/static/app.js",
+  "/static/i18n.js",
+  "/static/style.css",
 ];
 
 self.addEventListener("install", (event) => {
@@ -77,7 +84,23 @@ self.addEventListener("fetch", (event) => {
     return; // default network fetch
   }
 
-  // Shell + static — cache-first.
+  // Un-versioned static (app.js, i18n.js, style.css): network-first so
+  // deploys land immediately; cache only as offline fallback.
+  const isNetworkFirst = NETWORK_FIRST_PATHS.includes(url.pathname);
+  if (isNetworkFirst) {
+    event.respondWith(
+      fetch(req).then((fresh) => {
+        if (fresh.ok) {
+          const copy = fresh.clone();
+          caches.open(CACHE_VERSION).then((c) => c.put(req, copy));
+        }
+        return fresh;
+      }).catch(() => caches.match(req).then((c) => c || caches.match("/")))
+    );
+    return;
+  }
+
+  // Everything else (versioned views, the "/" shell) — cache-first SWR.
   event.respondWith(
     caches.match(req).then((cached) => {
       if (cached) {
