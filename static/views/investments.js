@@ -25,6 +25,16 @@ export async function render(root) {
   if (sessionStorage.getItem(cacheKey) === null) {
     root.innerHTML = skeleton("table");
   }
+  // Cross-view filter handoff — when the user clicks a slice on the
+  // dashboard allocation doughnut, dashboard.js writes the asset type
+  // to sessionStorage and navigates here. Apply once + clear the flag.
+  try {
+    const pending = sessionStorage.getItem("inv:pendingTypeFilter");
+    if (pending) {
+      filterType = pending;
+      sessionStorage.removeItem("inv:pendingTypeFilter");
+    }
+  } catch (_) {}
   try {
     cache = await cachedGet("/investments/", (fresh) => {
       // Background fetch returned different data — replace the table in

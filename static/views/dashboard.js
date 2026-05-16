@@ -192,6 +192,7 @@ export async function render(root) {
             </div>
             <div style="padding:0">
               ${carbonCard(data.carbon)}
+              ${carbonTopEmittersTable(data.carbon)}
             </div>
           </div>
         </div>
@@ -462,6 +463,35 @@ function diversificationCard(div) {
       ${countryRows ? `<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin:10px 0 6px">By country</div>${countryRows}` : ""}
     </div>
   </div>`;
+}
+
+// Permanent ranking shown directly below the carbon footprint card on
+// the Risk & Carbon tab. The same `breakdown` data was previously only
+// visible after clicking the chevron — now it's surfaced as a proper
+// table so users immediately see which holdings drive their footprint.
+function carbonTopEmittersTable(carbon) {
+  const breakdown = (carbon && carbon.breakdown) || [];
+  if (!breakdown.length) return "";
+  const total = carbon.total_tco2e_year || breakdown.reduce((s, b) => s + b.emissions_tco2e_year, 0) || 1;
+  const rows = breakdown.slice(0, 10).map((b, i) => {
+    const pct = (b.emissions_tco2e_year / total) * 100;
+    const sym = b.symbol ? `<span style="color:var(--text-muted);font-size:11px;margin-left:6px">${escapeHtml(b.symbol)}</span>` : "";
+    return `
+      <div class="emitter-row">
+        <div class="emitter-rank">${i + 1}</div>
+        <div class="emitter-name"><strong>${escapeHtml(b.name)}</strong>${sym}<div class="emitter-basis">${escapeHtml(b.basis)}</div></div>
+        <div class="emitter-bar-wrap"><div class="emitter-bar" style="width:${Math.min(100, pct).toFixed(1)}%"></div></div>
+        <div class="emitter-val">${b.emissions_tco2e_year.toFixed(2)} <span style="color:var(--text-muted);font-size:11px">tCO₂e</span></div>
+      </div>`;
+  }).join("");
+  return `
+    <div class="card" style="margin-top:14px;padding:18px 20px 20px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px">
+        <h4 style="margin:0;font-size:14px">${t("dashboard.carbon_top_emitters")}</h4>
+        <span style="color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:0.08em;font-family:var(--font-mono)">${t("dashboard.carbon_top_emitters_count").replace("{n}", String(breakdown.length))}</span>
+      </div>
+      <div class="emitter-list">${rows}</div>
+    </div>`;
 }
 
 function carbonCard(carbon) {
@@ -827,15 +857,18 @@ async function buildAllocationChart(byType) {
   await loadChartJs();
   if (!document.getElementById("chart-allocation")) return;
   try { state.charts.allocation?.destroy?.(); } catch (_) {}
-  const labels = Object.keys(byType);
+  // `rawLabels` keeps the raw type slug ("stock", "real_estate", …) for
+  // the click→filter handler; `labels` is the translated display label.
+  const rawLabels = Object.keys(byType);
   const data = Object.values(byType);
+  ctx.style.cursor = "pointer";
   state.charts.allocation = new window.Chart(ctx, {
     type: "doughnut",
     data: {
-      labels: labels.map(l => t(`investments.types.${l}`)),
+      labels: rawLabels.map(l => t(`investments.types.${l}`)),
       datasets: [{
         data,
-        backgroundColor: labels.map(l => TYPE_COLORS[l] || "#a89683"),
+        backgroundColor: rawLabels.map(l => TYPE_COLORS[l] || "#a89683"),
         borderColor: "#faf7f2",
         borderWidth: 2,
       }],
@@ -844,6 +877,19 @@ async function buildAllocationChart(byType) {
       responsive: true, maintainAspectRatio: false,
       cutout: "65%",
       plugins: { legend: { position: "bottom", labels: { font: { size: 12 }, boxWidth: 10 } } },
+      onHover: (event, elements) => {
+        event.native.target.style.cursor = elements.length ? "pointer" : "default";
+      },
+      // Click on a slice → navigate to /#/investments with the slice's
+      // asset type pre-selected as the filter. sessionStorage is the
+      // hand-off because it's robust to hashchange + view module reload.
+      onClick: (event, elements) => {
+        if (!elements || !elements.length) return;
+        const slug = rawLabels[elements[0].index];
+        if (!slug) return;
+        try { sessionStorage.setItem("inv:pendingTypeFilter", slug); } catch (_) {}
+        location.hash = "#/investments";
+      },
     },
   });
 }
