@@ -277,8 +277,15 @@ async def history(
 
     bench_series: list[dict] = []
     try:
-        bench_raw = await market_service.get_historical(benchmark, period=period)
-    except Exception:
+        # 4-second hard ceiling — yfinance occasionally hangs for 30+ seconds
+        # when the upstream is under load. Better to skip the benchmark
+        # overlay than make the user wait for a chart that can render fine
+        # without it.
+        bench_raw = await asyncio.wait_for(
+            market_service.get_historical(benchmark, period=period),
+            timeout=4.0,
+        )
+    except (Exception, asyncio.TimeoutError):
         bench_raw = None
     if bench_raw:
         # Trim to our snapshot window and rebase to 100 at the first overlapping date.
@@ -324,15 +331,20 @@ async def risk(
     )
     portfolio_values = [s.total_value for s in snaps]
 
-    # Pull a matching benchmark series for beta (best-effort).
+    # Pull a matching benchmark series for beta (best-effort). 4-second
+    # ceiling — without a benchmark we just skip the beta computation,
+    # which is more graceful than blocking the risk endpoint for 30s.
     period = "6mo" if days <= 180 else "1y" if days <= 365 else "5y"
     bench_values: list[float] = []
     try:
-        bench_raw = await market_service.get_historical(benchmark, period=period)
+        bench_raw = await asyncio.wait_for(
+            market_service.get_historical(benchmark, period=period),
+            timeout=4.0,
+        )
         if bench_raw and snaps:
             snap_start = snaps[0].snapshot_date.isoformat()
             bench_values = [float(p["close"]) for p in bench_raw if p["date"] >= snap_start]
-    except Exception:
+    except (Exception, asyncio.TimeoutError):
         pass
 
     metrics = compute_risk_metrics(portfolio_values, bench_values or None)
