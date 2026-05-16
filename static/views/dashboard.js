@@ -69,7 +69,12 @@ export async function render(root) {
     data = await cachedGet("/dashboard/summary", (fresh) => {
       // Fresh data arrived in the background; re-render with it. Only
       // triggered when fresh != cached, so identical payloads don't repaint.
+      // Defense-in-depth: also check the URL — if the user navigated to
+      // another route during the bg fetch and the cleanup somehow didn't
+      // fire (Safari tab-switch edge case, etc.), don't replace their
+      // current view with the dashboard.
       if (cancelled) return;
+      if (window.location.hash && window.location.hash !== "#/dashboard") return;
       render(root);
     });
   } catch (err) {

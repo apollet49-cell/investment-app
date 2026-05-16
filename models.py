@@ -228,3 +228,36 @@ class PortfolioSnapshot(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="snapshots")
+
+
+class MarketDataCache(Base):
+    """Postgres-backed cache for yfinance / external market data.
+
+    The in-memory TTLCache in services/market_data.py is fast but resets
+    on every Render restart (and the free tier sleeps after 15min idle —
+    every wake-up is a fresh cache). This Postgres mirror survives
+    restarts so the first user after a wake-up doesn't pay the cold yfinance hit.
+
+    Keyed by (kind, key) so different data shapes coexist:
+      - kind='stock'      key='AAPL'
+      - kind='crypto'     key='bitcoin'
+      - kind='forex'      key='USD-EUR'
+      - kind='historical' key='^GSPC:1y'
+      - kind='dividend'   key='AAPL'
+
+    Hot path stays the in-memory cache; this is the slow-path safety net.
+    The hourly scheduler job purges entries older than 24h to bound DB size.
+    """
+    __tablename__ = "market_data_cache"
+    __table_args__ = (
+        UniqueConstraint("kind", "key", name="uq_mdc_kind_key"),
+        Index("ix_mdc_expires", "expires_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    key: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload: Mapped[str] = mapped_column(Text, nullable=False)  # JSON-encoded
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+

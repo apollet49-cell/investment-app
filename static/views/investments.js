@@ -29,7 +29,11 @@ export async function render(root) {
     cache = await cachedGet("/investments/", (fresh) => {
       // Background fetch returned different data — replace the table in
       // place so the user sees the update without losing scroll/focus.
+      // Defense-in-depth URL check: if the user navigated away during
+      // the bg fetch, don't paint investments content into the dashboard
+      // (or wherever they are now).
       if (!root.isConnected) return;
+      if (window.location.hash && window.location.hash !== "#/investments") return;
       cache = fresh;
       refresh(root);
     });

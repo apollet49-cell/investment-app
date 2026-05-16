@@ -100,6 +100,17 @@ class MarketDataService:
                 return self._stock_cache[symbol]
             self._cache_misses += 1
 
+        # Postgres slow-path cache — survives Render free-tier sleeps so
+        # the first user after a wake-up doesn't pay a fresh yfinance hit.
+        # Wrapped to_thread because the DB session is sync.
+        import asyncio as _asyncio
+        from services import market_cache_db
+        db_hit = await _asyncio.to_thread(market_cache_db.get, "stock", symbol)
+        if db_hit is not None:
+            async with self._lk_stock:
+                self._stock_cache[symbol] = db_hit
+            return db_hit
+
         result = await self._stock_yfinance(symbol)
         if result is None:
             result = await self._stock_alpha_vantage(symbol)
@@ -107,6 +118,8 @@ class MarketDataService:
         if result is not None:
             async with self._lk_stock:
                 self._stock_cache[symbol] = result
+            # Fire-and-forget DB write — caller doesn't wait.
+            _asyncio.create_task(_asyncio.to_thread(market_cache_db.put, "stock", symbol, result))
         return result
 
     async def _stock_yfinance(self, symbol: str) -> Optional[dict[str, Any]]:

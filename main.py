@@ -164,10 +164,20 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             log.exception("demo cleanup failed: %s", e)
 
+    async def purge_market_cache():
+        try:
+            from services import market_cache_db
+            n = await asyncio.to_thread(market_cache_db.purge_expired)
+            if n:
+                log.info("market_data_cache: purged %d expired rows", n)
+        except Exception as e:
+            log.exception("market cache purge failed: %s", e)
+
     app.state.scheduler.add_job(refresh_portfolios, "interval", seconds=60, id="portfolios", max_instances=1)
     app.state.scheduler.add_job(refresh_forex, "interval", seconds=300, id="forex", max_instances=1)
     app.state.scheduler.add_job(refresh_indices, "interval", seconds=900, id="indices", max_instances=1)
     app.state.scheduler.add_job(refresh_macro, "interval", seconds=3600, id="macro", max_instances=1)
+    app.state.scheduler.add_job(purge_market_cache, "interval", hours=1, id="market_cache_purge", max_instances=1)
     # Snapshot every 6h so we get coverage even if the process restarts daily
     # (Render free tier sleeps idle services). The take_snapshot helper is
     # idempotent — running it 4× a day still produces one row per user per date.

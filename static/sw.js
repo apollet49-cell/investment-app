@@ -35,6 +35,7 @@ const NETWORK_FIRST_PATHS = [
   "/static/app.js",
   "/static/i18n.js",
   "/static/style.css",
+  "/static/landing.css",
 ];
 
 self.addEventListener("install", (event) => {
