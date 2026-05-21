@@ -247,9 +247,14 @@ _IS_PROD = app_settings.SENTRY_ENV == "production"
 _CSP = "; ".join([
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://eu.i.posthog.com https://us.i.posthog.com",
-    "style-src 'self' 'unsafe-inline'",
+    # style-src MUST include fonts.googleapis.com — index.html loads the Geist /
+    # Instrument Serif stylesheet from there. Omitting it blocks the stylesheet
+    # and the whole UI falls back to system fonts (looks broken).
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "img-src 'self' data: https:",
-    "font-src 'self' data:",
+    # font-src MUST include fonts.gstatic.com — that's where Google serves the
+    # actual .woff2 font files referenced by the googleapis stylesheet.
+    "font-src 'self' data: https://fonts.gstatic.com",
     # connect-src: API + WebSocket + analytics/error/exchange-rate endpoints
     "connect-src 'self' ws: wss: https://eu.i.posthog.com https://us.i.posthog.com https://*.sentry.io https://*.ingest.sentry.io",
     "frame-ancestors 'none'",
