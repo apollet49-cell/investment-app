@@ -1,4 +1,4 @@
-import { API, state, money, spinner, escapeHtml, onViewCleanup } from "/static/app.js";
+import { API, cachedGet, state, money, spinner, escapeHtml, onViewCleanup } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 const TMI_OPTIONS = [0, 11, 30, 41, 45];
@@ -8,23 +8,31 @@ let peaYears = 5;
 let avYears = 8;
 
 export async function render(root) {
+  let cancelled = false;
+  onViewCleanup(() => { cancelled = true; });
+  const myRenderId = root.dataset.renderId;
+  const stillOwnsRoot = () => !cancelled && root.dataset.renderId === myRenderId;
+
   root.innerHTML = `<div style="text-align:center;padding:40px">${spinner(true)}</div>`;
-  await refresh(root);
-  // Auto-refresh on input changes is wired inside refresh().
+  await refresh(root, stillOwnsRoot);
 }
 
-async function refresh(root) {
+async function refresh(root, stillOwnsRoot) {
   let data;
   try {
-    data = await API.request(`/tax/summary?tmi=${tmi}&pea_years=${peaYears}&av_years=${avYears}`);
+    // cachedGet keyed per (tmi, pea_years, av_years) tuple — different
+    // sliders produce different keys, so the cache is per-scenario.
+    data = await cachedGet(`/tax/summary?tmi=${tmi}&pea_years=${peaYears}&av_years=${avYears}`);
   } catch (err) {
+    if (!stillOwnsRoot()) return;
     root.innerHTML = `<div class="alert-banner error">${escapeHtml(err.message)}</div>`;
     return;
   }
-  draw(root, data);
+  if (!stillOwnsRoot()) return;
+  draw(root, data, stillOwnsRoot);
 }
 
-function draw(root, data) {
+function draw(root, data, stillOwnsRoot) {
   const wrappers = data.wrappers || [];
   const optimalTax = data.total_tax_optimal || 0;
   const worstTax = data.total_tax_worst || 0;
@@ -91,22 +99,24 @@ function draw(root, data) {
     </div>
   `;
 
-  // Wire input changes → reload
+  // Wire input changes → reload. Each handler re-checks stillOwnsRoot
+  // through refresh(), so a click landing right as the user navigates
+  // away doesn't paint tax content into another view.
   for (const b of root.querySelectorAll("[data-tmi]")) {
-    b.onclick = () => { tmi = parseInt(b.dataset.tmi, 10); refresh(root); };
+    b.onclick = () => { tmi = parseInt(b.dataset.tmi, 10); refresh(root, stillOwnsRoot); };
   }
   const peaInput = document.getElementById("tax-pea-years");
   if (peaInput) {
     peaInput.onchange = () => {
       const v = parseFloat(peaInput.value);
-      if (isFinite(v) && v >= 0) { peaYears = v; refresh(root); }
+      if (isFinite(v) && v >= 0) { peaYears = v; refresh(root, stillOwnsRoot); }
     };
   }
   const avInput = document.getElementById("tax-av-years");
   if (avInput) {
     avInput.onchange = () => {
       const v = parseFloat(avInput.value);
-      if (isFinite(v) && v >= 0) { avYears = v; refresh(root); }
+      if (isFinite(v) && v >= 0) { avYears = v; refresh(root, stillOwnsRoot); }
     };
   }
 }

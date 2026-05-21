@@ -1,8 +1,11 @@
-import { API, loadChartJs, state, money, spinner, toast, escapeHtml, onViewCleanup, track } from "/static/app.js";
+import { API, cachedGet, loadChartJs, state, money, spinner, toast, escapeHtml, onViewCleanup, track } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
-let monthlyExpenses = 2000;
-let monthlySavings = 1000;
+// Defaults aligned with the /dashboard/all seed (cache.js:189-ish) so the
+// first /planning/fire call hits the prewarmed cache instead of bouncing
+// to the network. If you change these, change them in prewarmCache too.
+let monthlyExpenses = 2500;
+let monthlySavings = 1500;
 let expectedReturn = 7.0;
 let multiplier = 25.0;
 let debounceTimer = null;
@@ -12,27 +15,36 @@ export async function render(root) {
     try { state.charts[k]?.destroy?.(); } catch (_) {}
     delete state.charts[k];
   }
-  root.innerHTML = `<div style="text-align:center;padding:40px">${spinner(true)}</div>`;
-  await refresh(root);
-}
-
-async function refresh(root) {
+  // Register cleanup BEFORE any await so the cancelled flag flips the
+  // instant the user navigates away — closes the window where a stale
+  // API resolve paints fire content over a different view.
   let cancelled = false;
   onViewCleanup(() => { cancelled = true; });
+  const myRenderId = root.dataset.renderId;
+  const stillOwnsRoot = () => !cancelled && root.dataset.renderId === myRenderId;
+  root.innerHTML = `<div style="text-align:center;padding:40px">${spinner(true)}</div>`;
+  await refresh(root, stillOwnsRoot);
+}
+
+async function refresh(root, stillOwnsRoot) {
   let data;
   try {
-    data = await API.request(`/planning/fire?monthly_expenses=${monthlyExpenses}&monthly_savings=${monthlySavings}&expected_return_pct=${expectedReturn}&target_multiplier=${multiplier}`);
+    // cachedGet so repeat visits with the same parameters paint from
+    // sessionStorage. The prewarmCache seed at login covers the default
+    // (2500, 1500, 7, 25) tuple.
+    data = await cachedGet(`/planning/fire?monthly_expenses=${monthlyExpenses}&monthly_savings=${monthlySavings}&expected_return_pct=${expectedReturn}&target_multiplier=${multiplier}`);
     track("fire_simulated", { expected_return_pct: expectedReturn });
   } catch (err) {
-    if (cancelled) return;
+    if (!stillOwnsRoot()) return;
     root.innerHTML = `<div class="alert-banner error">${escapeHtml(err.message)}</div>`;
     return;
   }
-  if (cancelled) return;
-  draw(root, data);
+  if (!stillOwnsRoot()) return;
+  draw(root, data, stillOwnsRoot);
 }
 
-async function draw(root, data) {
+async function draw(root, data, stillOwnsRoot) {
+  if (!stillOwnsRoot()) return;
   const progress = data.progress_pct || 0;
   const years = data.years_to_fire;
   const yearsStr = data.already_fire ? "🎉 " + t("fire.already_fire") : (years == null ? "—" : `${years.toFixed(1)}`);
@@ -103,10 +115,16 @@ async function draw(root, data) {
     </div>
   `;
 
-  // Wire inputs (debounced auto-refresh)
+  // Wire inputs (debounced auto-refresh). The timer is also cleared by
+  // the cleanup registered in render() — but only via the cancelled
+  // flag; the setTimeout itself isn't held in the cleanup closure, so a
+  // late fire is possible and stillOwnsRoot() is the guard.
   const debouncedRefresh = () => {
     clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => refresh(root), 400);
+    debounceTimer = setTimeout(() => {
+      if (!stillOwnsRoot()) return;
+      refresh(root, stillOwnsRoot);
+    }, 400);
   };
   document.getElementById("fire-exp").oninput = (e) => { monthlyExpenses = parseFloat(e.target.value) || 0; debouncedRefresh(); };
   document.getElementById("fire-sav").oninput = (e) => { monthlySavings = parseFloat(e.target.value) || 0; debouncedRefresh(); };
@@ -116,6 +134,7 @@ async function draw(root, data) {
   // Draw the trajectory chart
   if (data.trajectory && data.trajectory.length) {
     await loadChartJs();
+    if (!stillOwnsRoot()) return;
     const ctx = document.getElementById("fire-chart");
     if (!ctx) return; // navigated away
     try { state.charts.fire?.destroy?.(); } catch (_) {}

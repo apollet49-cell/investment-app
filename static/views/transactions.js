@@ -1,4 +1,4 @@
-import { API, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, track, confirmModal } from "/static/app.js";
+import { API, cachedGet, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, track, confirmModal } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 let cache = [];
@@ -6,20 +6,42 @@ let summary = null;
 let investmentsCache = [];
 
 export async function render(root) {
-  root.innerHTML = `<div style="text-align:center;padding:40px">${spinner(true)}</div>`;
+  // Anti-rollback: same pattern as dashboard/investments. The
+  // DOM-attached route token is the authoritative signal — closures
+  // captured at render start may miss a navigation if the cleanup
+  // hasn't fired yet when an in-flight await resolves.
+  let cancelled = false;
+  onViewCleanup(() => { cancelled = true; });
+  const myRenderId = root.dataset.renderId;
+  const stillOwnsRoot = () => !cancelled && root.dataset.renderId === myRenderId;
+
+  // Render skeleton only if no SWR cache — otherwise the cached value
+  // comes back synchronously and the spinner-then-content flash is
+  // skipped. The view-root token guard above handles racing navigation.
+  const cacheKey = `swr:${state.token?.slice(-12) || "anon"}:/transactions`;
+  if (sessionStorage.getItem(cacheKey) === null) {
+    root.innerHTML = `<div style="text-align:center;padding:40px">${spinner(true)}</div>`;
+  }
   try {
+    // cachedGet for all three so repeat visits paint from sessionStorage
+    // (~0ms) instead of waiting on the network. Background revalidation
+    // is fire-and-forget; no onUpdate needed since the view re-renders
+    // on each navigation anyway.
     const [txns, sum, invs] = await Promise.all([
-      API.request("/transactions"),
-      API.request("/transactions/summary"),
-      API.request("/investments/"),
+      cachedGet("/transactions"),
+      cachedGet("/transactions/summary"),
+      cachedGet("/investments/"),
     ]);
+    if (!stillOwnsRoot()) return;
     cache = txns;
     summary = sum;
     investmentsCache = invs;
   } catch (err) {
+    if (!stillOwnsRoot()) return;
     root.innerHTML = `<div class="alert-banner error">${escapeHtml(err.message)}</div>`;
     return;
   }
+  if (!stillOwnsRoot()) return;
   draw(root);
 }
 

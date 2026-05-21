@@ -14,6 +14,11 @@ import { t } from "/static/i18n.js";
 // reproducible and explainable.
 
 export async function render(root) {
+  let cancelled = false;
+  onViewCleanup(() => { cancelled = true; });
+  const myRenderId = root.dataset.renderId;
+  const stillOwnsRoot = () => !cancelled && root.dataset.renderId === myRenderId;
+
   root.innerHTML = `<div class="review-shell">${skeleton("kpi")}</div>`;
   let summary, perf, risk;
   try {
@@ -23,9 +28,11 @@ export async function render(root) {
       cachedGet("/dashboard/risk?days=180&benchmark=^GSPC"),
     ]);
   } catch (err) {
+    if (!stillOwnsRoot()) return;
     root.innerHTML = `<div class="alert-banner error">${escapeHtml(err.message)}</div>`;
     return;
   }
+  if (!stillOwnsRoot()) return;
   if (!summary.current_value) {
     root.innerHTML = `<div class="card empty-state">
       <h3>${t("review.empty_title")}</h3>

@@ -1,4 +1,4 @@
-import { API, money, spinner, toast, escapeHtml, track } from "/static/app.js";
+import { API, cachedGet, money, spinner, toast, escapeHtml, track, onViewCleanup } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 // Default canonical types — pre-populated rows in the editor.
@@ -10,10 +10,19 @@ let currentAlloc = {};   // {type: current_value}
 let currentTotal = 0;
 
 export async function render(root) {
+  let cancelled = false;
+  onViewCleanup(() => { cancelled = true; });
+  const myRenderId = root.dataset.renderId;
+  const stillOwnsRoot = () => !cancelled && root.dataset.renderId === myRenderId;
+
   root.innerHTML = `<div style="text-align:center;padding:40px">${spinner(true)}</div>`;
   try {
-    // Fetch the user's investments once to pre-populate type rows and current values.
-    const inv = await API.request("/investments");
+    // cachedGet("/investments/") matches the prewarmCache seed key from
+    // login. The trailing slash matters — without it FastAPI 307-
+    // redirects to the slashed URL (extra round-trip) AND we miss the
+    // pre-warmed cache entry.
+    const inv = await cachedGet("/investments/");
+    if (!stillOwnsRoot()) return;
     currentAlloc = {};
     currentTotal = 0;
     for (const i of inv) {
@@ -23,9 +32,11 @@ export async function render(root) {
       currentTotal += v;
     }
   } catch (err) {
+    if (!stillOwnsRoot()) return;
     root.innerHTML = `<div class="alert-banner error">${escapeHtml(err.message)}</div>`;
     return;
   }
+  if (!stillOwnsRoot()) return;
   draw(root);
 }
 

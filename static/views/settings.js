@@ -1,9 +1,14 @@
-import { API, state, toast, escapeHtml, loadFxRate } from "/static/app.js";
+import { API, state, toast, escapeHtml, loadFxRate, onViewCleanup } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 const CURRENCIES = ["USD", "EUR", "GBP", "CHF"];
 
 export async function render(root) {
+  let cancelled = false;
+  onViewCleanup(() => { cancelled = true; });
+  const myRenderId = root.dataset.renderId;
+  const stillOwnsRoot = () => !cancelled && root.dataset.renderId === myRenderId;
+
   // Defensive guard: state.user should always be set when this view renders,
   // but if for any reason it isn't (race condition, expired session, etc.),
   // fall back to /auth/me before reading fields.
@@ -11,14 +16,17 @@ export async function render(root) {
     try {
       state.user = await API.request("/auth/me");
     } catch (err) {
+      if (!stillOwnsRoot()) return;
       root.innerHTML = `<div class="alert-banner error">${err.message || "Session expired — please log in again."}</div>`;
       return;
     }
+    if (!stillOwnsRoot()) return;
   }
   const user = state.user;
 
   let alerts = [];
   try { alerts = await API.request("/alerts/"); } catch (_) {}
+  if (!stillOwnsRoot()) return;
   const roiAlert = alerts.find(a => a.type === "roi_below" && a.scope === "portfolio");
   const ddAlert = alerts.find(a => a.type === "drawdown_above" && a.scope === "portfolio");
 

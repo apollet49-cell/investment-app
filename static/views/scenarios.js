@@ -1,13 +1,24 @@
-import { API, loadChartJs, money, pct, spinner, toast, state, escapeHtml } from "/static/app.js";
+import { API, loadChartJs, money, pct, spinner, toast, state, escapeHtml, onViewCleanup } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 const RISKS = ["low", "medium", "high"];
 
 export async function render(root) {
+  // Anti-rollback guard, see dashboard.js for the full rationale.
+  let cancelled = false;
+  onViewCleanup(() => { cancelled = true; });
+  const myRenderId = root.dataset.renderId;
+  const stillOwnsRoot = () => !cancelled && root.dataset.renderId === myRenderId;
+
   root.innerHTML = `<div style="text-align:center;padding:40px">${spinner(true)}</div>`;
   let scenarios;
   try { scenarios = await API.request("/scenarios/"); }
-  catch (err) { root.innerHTML = `<div class="alert-banner error">${escapeHtml(err.message)}</div>`; return; }
+  catch (err) {
+    if (!stillOwnsRoot()) return;
+    root.innerHTML = `<div class="alert-banner error">${escapeHtml(err.message)}</div>`;
+    return;
+  }
+  if (!stillOwnsRoot()) return;
 
   root.innerHTML = `
     <div class="card">
