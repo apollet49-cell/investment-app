@@ -81,7 +81,7 @@ All notable changes to this project. Most recent first.
 
 ### Tests
 
-- 72 → 91 tests, including: scenarios CRUD + simulate, planning/fire,
+- 72 → 92 tests, including: scenarios CRUD + simulate, planning/fire,
   stress-test, alerts CRUD + dismiss, transactions summary, SSE hub
   back-pressure, WebSocket connect, `/dashboard/all` bundle, `/auth/demo`
   cleanup pattern, PWA artefacts (`/sw.js`, `/manifest.json`).

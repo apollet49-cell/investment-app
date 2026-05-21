@@ -16,12 +16,19 @@ from typing import Optional
 import yfinance as yf
 from cachetools import TTLCache
 
+from services import market_cache_db
 from services.clock import today_utc
 
 log = logging.getLogger("dividends")
 
 _meta_cache: TTLCache = TTLCache(maxsize=512, ttl=3600)
 _meta_lock = asyncio.Lock()
+
+# Dividend metadata changes slowly (quarterly at most), so the Postgres
+# layer keeps it 24h. The demo portfolio reuses the same ~20 tickers, so
+# once any visitor warms the cache every later /dividends/calendar is a
+# DB hit (~1s) instead of ~18s of per-symbol yfinance on a 1-vCPU box.
+_DIVIDEND_TTL_SECONDS = 24 * 60 * 60
 
 
 def _fetch_sync(symbol: str) -> Optional[list[dict]]:
@@ -167,12 +174,26 @@ async def fetch_dividend_metadata(symbol: str) -> dict:
         return {"symbol": symbol, "history": [], "next_ex_div": None,
                 "ttm_dividend": None, "annual_yield_pct": None}
     key = symbol.upper()
+    # Layer 1: in-memory (fastest, but per-process and lost on restart).
     async with _meta_lock:
         if key in _meta_cache:
             return _meta_cache[key]
+    # Layer 2: Postgres (survives restarts, shared across users/requests).
+    # market_cache_db.get never raises — a DB hiccup degrades to a miss.
+    cached = await asyncio.to_thread(market_cache_db.get, "dividend", key)
+    if cached is not None:
+        async with _meta_lock:
+            _meta_cache[key] = cached
+        return cached
+    # Layer 3: cold — pay the yfinance round-trip, then write through to
+    # both caches. Don't persist error results (we want to retry those).
     result = await asyncio.to_thread(_fetch_metadata_sync, key)
     async with _meta_lock:
         _meta_cache[key] = result
+    if not result.get("error"):
+        await asyncio.to_thread(
+            market_cache_db.put, "dividend", key, result, _DIVIDEND_TTL_SECONDS
+        )
     return result
 
 

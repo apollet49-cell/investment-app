@@ -558,6 +558,25 @@ def test_dashboard_all_returns_seven_keys(client, auth_headers):
     assert body["summary"]["current_value"] == 1100
 
 
+# ---------- dividend metadata Postgres cache ----------
+
+def test_dividend_metadata_uses_db_cache(client):
+    """A warm Postgres cache entry must short-circuit the per-symbol
+    yfinance call. This is what takes the /dividends/calendar (income
+    tab) endpoint from ~18s cold to ~1s once the cache is warm. We seed a
+    cache row for a fake ticker and assert fetch returns it verbatim
+    (a real yfinance hit for 'ZZZZ' would return nulls / an error)."""
+    import asyncio
+    from services import dividends, market_cache_db
+    market_cache_db.put("dividend", "ZZZZ", {
+        "symbol": "ZZZZ", "ttm_dividend": 1.23, "annual_yield_pct": 2.5,
+        "history": [], "next_ex_div": "2026-03-01", "payments_per_year": 4,
+    }, 3600)
+    r = asyncio.run(dividends.fetch_dividend_metadata("ZZZZ"))
+    assert r["ttm_dividend"] == 1.23, r
+    assert r["next_ex_div"] == "2026-03-01", r
+
+
 # ---------- /auth/demo cleanup helper ----------
 
 def test_demo_user_email_matches_cleanup_pattern(client):
