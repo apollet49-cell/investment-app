@@ -1,21 +1,16 @@
-"""Anthropic Claude integration for the InvestAI chatbot.
-
-Streams responses token-by-token via SSE. Persists user + assistant messages
-after the stream completes (or marks `truncated=True` if the client
-disconnected mid-stream).
-"""
+"""Anthropic Claude one-shot calls used by the monthly PDF report and the
+dashboard's hero-insight endpoint. Streaming chat was removed with the
+chatbot router; everything here is request/response."""
 from __future__ import annotations
 
-import json
 import logging
-from collections.abc import AsyncIterator
 from typing import Optional
 
-from anthropic import Anthropic, APIError, AuthenticationError, RateLimitError
+from anthropic import Anthropic
 from sqlalchemy.orm import Session
 
 from crypto import decrypt
-from models import ChatMessage, Investment, User
+from models import Investment, User
 from settings import settings
 
 log = logging.getLogger("ai_service")
@@ -72,73 +67,6 @@ def _portfolio_summary(db: Session, user: User) -> str:
 
 def build_system_prompt(db: Session, user: User) -> str:
     return SYSTEM_BASE + "\n\n" + _portfolio_summary(db, user)
-
-
-def _history(db: Session, user: User, limit: int = 20) -> list[dict[str, str]]:
-    rows = (
-        db.query(ChatMessage)
-        .filter(ChatMessage.user_id == user.id)
-        .order_by(ChatMessage.created_at.desc())
-        .limit(limit)
-        .all()
-    )
-    rows.reverse()
-    return [{"role": r.role, "content": r.content} for r in rows]
-
-
-async def stream_chat(db: Session, user: User, message: str) -> AsyncIterator[str]:
-    """Yield SSE-formatted frames. Persist messages after stream completes."""
-    try:
-        api_key = _resolve_key(user)
-    except APIKeyMissingError:
-        yield _sse({"error": "Set your Anthropic API key in Settings to use the chatbot."})
-        return
-
-    client = Anthropic(api_key=api_key)
-    system = build_system_prompt(db, user)
-    history = _history(db, user)
-    messages = history + [{"role": "user", "content": message}]
-
-    # Save the user's message immediately so it is reflected in /chat/history
-    # even if the stream is interrupted before any tokens come back.
-    db.add(ChatMessage(user_id=user.id, role="user", content=message))
-    db.commit()
-
-    accumulated = ""
-    truncated = False
-    try:
-        with client.messages.stream(
-            model=MODEL,
-            system=system,
-            messages=messages,
-            max_tokens=2048,
-        ) as stream:
-            for chunk in stream.text_stream:
-                accumulated += chunk
-                yield _sse({"delta": chunk})
-        yield _sse({"done": True})
-    except AuthenticationError:
-        truncated = True
-        yield _sse({"error": "Anthropic API key was rejected. Update it in Settings."})
-    except RateLimitError:
-        truncated = True
-        yield _sse({"error": "Anthropic rate limit reached. Try again in a moment."})
-    except APIError as e:
-        truncated = True
-        log.exception("Anthropic API error: %s", e)
-        yield _sse({"error": "AI service is temporarily unavailable. Please try again."})
-    except Exception as e:  # noqa: BLE001
-        truncated = True
-        log.exception("Chat stream failed: %s", e)
-        yield _sse({"error": "Unexpected error while generating response."})
-    finally:
-        if accumulated:
-            db.add(ChatMessage(user_id=user.id, role="assistant", content=accumulated, truncated=truncated))
-            db.commit()
-
-
-def _sse(payload: dict) -> str:
-    return f"data: {json.dumps(payload)}\n\n"
 
 
 def one_shot(db: Session, user: User, message: str, system_override: Optional[str] = None, max_tokens: int = 1024) -> str:

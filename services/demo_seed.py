@@ -16,14 +16,11 @@ from sqlalchemy.orm import Session
 
 from models import (
     Alert,
-    ChatMessage,
-    DCAPlan,
     Investment,
     PortfolioSnapshot,
     Scenario,
     Transaction,
     User,
-    WatchlistItem,
 )
 
 
@@ -32,10 +29,7 @@ def _days_ago(n: int) -> date:
 
 
 def _wipe_user_data(db: Session, user_id: int) -> None:
-    for model in (
-        Transaction, DCAPlan, Alert, Scenario,
-        WatchlistItem, ChatMessage, PortfolioSnapshot, Investment,
-    ):
+    for model in (Transaction, Alert, Scenario, PortfolioSnapshot, Investment):
         db.query(model).filter(model.user_id == user_id).delete(synchronize_session=False)
 
 
@@ -178,20 +172,6 @@ def seed_user(db: Session, user: User, *, set_currency: str | None = None) -> di
             tx_count += 1
     db.commit()
 
-    # ---- DCA Plans ----
-    for p in [
-        DCAPlan(user_id=user.id, name="VWCE monthly", symbol="VWCE.DE",
-                asset_type="etf", amount=400, frequency="monthly",
-                start_date=_days_ago(540), is_active=True),
-        DCAPlan(user_id=user.id, name="Bitcoin weekly", symbol="bitcoin",
-                asset_type="crypto", amount=50, frequency="weekly",
-                start_date=_days_ago(280), is_active=True),
-        DCAPlan(user_id=user.id, name="World ETF (IWDA) — paused",
-                symbol="IWDA.AS", asset_type="etf", amount=250,
-                frequency="biweekly", start_date=_days_ago(700), is_active=False),
-    ]:
-        db.add(p)
-
     # ---- Scenarios ----
     for s in [
         Scenario(user_id=user.id, name="Aggressive growth", amount=50000,
@@ -209,16 +189,6 @@ def seed_user(db: Session, user: User, *, set_currency: str | None = None) -> di
         Alert(user_id=user.id, type="drawdown_above", threshold=20.0, scope="portfolio", is_active=True),
     ]:
         db.add(a)
-
-    # ---- Watchlist ----
-    for w in [
-        WatchlistItem(user_id=user.id, symbol="NVDA", asset_type="stock", name="NVIDIA"),
-        WatchlistItem(user_id=user.id, symbol="TSLA", asset_type="stock", name="Tesla"),
-        WatchlistItem(user_id=user.id, symbol="ASML", asset_type="stock", name="ASML Holding"),
-        WatchlistItem(user_id=user.id, symbol="VUSA.AS", asset_type="etf", name="Vanguard S&P 500"),
-        WatchlistItem(user_id=user.id, symbol="cardano", asset_type="crypto", name="Cardano"),
-    ]:
-        db.add(w)
 
     # ---- Snapshots (18 months of daily history) ----
     # Bulk-insert in one statement instead of 541 individual db.add()s.
@@ -246,10 +216,8 @@ def seed_user(db: Session, user: User, *, set_currency: str | None = None) -> di
     return {
         "investments": len(inv_objs),
         "transactions": tx_count,
-        "dca_plans": 3,
         "scenarios": 3,
         "alerts": 2,
-        "watchlist": 5,
         "snapshots": n_days + 1,
         "currency": user.currency,
         "net_worth_usd": round(snap_total_today, 2),

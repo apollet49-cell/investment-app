@@ -484,7 +484,7 @@ a:hover { color: var(--primary-strong); }
    column. */
 @media print {
   /* Hide everything chrome-related */
-  .sidebar, .topbar, .mobile-tabbar, .chat-fab, .chat-panel,
+  .sidebar, .topbar, .mobile-tabbar,
   .no-print, .review-print, #toast-host, .sidebar-backdrop,
   .hero-cta, #nav-toggle, #user-chip, #mobile-logout, #lang-switch {
     display: none !important;
@@ -1125,20 +1125,10 @@ a:hover { color: var(--primary-strong); }
   .toolbar .grow { width: 100%; min-width: 100%; }
   .toolbar select, .toolbar .btn { flex: 1 1 auto; }
 
-  /* Chat panel: full-screen on phones */
-  .chat-panel {
-    width: 100vw !important;
-    max-width: 100vw !important;
-    height: 100vh;
-    top: 0; right: 0; bottom: 0; left: 0;
-    border-radius: 0;
-  }
-  .chat-fab { bottom: 18px; right: 18px; }
-  /* Hide the chat FAB AND mobile tabbar when the sidebar is open — the
-     drawer covers the viewport so leaving the bottom tabbar visible
-     creates two competing nav surfaces. DOM siblings don't allow a
-     direct CSS selector, so we toggle a body class from JS instead. */
-  body.sidebar-open .chat-fab,
+  /* Hide the mobile tabbar when the sidebar is open — the drawer covers
+     the viewport so leaving the bottom tabbar visible creates two
+     competing nav surfaces. DOM siblings don't allow a direct CSS
+     selector, so we toggle a body class from JS instead. */
   body.sidebar-open .mobile-tabbar { display: none; }
 
   /* Auth / landing on phone: stack vertically, hero above auth card */
@@ -1216,25 +1206,10 @@ a:hover { color: var(--primary-strong); }
 }
 
 /* ---------- Mobile fixes for view-injected styles ---------- */
-/* These rules target classes that views (markets.js, investments.js) inject
-   via document.createElement('style'). We add them here at the same media
-   level so they apply uniformly across pages. */
+/* Mobile-specific layout tweaks for the investments what-if + detail
+   modals. The original block also held .markets-tabs / .compare-chip
+   rules for views that were since removed — those are gone. */
 @media (max-width: 640px) {
-  /* Markets: tab row scrolls horizontally instead of wrapping awkwardly.
-     Smaller padding so 5 tabs (Stocks/Crypto/ETFs/Movers/Screener) fit. */
-  .markets-tabs {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    flex-wrap: nowrap;
-    scrollbar-width: none;
-  }
-  .markets-tabs::-webkit-scrollbar { display: none; }
-  .markets-tab {
-    padding: 12px 14px !important;
-    font-size: 13px !important;
-    flex-shrink: 0;
-    white-space: nowrap;
-  }
   /* Asset detail slide-over: take full screen instead of 96vw with side bar */
   .detail-panel {
     width: 100vw !important;
@@ -1256,12 +1231,6 @@ a:hover { color: var(--primary-strong); }
   div[style*="grid-template-columns:1fr 1fr"][style*="font-size:13px"] {
     grid-template-columns: 1fr !important;
   }
-
-  /* Compare view: chips wrap on small screens */
-  .compare-chip { font-size: 11px; padding: 4px 8px; }
-
-  /* Chat page: full-height messages list */
-  #chat-page-messages { min-height: 380px; }
 
   /* Reports: download buttons stack to full width */
   .card .btn-block { width: 100%; }
@@ -1589,8 +1558,6 @@ table.data td { font-variant-numeric: tabular-nums; }
   /* Reserve space at the bottom of every view for the tabbar
      (~58px tall + safe-area). */
   .view-root { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
-  /* Chat FAB needs to clear the tabbar. */
-  .chat-fab { bottom: calc(80px + env(safe-area-inset-bottom)) !important; }
 }
 
 /* ---------- Empty state ---------- */
@@ -1602,79 +1569,6 @@ table.data td { font-variant-numeric: tabular-nums; }
 .empty-state svg { width: 70px; height: 70px; opacity: 0.35; }
 .empty-state h3 { margin: 16px 0 8px; color: var(--text); font-family: var(--font-serif); font-weight: 400; font-size: 22px; }
 .empty-state p { font-size: 13px; margin: 0 0 22px; }
-
-/* ---------- Chat ---------- */
-.chat-fab {
-  position: fixed; bottom: 28px; right: 28px;
-  width: 52px; height: 52px;
-  border-radius: 50%;
-  background: var(--primary);
-  color: #fff;
-  border: none;
-  cursor: pointer;
-  z-index: 999;
-  box-shadow: var(--shadow-lg);
-  transition: background 150ms ease, transform 150ms ease;
-  display: inline-flex; align-items: center; justify-content: center;
-}
-.chat-fab svg { width: 22px; height: 22px; }
-.chat-fab:hover { background: var(--primary-strong); transform: translateY(-2px); }
-.chat-panel {
-  position: fixed; bottom: 0; right: 0;
-  width: min(440px, 100%);
-  height: min(620px, 80vh);
-  background: var(--surface);
-  border-radius: var(--radius) 0 0 0;
-  box-shadow: var(--shadow-lg);
-  display: flex; flex-direction: column;
-  z-index: 1001;
-  border: 1px solid var(--border);
-  border-bottom: none;
-  border-right: none;
-}
-.chat-panel-header {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border);
-  background: var(--sidebar-bg);
-  color: var(--text);
-  border-radius: var(--radius) 0 0 0;
-}
-.chat-panel-header strong { font-family: var(--font-serif); font-size: 16px; font-weight: 500; }
-.chat-panel-header .icon-btn { color: var(--sidebar-fg); border-color: var(--border-strong); }
-.chat-messages { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
-.msg {
-  max-width: 85%;
-  padding: 10px 14px;
-  border-radius: var(--radius);
-  font-size: 13px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-.msg.user { align-self: flex-end; background: var(--primary); color: #fff; }
-.msg.assistant { align-self: flex-start; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
-.msg.error { align-self: flex-start; background: rgba(165, 101, 81, 0.1); color: var(--danger); border: 1px solid rgba(165, 101, 81, 0.2); }
-.typing { display: inline-flex; gap: 4px; align-items: center; padding: 4px 0; }
-.typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); animation: typing 1.2s infinite ease-in-out; }
-.typing span:nth-child(2) { animation-delay: 0.2s; }
-.typing span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes typing { 0%, 60%, 100% { transform: translateY(0); opacity: 0.3; } 30% { transform: translateY(-3px); opacity: 1; } }
-.chat-form {
-  display: flex; gap: 8px; padding: 14px;
-  border-top: 1px solid var(--border);
-}
-.chat-form textarea {
-  flex: 1; resize: none;
-  padding: 10px 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
-  font-family: inherit;
-  font-size: 13px;
-}
-.chat-form textarea:focus { outline: none; border-color: var(--primary); }
 
 /* ---------- Calculator / scenarios specific ---------- */
 .row { display: flex; gap: 18px; flex-wrap: wrap; }

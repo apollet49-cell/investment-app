@@ -187,20 +187,6 @@ class CalcResult(BaseModel):
     result: Any
 
 
-# ---------- Chat ----------
-class ChatMessageOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    role: str
-    content: str
-    truncated: bool
-    created_at: datetime
-
-
-class ChatSendRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=5000)
-
-
 # ---------- Settings ----------
 class SettingsUpdate(BaseModel):
     name: Optional[str] = None
@@ -243,49 +229,8 @@ class TransactionOut(BaseModel):
     created_at: datetime
 
 
-class DCAPlanCreate(BaseModel):
-    model_config = ConfigDict(allow_inf_nan=False)
-    name: str = Field(min_length=1, max_length=255)
-    symbol: Optional[str] = Field(default=None, max_length=64)
-    asset_type: str = "etf"
-    amount: float = Field(gt=0)
-    frequency: str = "monthly"
-    day_of_month: Optional[int] = Field(default=None, ge=1, le=31)
-    start_date: date
-    is_active: bool = True
-
-
-class DCAPlanOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    name: str
-    symbol: Optional[str]
-    asset_type: str
-    amount: float
-    frequency: str
-    day_of_month: Optional[int]
-    start_date: date
-    is_active: bool
-    created_at: datetime
-
-
 class TargetAllocationUpdate(BaseModel):
     target_by_type: dict[str, float]
-
-
-class WatchlistItemCreate(BaseModel):
-    symbol: str = Field(min_length=1, max_length=64)
-    asset_type: str
-    name: Optional[str] = None
-
-
-class WatchlistItemOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    symbol: str
-    asset_type: str
-    name: Optional[str]
-    created_at: datetime
 
 
 class AlertOut(BaseModel):
