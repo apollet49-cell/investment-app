@@ -52,7 +52,7 @@
       line-height: 1.45;
     }
   </style>
-  <link rel="stylesheet" href="/static/style.css?v=82" />
+  <link rel="stylesheet" href="/static/style.css?v=87" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='8' y='8' width='84' height='84' rx='20' fill='%236b7d5e'/><rect x='26' y='60' width='11' height='22' rx='2' fill='%23faf7f2'/><rect x='44' y='46' width='11' height='36' rx='2' fill='%23faf7f2'/><rect x='62' y='28' width='11' height='54' rx='2' fill='%23faf7f2'/><path d='M31 58 L49 44 L67 26' stroke='%23faf7f2' stroke-width='3' fill='none' stroke-linecap='round'/></svg>" />
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#6b7d5e" />
@@ -60,9 +60,11 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="InvestApp" />
   <!-- Chart.js and lightweight-charts are lazy-loaded by the views that
-       actually draw charts (dashboard, fire, scenarios, compare, plans,
-       investments detail modal, markets). See loadChartJs() in app.js. -->
-  <link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" />
+       actually draw charts (dashboard, fire, scenarios, compare,
+       investments detail modal). See loadChartJs() in app.js. -->
+  <link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"
+        integrity="sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt"
+        crossorigin="anonymous" />
 </head>
 <body>
   <div id="toast-host" aria-live="polite"></div>
@@ -615,6 +617,6 @@
     <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
   </div>
 
-  <script type="module" src="/static/app.js?v=82"></script>
+  <script type="module" src="/static/app.js?v=87"></script>
 </body>
 </html>

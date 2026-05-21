@@ -1,18 +1,26 @@
-// Single-page app entry point. Hash-based router, module-level state, JSON API
-// wrapper that injects the JWT and handles 401 once. View modules are lazy-loaded.
+// Single-page app entry point. Hash-based router, module-level state,
+// JSON API wrapper that injects the JWT and handles 401 once. View
+// modules are lazy-loaded.
+//
+// This file owns the SPA shell: routing, boot, sidebar, SSE/WebSocket,
+// install prompt. The reusable building blocks (SWR cache, UI helpers,
+// FX, analytics, auth UI) live in ./app/*.js and are re-exported here so
+// the 22 view modules can keep importing everything from "/static/app.js".
 import { t, getLang, setLang, availableLangs } from "/static/i18n.js";
 
+// ---------- State ----------
 export const state = {
   user: null,
   token: localStorage.getItem("token") || null,
   theme: localStorage.getItem("theme") || "dark",
   charts: {},               // { name: Chart.js instance, destroyed on view change }
-  sse: null,                // EventSource
+  sse: null,                // EventSource / WebSocket
   lastPrices: new Map(),    // for flash animations
   fxRate: 1.0,              // USD → user.currency multiplier (1.0 when user.currency == "USD")
   fxFetchedAt: null,
 };
 
+// ---------- HTTP wrapper ----------
 const API = {
   base: "",
   async request(path, opts = {}) {
@@ -44,211 +52,35 @@ const API = {
 
 export { API };
 
-// Stale-while-revalidate GET helper. Backed by IndexedDB (with an
-// in-memory + sessionStorage fast path) so the cache survives tab close
-// and full-page reloads. Each entry has a 24h TTL — beyond that we fall
-// back to network so the user doesn't see a dashboard from two weeks ago.
-//
-// Layered cache lookup:
-//   1. In-memory Map (zero-latency for the current session)
-//   2. sessionStorage (synchronous, survives soft reload)
-//   3. IndexedDB (asynchronous, survives tab close & browser restart)
-//   4. Network
-//
-// Request deduplication: when N concurrent callers ask for the same
-// uncached path (e.g. dashboard.js calling loadPerformance +
-// loadHistoryAndBenchmark in parallel), only ONE fetch goes over the
-// wire — others await the shared promise.
-//
-// Cache is scoped to the JWT so two users sharing a browser don't bleed.
-const _inflight = new Map();
-const _memCache = new Map();
-const SWR_TTL_MS = 24 * 60 * 60 * 1000;
+// ---------- Sub-module re-exports ----------
+// Imports must be hoisted, so the bindings in cache/ui/fx/analytics/auth_ui
+// see `state` and `API` (defined above) by the time their bodies execute.
+export {
+  hydrateSwrCache,
+  cachedGet,
+  clearSwrCache,
+  prewarmCache,
+  invalidateCache,
+  seedCache,
+} from "/static/app/cache.js";
+export { toast, confirmModal, animateNumber, spinner, skeleton } from "/static/app/ui.js";
+export { loadFxRate } from "/static/app/fx.js";
+export { track } from "/static/app/analytics.js";
+import { clearSwrCache, prewarmCache } from "/static/app/cache.js";
+import { toast } from "/static/app/ui.js";
+import { loadFxRate } from "/static/app/fx.js";
+import { track, loadPosthog } from "/static/app/analytics.js";
+import { showAuth } from "/static/app/auth_ui.js";
 
-// Tiny IndexedDB wrapper (no library — keeps the bundle small).
-const _IDB_NAME = "investapp-swr";
-const _IDB_STORE = "swr";
-let _idbPromise = null;
-function _openIdb() {
-  if (_idbPromise) return _idbPromise;
-  if (!("indexedDB" in window)) return Promise.resolve(null);
-  _idbPromise = new Promise((resolve) => {
-    const req = indexedDB.open(_IDB_NAME, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(_IDB_STORE);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => resolve(null); // fail-open: degrade to sessionStorage
-  });
-  return _idbPromise;
-}
-async function _idbGet(key) {
-  const db = await _openIdb();
-  if (!db) return null;
-  return new Promise((resolve) => {
-    try {
-      const tx = db.transaction(_IDB_STORE, "readonly");
-      const req = tx.objectStore(_IDB_STORE).get(key);
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => resolve(null);
-    } catch (_) { resolve(null); }
-  });
-}
-async function _idbPut(key, value) {
-  const db = await _openIdb();
-  if (!db) return;
-  try {
-    const tx = db.transaction(_IDB_STORE, "readwrite");
-    tx.objectStore(_IDB_STORE).put(value, key);
-  } catch (_) { /* quota / closed db — ignore */ }
-}
-async function _idbDeleteWhere(predicate) {
-  const db = await _openIdb();
-  if (!db) return;
-  try {
-    const tx = db.transaction(_IDB_STORE, "readwrite");
-    const store = tx.objectStore(_IDB_STORE);
-    store.openCursor().onsuccess = (e) => {
-      const cursor = e.target.result;
-      if (!cursor) return;
-      if (predicate(cursor.key)) cursor.delete();
-      cursor.continue();
-    };
-  } catch (_) {}
-}
-
-function _swrKey(path) {
-  return `swr:${state.token?.slice(-12) || "anon"}:${path}`;
-}
-
-function _isFresh(entry) {
-  return entry && entry.value !== undefined && (Date.now() - (entry.at || 0)) < SWR_TTL_MS;
-}
-
-function _readSync(key) {
-  // In-memory first (no parse), then sessionStorage (synchronous, parsed once).
-  if (_memCache.has(key)) return _memCache.get(key);
-  const raw = sessionStorage.getItem(key);
-  if (!raw) return null;
-  try {
-    const entry = JSON.parse(raw);
-    _memCache.set(key, entry);
-    return entry;
-  } catch (_) { return null; }
-}
-
-function _writeAll(key, value) {
-  const entry = { value, at: Date.now() };
-  _memCache.set(key, entry);
-  try { sessionStorage.setItem(key, JSON.stringify(entry)); } catch (_) {}
-  _idbPut(key, entry).catch(() => {});
-}
-
-// Hydrate the synchronous caches from IndexedDB at boot so the *first*
-// page load after a browser restart still gets instant repeat-visit perf.
-export async function hydrateSwrCache() {
-  const db = await _openIdb();
-  if (!db) return;
-  return new Promise((resolve) => {
-    try {
-      const tx = db.transaction(_IDB_STORE, "readonly");
-      const store = tx.objectStore(_IDB_STORE);
-      const req = store.openCursor();
-      req.onsuccess = (e) => {
-        const cursor = e.target.result;
-        if (!cursor) return resolve();
-        const key = cursor.key;
-        const entry = cursor.value;
-        if (typeof key === "string" && key.startsWith("swr:") && _isFresh(entry)) {
-          _memCache.set(key, entry);
-          try { sessionStorage.setItem(key, JSON.stringify(entry)); } catch (_) {}
-        } else if (entry && !_isFresh(entry)) {
-          cursor.delete(); // GC stale entries
-        }
-        cursor.continue();
-      };
-      req.onerror = () => resolve();
-    } catch (_) { resolve(); }
-  });
-}
-
-export async function cachedGet(path, onUpdate) {
-  const key = _swrKey(path);
-  const cached = _readSync(key);
-  if (_isFresh(cached)) {
-    // Fire-and-forget background refresh, deduped via the inflight map.
-    if (!_inflight.has(key)) {
-      const p = API.request(path).then(fresh => {
-        const same = JSON.stringify(fresh) === JSON.stringify(cached.value);
-        _writeAll(key, fresh);
-        if (!same && typeof onUpdate === "function") {
-          try { onUpdate(fresh); } catch (_) {}
-        }
-        return fresh;
-      }).catch(() => null).finally(() => _inflight.delete(key));
-      _inflight.set(key, p);
-    }
-    return cached.value;
-  }
-  // Cache miss / stale: dedupe via inflight too.
-  if (_inflight.has(key)) {
-    const fresh = await _inflight.get(key);
-    if (fresh !== null && fresh !== undefined) return fresh;
-  }
-  const promise = API.request(path)
-    .then(fresh => {
-      _writeAll(key, fresh);
-      return fresh;
-    })
-    .finally(() => _inflight.delete(key));
-  _inflight.set(key, promise);
-  return await promise;
-}
-
-export function clearSwrCache() {
-  _memCache.clear();
-  for (const k of Object.keys(sessionStorage)) {
-    if (k.startsWith("swr:")) sessionStorage.removeItem(k);
-  }
-  _idbDeleteWhere(k => typeof k === "string" && k.startsWith("swr:")).catch(() => {});
-}
-
-// Fire the most-visited GETs in parallel right after login so the SWR
-// cache is hot when the user navigates. Each call is fire-and-forget
-// (errors swallowed silently); cachedGet() reads from sessionStorage on
-// the next call. Skipped if a cache entry for that path already exists
-// (avoids re-fetching when bootApp runs on page reload).
-export function prewarmCache() {
-  // With /dashboard/all wiring the entire dashboard in one fetch, the
-  // prewarm just needs to seed the bundle once. The view will read each
-  // sub-result from the SWR cache instead of firing 6 individual calls.
-  const tokenSuffix = state.token?.slice(-12) || "anon";
-  const prefix = `swr:${tokenSuffix}:`;
-  // Skip if dashboard summary is already warm from a recent visit.
-  if (sessionStorage.getItem(prefix + "/dashboard/summary")) return;
-  API.request("/dashboard/all").then(bundle => {
-    if (!bundle) return;
-    seedCache("/dashboard/summary", bundle.summary);
-    seedCache("/dashboard/performance", bundle.performance);
-    seedCache("/dashboard/history?days=365&benchmark=^GSPC", bundle.history);
-    seedCache("/dashboard/risk?days=180&benchmark=^GSPC", bundle.risk);
-    seedCache(`/planning/fire?monthly_expenses=2500&monthly_savings=1500&expected_return_pct=7&target_multiplier=25`, bundle.fire);
-    seedCache("/planning/stress-test", bundle.stress);
-    seedCache("/dividends/calendar", bundle.dividends);
-  }).catch(() => {});
-  // Investments list is separate from /dashboard/all
-  if (!sessionStorage.getItem(prefix + "/investments/")) {
-    API.request("/investments/").then(data => seedCache("/investments/", data)).catch(() => {});
-  }
-}
-
-// Lazy script loader. Memoised Promise so concurrent callers get the same
-// load. Used to defer Chart.js and lightweight-charts (combined ~300KB
-// unzipped) from the index.html <script> tags — those pulled the libs
-// even on routes that don't draw any charts (Calculator, Settings,
-// Transactions list, Reports). Now each chart-using view does:
+// ---------- Lazy script loader ----------
+// Memoised Promise so concurrent callers get the same load. Used to
+// defer Chart.js and lightweight-charts (combined ~300KB unzipped) from
+// the index.html <script> tags — those pulled the libs even on routes
+// that don't draw any charts. Now each chart-using view does:
 //   await loadChartJs();
 //   state.charts.foo = new window.Chart(ctx, { ... });
 const _scriptCache = new Map();
-export function loadScript(src) {
+export function loadScript(src, integrity) {
   if (_scriptCache.has(src)) return _scriptCache.get(src);
   const p = new Promise((resolve, reject) => {
     const existing = document.querySelector(`script[src="${src}"]`);
@@ -261,6 +93,10 @@ export function loadScript(src) {
     const s = document.createElement("script");
     s.src = src;
     s.async = true;
+    if (integrity) {
+      s.integrity = integrity;
+      s.crossOrigin = "anonymous";
+    }
     s.onload = () => { s.dataset.loaded = "1"; resolve(); };
     s.onerror = reject;
     document.head.appendChild(s);
@@ -269,239 +105,18 @@ export function loadScript(src) {
   return p;
 }
 export const loadChartJs = () =>
-  window.Chart ? Promise.resolve() : loadScript("https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js");
+  window.Chart ? Promise.resolve() : loadScript(
+    "https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js",
+    "sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt",
+  );
 export const loadLightweightCharts = () =>
-  window.LightweightCharts ? Promise.resolve() : loadScript("https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js");
-
-// Drop one or more cached paths so the next cachedGet() goes to the
-// network. Call this after mutations (POST/PUT/DELETE) on a resource so
-// the next view doesn't render with the stale list. Accepts prefixes —
-// `invalidateCache("/investments/")` also clears `/investments/?foo=1`.
-export function invalidateCache(...pathPrefixes) {
-  const tokenSuffix = state.token?.slice(-12) || "anon";
-  const prefix = `swr:${tokenSuffix}:`;
-  const matches = (k) => {
-    if (typeof k !== "string" || !k.startsWith(prefix)) return false;
-    const rest = k.slice(prefix.length);
-    return pathPrefixes.some(p => rest.startsWith(p));
-  };
-  for (const k of Array.from(_memCache.keys())) if (matches(k)) _memCache.delete(k);
-  for (const k of Object.keys(sessionStorage)) if (matches(k)) sessionStorage.removeItem(k);
-  _idbDeleteWhere(matches).catch(() => {});
-}
-
-// Seed the SWR cache with a value we already have in memory (e.g. from
-// a /dashboard/all bundle response or right after a mutation). Avoids a
-// redundant network round-trip on the next cachedGet.
-export function seedCache(path, value) {
-  if (value === null || value === undefined) return;
-  _writeAll(_swrKey(path), value);
-}
-
-// ---------- Toast / spinner ----------
-export function toast(message, type = "info", ms = 3500) {
-  const host = document.getElementById("toast-host");
-  const el = document.createElement("div");
-  el.className = `toast ${type}`;
-  el.textContent = message;
-  host.appendChild(el);
-  setTimeout(() => el.remove(), ms);
-}
-
-// Styled confirm modal — replaces window.confirm() everywhere. Returns
-// a Promise<boolean>. Renders a centered card with the message, two
-// buttons (Cancel + Confirm). Escape / backdrop click resolve false.
-// The Confirm button can be tinted "danger" for destructive actions.
-export function confirmModal({ message, title = "", confirmText = "Confirm", cancelText = "Cancel", danger = false } = {}) {
-  return new Promise((resolve) => {
-    const overlay = document.createElement("div");
-    overlay.className = "confirm-overlay";
-    const safeTitle = title ? `<div class="confirm-title">${escapeHtml(title)}</div>` : "";
-    overlay.innerHTML = `
-      <div class="confirm-card" role="dialog" aria-modal="true">
-        ${safeTitle}
-        <div class="confirm-message">${escapeHtml(message)}</div>
-        <div class="confirm-actions">
-          <button class="btn btn-ghost confirm-cancel" type="button">${escapeHtml(cancelText)}</button>
-          <button class="btn ${danger ? "btn-danger" : "btn-primary"} confirm-ok" type="button">${escapeHtml(confirmText)}</button>
-        </div>
-      </div>`;
-    document.body.appendChild(overlay);
-    // Focus the confirm button so Enter accepts; Esc cancels.
-    const okBtn = overlay.querySelector(".confirm-ok");
-    const cancelBtn = overlay.querySelector(".confirm-cancel");
-    okBtn.focus();
-    const done = (val) => {
-      overlay.removeEventListener("keydown", onKey);
-      overlay.remove();
-      resolve(val);
-    };
-    const onKey = (e) => {
-      if (e.key === "Escape") done(false);
-      if (e.key === "Enter") done(true);
-    };
-    overlay.addEventListener("keydown", onKey);
-    overlay.addEventListener("click", (e) => {
-      if (e.target === overlay) done(false);
-    });
-    okBtn.onclick = () => done(true);
-    cancelBtn.onclick = () => done(false);
-  });
-}
-
-// Count-up animation on a DOM element. Used by the dashboard KPI cards
-// so the net worth / total invested / ROI percentages animate from 0
-// to their final value over ~700ms. Feels alive without being annoying.
-// Pass `format(n)` for currency / percent / etc.; default is integer.
-export function animateNumber(el, target, { duration = 700, format = (n) => Math.round(n).toString() } = {}) {
-  if (!el || !isFinite(target)) return;
-  const start = performance.now();
-  const initial = 0;
-  // Cancel any previous animation running on this element
-  if (el._countAnim) cancelAnimationFrame(el._countAnim);
-  const tick = (now) => {
-    const t = Math.min(1, (now - start) / duration);
-    // ease-out-cubic — fast start, gentle landing
-    const eased = 1 - Math.pow(1 - t, 3);
-    const v = initial + (target - initial) * eased;
-    el.textContent = format(v);
-    if (t < 1) {
-      el._countAnim = requestAnimationFrame(tick);
-    } else {
-      delete el._countAnim;
-    }
-  };
-  el._countAnim = requestAnimationFrame(tick);
-}
-
-export function spinner(big = false) {
-  return `<span class="spinner ${big ? "lg" : ""}"></span>`;
-}
-
-// Skeleton placeholders — match the final layout so the page doesn't
-// reflow when data lands. `shape` is one of:
-//   "kpi"       — 4 KPI cards in a grid (dashboard hero)
-//   "chart"     — a chart card
-//   "table"     — 8 table rows
-//   "list"      — 4 list rows
-// Use instead of spinner() for content that's visible in <1s. Beyond 1s
-// users prefer feedback that something IS loading (spinner > skeleton).
-export function skeleton(shape = "kpi") {
-  const bar = (w = "100%", h = "12px") => `<div class="sk-bar" style="width:${w};height:${h}"></div>`;
-  if (shape === "kpi") {
-    return `<div class="summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
-      ${Array(4).fill(`
-        <div class="summary-card sk">
-          ${bar("60%", "11px")}
-          ${bar("80%", "26px")}
-          ${bar("50%", "11px")}
-        </div>`).join("")}
-    </div>
-    <div class="card chart-card sk-chart"></div>`;
-  }
-  if (shape === "chart") {
-    return `<div class="card chart-card sk-chart"></div>`;
-  }
-  if (shape === "table") {
-    return `<div class="card">
-      ${Array(8).fill(`<div class="sk-row">${bar("30%")}${bar("15%")}${bar("15%")}${bar("15%")}</div>`).join("")}
-    </div>`;
-  }
-  if (shape === "list") {
-    return `<div class="card">
-      ${Array(4).fill(`<div class="sk-row">${bar("50%")}${bar("30%")}</div>`).join("")}
-    </div>`;
-  }
-  return spinner(true);
-}
-
-// ---------- FX rate (USD → user currency) ----------
-// All monetary values are stored in USD on the backend; the frontend converts
-// at display time using a live rate from /market/forex/USD/{currency}.
-export async function loadFxRate() {
-  const cur = state.user?.currency || "USD";
-  if (cur === "USD") {
-    state.fxRate = 1.0;
-    state.fxFetchedAt = Date.now();
-    state.fxFailed = false;
-    return 1.0;
-  }
-  // Read cached FX from localStorage so non-USD users don't wait for a
-  // yfinance round-trip on every cold start. FX rates move slowly (~0.5%/day
-  // for major pairs); a 1h cache is fine for display formatting. We still
-  // fire a background refresh so the next render is up-to-date.
-  const lsKey = `fx:USD:${cur}`;
-  try {
-    const raw = localStorage.getItem(lsKey);
-    if (raw) {
-      const { rate, at } = JSON.parse(raw);
-      if (isFinite(rate) && rate > 0 && Date.now() - at < 60 * 60 * 1000) {
-        state.fxRate = rate;
-        state.fxFetchedAt = at;
-        state.fxFailed = false;
-        // Background refresh — don't await, so the caller proceeds.
-        API.request(`/market/forex/USD/${cur}`).then(d => {
-          if (d?.rate && isFinite(d.rate) && d.rate > 0) {
-            state.fxRate = d.rate;
-            state.fxFetchedAt = Date.now();
-            try { localStorage.setItem(lsKey, JSON.stringify({ rate: d.rate, at: Date.now() })); } catch (_) {}
-          }
-        }).catch(() => {});
-        return rate;
-      }
-    }
-  } catch (_) {}
-  try {
-    const data = await API.request(`/market/forex/USD/${cur}`);
-    if (data?.rate && isFinite(data.rate) && data.rate > 0) {
-      state.fxRate = data.rate;
-      state.fxFetchedAt = Date.now();
-      state.fxFailed = false;
-      try { localStorage.setItem(lsKey, JSON.stringify({ rate: data.rate, at: Date.now() })); } catch (_) {}
-      return data.rate;
-    }
-  } catch (e) {
-    console.warn(`FX rate USD→${cur} failed, falling back to 1.0:`, e.message);
-  }
-  state.fxRate = 1.0;
-  state.fxFailed = true;
-  return 1.0;
-}
-
-// ---------- Analytics (PostHog) ----------
-// Loaded lazily from /config/public after bootApp. If POSTHOG_API_KEY isn't
-// set on the server, this becomes a no-op so dev/test runs aren't tracked.
-let _posthogReady = false;
-export function track(event, props = {}) {
-  if (!_posthogReady || !window.posthog) return;
-  try { window.posthog.capture(event, props); } catch (_) {}
-}
-async function loadPosthog() {
-  try {
-    const cfg = await fetch("/config/public").then(r => r.json()).catch(() => ({}));
-    const ph = cfg?.posthog;
-    if (!ph?.api_key) return;
-    // Minimal snippet — keeps the page light, defers full SDK loading
-    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
-    window.posthog.init(ph.api_key, {
-      api_host: ph.host,
-      person_profiles: "identified_only",
-      capture_pageview: false,        // we'll send manual pageviews per route
-      capture_pageleave: true,
-      disable_session_recording: true,
-    });
-    if (state.user?.id) {
-      window.posthog.identify(String(state.user.id), {
-        currency: state.user.currency,
-        has_anthropic_key: state.user.has_anthropic_key,
-      });
-    }
-    _posthogReady = true;
-  } catch (_) { /* analytics is best-effort */ }
-}
+  window.LightweightCharts ? Promise.resolve() : loadScript(
+    "https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js",
+    "sha384-JZigAjwiaZtkUbA44CWkPaT3iBb/mU5pO6QOANp+OqHd4q+1+7MG1kzp2OOP9ZfP",
+  );
 
 // ---------- Authenticated download ----------
-// Browsers don't add the Authorization header on a plain `<a href>` click,
+// Browsers don't add the Authorization header on a plain <a href> click,
 // so any export endpoint behind get_current_user 401s on a vanilla link.
 // This fetches with the bearer token, builds a blob, and triggers a click
 // on a transient anchor so the browser presents the standard save dialog.
@@ -542,11 +157,15 @@ export function pct(value, signed = true) {
   return `${sign}${Number(value).toFixed(2)}%`;
 }
 
+export function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
 // ---------- Routing ----------
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "82";
+const VIEW_VERSION = "87";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -567,18 +186,13 @@ const ROUTES = [
 // in SIDEBAR_LINKS below.
 const ICONS = {
   dashboard:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>`,
-  markets:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 4 9 14 14 0 0 1-4 9 14 14 0 0 1-4-9 14 14 0 0 1 4-9z"/></svg>`,
-  watchlist:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 14.85 8 21 8.9 16.5 13.5 17.7 20 12 16.85 6.3 20 7.5 13.5 3 8.9 9.15 8 12 2"/></svg>`,
   investments: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><path d="M3 13h18"/></svg>`,
   calculator:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8"/><path d="M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"/></svg>`,
   scenarios:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="15 7 21 7 21 13"/></svg>`,
-  chat:        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.2L3 21l1.8-6.4A8 8 0 1 1 21 12z"/></svg>`,
   reports:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>`,
-  compare:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><path d="M3 6 H21"/><path d="M3 6 L7 10"/><path d="M3 6 L7 2"/></svg>`,
   tax:         `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><circle cx="7" cy="7" r="2"/><circle cx="17" cy="17" r="2"/><path d="M3 3 H21 V21 H3 Z" stroke-dasharray="2,3"/></svg>`,
   fire:        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 14a4 4 0 0 0 8 0c0-2-1-3.5-3-5 0 2-1 3-2 3.5 0-1.5-1-2.5-1-2.5-1 1-2 2.5-2 4z"/><path d="M12 2c0 3-2 4-2 6"/></svg>`,
   transactions:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 3 21 7 17 11"/><line x1="21" y1="7" x2="9" y2="7"/><polyline points="7 21 3 17 7 13"/><line x1="3" y1="17" x2="15" y2="17"/></svg>`,
-  plans:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><circle cx="12" cy="15" r="2"/></svg>`,
   rebalance:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v6M7 14v6"/><path d="M4 7h6M4 17h6"/><path d="M17 4v6M17 14v6"/><path d="M14 12h6"/><circle cx="17" cy="12" r="0.5"/></svg>`,
   settings:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v3M12 20v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M1 12h3M20 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>`,
   sun:         `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>`,
@@ -586,7 +200,6 @@ const ICONS = {
   logout:      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
   review:      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/><path d="M12 18 L13.6 14.5 L17 13 L13.6 11.5 L12 8 L10.4 11.5 L7 13 L10.4 14.5 Z"/></svg>`,
 };
-
 // FIRE-focused navigation. Cut from 12 to 8 items — Markets browser,
 // Watchlist, DCA Plans, and Compare were 70-80% complete features that
 // diluted the product story. They're still reachable by direct URL for
@@ -603,14 +216,15 @@ const SIDEBAR_LINKS = [
   { hash: "#/rebalance",   icon: "rebalance",   labelKey: "nav.rebalance" },
   { hash: "#/reports",     icon: "reports",     labelKey: "nav.reports" },
 ];
-// Routes that still exist (direct URL works) but are NOT shown in the sidebar.
-// Keeping them in ROUTES means /#compare or /#calculator continues to load if
-// someone has a bookmark or hits the URL directly.
-
-// Sidebar items rendered just above the language/theme/logout footer.
-// Visually separated to give Settings its own "preferences" zone.
 const SIDEBAR_BOTTOM_LINKS = [
   { hash: "#/settings",    icon: "settings",    labelKey: "nav.settings" },
+];
+const MOBILE_TABBAR_LINKS = [
+  { hash: "#/dashboard",    icon: "dashboard",    labelKey: "nav.dashboard" },
+  { hash: "#/investments",  icon: "investments",  labelKey: "nav.investments" },
+  { hash: "#/transactions", icon: "transactions", labelKey: "nav.transactions" },
+  { hash: "#/review",       icon: "review",       labelKey: "review.title" },
+  { hash: "#/fire",         icon: "fire",         labelKey: "nav.fire" },
 ];
 
 function destroyCharts() {
@@ -648,16 +262,13 @@ async function renderRoute() {
     return;
   }
   const hash = window.location.hash || "#/dashboard";
-  // Landing-only anchors (the dropdown menu uses #lv-honest, #lv-pricing
-  // etc. for smooth-scroll). These can fire hashchange even when the
-  // landing is hidden (e.g. an old browser session that still has those
-  // anchors in URL history). DON'T bounce the authenticated user to
+  // Landing-only anchors (#lv-honest etc.) can fire hashchange even when
+  // the landing is hidden. Don't bounce the authenticated user to
   // dashboard — silently ignore. Same for empty / "#" hashes.
   if (hash.startsWith("#lv-") || hash === "" || hash === "#") return;
   // Unknown routes (typos, removed features like #/markets) → silently
   // rewrite to dashboard via hash change rather than rendering dashboard
-  // under the wrong URL. The hashchange fires renderRoute again with the
-  // correct hash and we render normally.
+  // under the wrong URL.
   const route = ROUTES.find(r => r.hash === hash);
   if (!route) {
     window.location.hash = "#/dashboard";
@@ -666,10 +277,7 @@ async function renderRoute() {
   const mySeq = ++_routeSeq;
   const routeTitle = t(route.titleKey);
   document.getElementById("page-title").textContent = routeTitle;
-  // Browser tab title — "Dashboard · InvestApp" reads naturally when
-  // the user has multiple tabs open. Default stays static on the landing.
   document.title = `${routeTitle} · InvestApp`;
-  // Analytics: page view per route, with the hash as the path.
   track("page_view", { route: route.hash });
   for (const a of document.querySelectorAll(".sidebar-link, .tab-link")) {
     const isActive = a.dataset.hash === route.hash;
@@ -680,18 +288,25 @@ async function renderRoute() {
   runViewCleanup();
   destroyCharts();
   const root = document.getElementById("view-root");
+  // Two DOM-attached tokens to defeat the rollback bug:
+  //   - dataset.route    : current hash (e.g. "#/fire")
+  //   - dataset.renderId : unique id per renderRoute call
+  // Views capture BOTH at render start. A stale async resolving after a
+  // navigation sees a different renderId (even if the route happens to
+  // match — e.g. user navigates dashboard → fire → dashboard within the
+  // same fetch window) and bails before painting.
+  root.dataset.route = route.hash;
+  root.dataset.renderId = String(mySeq);
   // Only show the spinner if the module isn't already cached — otherwise
   // the swap is synchronous and showing-then-immediately-replacing a
-  // spinner causes a flash. Just leave the existing content briefly.
+  // spinner causes a flash.
   if (!_preloadedModules.has(route.hash)) {
+    const { spinner } = await import("/static/app/ui.js");
     root.innerHTML = `<div style="text-align:center;padding:60px">${spinner(true)}</div>`;
   }
   try {
     const mod = _preloadedModules.get(route.hash) || await route.load();
-    // Cache for future navigations (instant on second visit).
     _preloadedModules.set(route.hash, mod);
-    // If a newer renderRoute already started, abort so we don't paint
-    // the OLD view's content over the new spinner / new view's render.
     if (mySeq !== _routeSeq) return;
     await mod.render(root);
     if (mySeq !== _routeSeq) return;
@@ -702,208 +317,8 @@ async function renderRoute() {
   }
 }
 
-// ---------- Auth screen ----------
-// The landing v2 (sage redesign, Geist+Instrument Serif) is pre-rendered
-// in index.html, so showAuth() just unhides #auth-screen and wires the
-// CTAs (idempotent — multiple calls don't double-bind handlers).
-function showAuth() {
-  document.getElementById("app-shell").classList.add("hidden");
-  const authScreen = document.getElementById("auth-screen");
-  authScreen.classList.remove("hidden");
-  // Document body should scroll the landing freely (the app-shell sets
-  // overflow:hidden when active for the fixed sidebar layout).
-  document.body.style.overflow = "";
-  wireLandingV2();
-}
-
-// Mode for the sign-in modal — "login" vs "register". Single shared
-// modal that swaps fields based on this flag.
-let _signinMode = "login";
-let _landingWired = false;
-
-function wireLandingV2() {
-  if (_landingWired) return;
-  _landingWired = true;
-
-  // Demo CTAs — every button/link with data-action="demo" triggers
-  // POST /auth/demo and boots straight into the app.
-  document.querySelectorAll('[data-action="demo"]').forEach((btn) => {
-    btn.addEventListener("click", async (ev) => {
-      ev.preventDefault();
-      const original = btn.innerHTML;
-      btn.disabled = true;
-      btn.innerHTML = `Setting up your demo…`;
-      try {
-        const data = await API.request("/auth/demo", { method: "POST" });
-        state.token = data.access_token;
-        state.user = data.user;
-        localStorage.setItem("token", state.token);
-        track("demo_login");
-        bootApp().catch(err => toast(err.message || "Something went wrong", "error"));
-      } catch (err) {
-        btn.disabled = false;
-        btn.innerHTML = original;
-        toast(err.message || "Demo unavailable, try again", "error");
-      }
-    });
-  });
-
-  // Sign-in modal triggers
-  document.querySelectorAll('[data-action="signin"]').forEach((el) => {
-    el.addEventListener("click", (ev) => { ev.preventDefault(); openSigninModal("login"); });
-  });
-
-  // Sticky-nav scrolled state — adds a thin border under the nav once
-  // the page has scrolled past the hero.
-  const lvNav = document.getElementById("lv-nav");
-  if (lvNav) {
-    const onScroll = () => {
-      if (window.scrollY > 6) lvNav.classList.add("is-scrolled");
-      else lvNav.classList.remove("is-scrolled");
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-  }
-
-  // Apple-style dropdown menu: trigger toggles the panel + backdrop,
-  // clicking an item smooth-scrolls to its section + closes the panel,
-  // Escape and outside-click also close.
-  const menuTrigger = document.getElementById("lv-menu-trigger");
-  const menuPanel = document.getElementById("lv-menu-panel");
-  const menuBackdrop = document.getElementById("lv-menu-backdrop");
-  if (menuTrigger && menuPanel) {
-    const setMenuOpen = (open) => {
-      menuPanel.classList.toggle("is-open", open);
-      menuBackdrop?.classList.toggle("is-open", open);
-      menuTrigger.setAttribute("aria-expanded", String(open));
-    };
-    menuTrigger.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      const isOpen = menuPanel.classList.contains("is-open");
-      setMenuOpen(!isOpen);
-    });
-    menuBackdrop?.addEventListener("click", () => setMenuOpen(false));
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && menuPanel.classList.contains("is-open")) setMenuOpen(false);
-    });
-    // Menu items: smooth-scroll + close
-    menuPanel.querySelectorAll("[data-menu-link]").forEach((link) => {
-      link.addEventListener("click", (ev) => {
-        const href = link.getAttribute("href");
-        if (href && href.startsWith("#")) {
-          ev.preventDefault();
-          setMenuOpen(false);
-          const target = document.querySelector(href);
-          if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-      });
-    });
-  }
-
-  // Reveal-on-scroll for sections — adds .is-in when each section enters
-  // the viewport. CSS handles the fade+rise.
-  const reveals = document.querySelectorAll("#auth-screen.landing-v2 .lv-sec-head, #auth-screen.landing-v2 .lv-compare, #auth-screen.landing-v2 .lv-bench-card, #auth-screen.landing-v2 .lv-env, #auth-screen.landing-v2 .lv-dvf-card, #auth-screen.landing-v2 .lv-review-card, #auth-screen.landing-v2 .lv-stat, #auth-screen.landing-v2 .lv-price, #auth-screen.landing-v2 .lv-cta-h");
-  reveals.forEach((el) => el.classList.add("lv-reveal"));
-  if ("IntersectionObserver" in window) {
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach((e) => {
-        if (e.isIntersecting) { e.target.classList.add("is-in"); io.unobserve(e.target); }
-      });
-    }, { threshold: 0.12, rootMargin: "0px 0px -8% 0px" });
-    reveals.forEach((el) => io.observe(el));
-  } else {
-    reveals.forEach((el) => el.classList.add("is-in"));
-  }
-
-  // Sign-in modal — form submit, close, switch register/login
-  const overlay = document.getElementById("signin-modal-overlay");
-  const form = document.getElementById("signin-form");
-  const errEl = document.getElementById("signin-error");
-  document.querySelectorAll('[data-action="signin-close"]').forEach((el) => {
-    el.addEventListener("click", closeSigninModal);
-  });
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) closeSigninModal(); });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && overlay.classList.contains("open")) closeSigninModal();
-  });
-  document.querySelectorAll('[data-action="signin-register"]').forEach((el) => {
-    el.addEventListener("click", (ev) => {
-      ev.preventDefault();
-      _signinMode = _signinMode === "login" ? "register" : "login";
-      renderSigninModeUI();
-    });
-  });
-  form.onsubmit = async (ev) => {
-    ev.preventDefault();
-    errEl.textContent = "";
-    const fd = new FormData(ev.target);
-    const payload = Object.fromEntries(fd.entries());
-    const submitBtn = form.querySelector(".signin-btn");
-    const originalLabel = submitBtn.textContent;
-    submitBtn.disabled = true;
-    submitBtn.textContent = "Working…";
-    try {
-      const path = _signinMode === "login" ? "/auth/login" : "/auth/register";
-      // Register endpoint expects a name — we use the email's local part
-      // when in register mode (the landing flow is auto-named).
-      if (_signinMode === "register" && !payload.name) {
-        payload.name = (payload.email || "").split("@")[0] || "Investor";
-      }
-      const data = await API.request(path, { method: "POST", body: payload });
-      if (!data || !data.access_token || !data.user) {
-        throw new Error("Invalid response from server");
-      }
-      state.token = data.access_token;
-      state.user = data.user;
-      localStorage.setItem("token", state.token);
-      track(_signinMode === "login" ? "user_login" : "user_register", { currency: data.user?.currency });
-      closeSigninModal();
-      bootApp().catch((err) => toast(err.message || "Boot error", "error"));
-    } catch (err) {
-      errEl.textContent = err.message || "Sign-in failed";
-      submitBtn.disabled = false;
-      submitBtn.textContent = originalLabel;
-    }
-  };
-}
-
-function openSigninModal(mode = "login") {
-  _signinMode = mode;
-  renderSigninModeUI();
-  const overlay = document.getElementById("signin-modal-overlay");
-  overlay.classList.add("open");
-  // Focus the email input
-  setTimeout(() => document.getElementById("signin-email")?.focus(), 50);
-}
-
-function closeSigninModal() {
-  document.getElementById("signin-modal-overlay")?.classList.remove("open");
-  document.getElementById("signin-error").textContent = "";
-}
-
-function renderSigninModeUI() {
-  const isLogin = _signinMode === "login";
-  document.getElementById("signin-h").textContent = isLogin ? "Sign in" : "Create your account";
-  const subP = document.querySelector(".signin-modal p");
-  if (subP) subP.textContent = isLogin
-    ? "Welcome back to your investment workspace."
-    : "Get a private workspace for your portfolio.";
-  document.querySelector(".signin-btn").textContent = isLogin ? "Sign in" : "Create account";
-  const switchEl = document.querySelector(".signin-switch");
-  if (switchEl) {
-    switchEl.innerHTML = isLogin
-      ? 'No account yet? <a data-action="signin-register">Register</a>'
-      : 'Already have an account? <a data-action="signin-register">Sign in</a>';
-    // Re-bind the new register link
-    switchEl.querySelector('[data-action="signin-register"]').addEventListener("click", (ev) => {
-      ev.preventDefault();
-      _signinMode = _signinMode === "login" ? "register" : "login";
-      renderSigninModeUI();
-    });
-  }
-}
-
-function logout() {
+// ---------- Logout ----------
+export function logout() {
   state.token = null;
   state.user = null;
   state.fxRate = 1.0;
@@ -917,18 +332,7 @@ function logout() {
   showAuth();
 }
 
-// ---------- App shell ----------
-// Mobile bottom tab bar — 5 most-used routes, Robinhood-style. The full
-// sidebar is still reachable on mobile via the hamburger, but the tabbar
-// handles the 80% case so a thumb never has to reach for the top-left.
-const MOBILE_TABBAR_LINKS = [
-  { hash: "#/dashboard",    icon: "dashboard",    labelKey: "nav.dashboard" },
-  { hash: "#/investments",  icon: "investments",  labelKey: "nav.investments" },
-  { hash: "#/transactions", icon: "transactions", labelKey: "nav.transactions" },
-  { hash: "#/review",       icon: "review",       labelKey: "review.title" },
-  { hash: "#/fire",         icon: "fire",         labelKey: "nav.fire" },
-];
-
+// ---------- Sidebar ----------
 function buildSidebar() {
   const renderLinks = (links) => links.map(l => `
     <a class="sidebar-link" data-hash="${l.hash}" href="${l.hash}">
@@ -940,7 +344,6 @@ function buildSidebar() {
   nav.innerHTML = renderLinks(SIDEBAR_LINKS);
   const navBottom = document.getElementById("sidebar-nav-bottom");
   if (navBottom) navBottom.innerHTML = renderLinks(SIDEBAR_BOTTOM_LINKS);
-  // Mobile tabbar
   const tabbar = document.getElementById("mobile-tabbar");
   if (tabbar) {
     tabbar.innerHTML = MOBILE_TABBAR_LINKS.map(l => `
@@ -949,8 +352,8 @@ function buildSidebar() {
       </a>
     `).join("");
   }
-  // Update the theme toggle + logout button icons too (they live in the footer
-  // and aren't otherwise regenerated, so set them once here on first build).
+  // Theme toggle + logout icons live in the footer and aren't otherwise
+  // regenerated, so set them once here on first build.
   const tt = document.getElementById("theme-toggle");
   if (tt) tt.innerHTML = ICONS[state.theme === "dark" ? "sun" : "moon"];
   const lo = document.getElementById("logout-btn");
@@ -966,14 +369,14 @@ function setTheme(theme) {
   state.theme = theme;
   document.documentElement.setAttribute("data-theme", theme);
   localStorage.setItem("theme", theme);
-  // Swap the toggle icon to match the new theme (sun in dark mode, moon in light).
   const tt = document.getElementById("theme-toggle");
   if (tt && typeof ICONS !== "undefined") {
     tt.innerHTML = ICONS[theme === "dark" ? "sun" : "moon"];
   }
 }
 
-async function bootApp() {
+// ---------- Boot ----------
+export async function bootApp() {
   // If we already have a token but no user, fetch /auth/me to validate.
   if (state.token && !state.user) {
     try {
@@ -989,8 +392,6 @@ async function bootApp() {
       return;
     }
   }
-  // Final safety: if for any reason state.user is still null at this point,
-  // route back to auth instead of crashing on `state.user.name` below.
   if (!state.user || !state.user.name) {
     console.warn("bootApp: state.user missing after auth flow, returning to login");
     logout();
@@ -1000,35 +401,22 @@ async function bootApp() {
   document.getElementById("app-shell").classList.remove("hidden");
   document.getElementById("user-chip").textContent = `${state.user.name} · ${state.user.currency || "USD"}`;
   buildSidebar();
-  // Fetch the FX rate before rendering so money() shows the right values.
   await loadFxRate();
-  // Analytics — fire-and-forget, doesn't block render.
   loadPosthog();
   // Normalise the hash to a valid app route before the first render.
   // After demo/login the hash might be #lv-pricing (CTA on the landing)
-  // or empty, or an old removed route like #/markets. replaceState avoids
-  // firing a hashchange that would double-render the view.
+  // or empty, or an old removed route. replaceState avoids firing a
+  // hashchange that would double-render the view.
   const _hash = window.location.hash;
   const _isValid = _hash && ROUTES.some(r => r.hash === _hash);
   if (!_isValid) {
     history.replaceState(null, "", "/#/dashboard");
   }
   renderRoute();
-  // SSE for live price flashes on the Investments view. Server-side
-  // heartbeat is 5s and retry is 30s now, so the previous reconnect
-  // loop is gone. Custom events `market:prices` dispatched here are
-  // consumed by investments.js to animate cell deltas.
   setupSSE();
-  // Cache pre-warm: fire the heavy dashboard endpoints in parallel right
-  // after login so the SWR cache is hot by the time the user clicks
-  // around. Each call writes to sessionStorage on success — the views
-  // then render instantly from cache instead of awaiting the network.
   prewarmCache();
   // Preload every view module in the background after the first render so
-  // subsequent navigations skip the dynamic-import wait. Cached in
-  // _preloadedModules; renderRoute reads from there before falling back to
-  // route.load(). Uses requestIdleCallback so it doesn't fight the initial
-  // dashboard render for bandwidth.
+  // subsequent navigations skip the dynamic-import wait.
   const preload = () => {
     for (const r of ROUTES) {
       if (_preloadedModules.has(r.hash)) continue;
@@ -1042,9 +430,10 @@ async function bootApp() {
   }
 }
 
-// Live price feed. Tries WebSocket first (lower overhead, survives proxies
-// better than long SSE streams) and falls back to SSE if the upgrade fails
-// or the browser doesn't support it.
+// ---------- Live price feed ----------
+// Tries WebSocket first (lower overhead, survives proxies better than
+// long SSE streams) and falls back to SSE if the upgrade fails or the
+// browser doesn't support it.
 function setupSSE() {
   if (state.sse) { try { state.sse.close(); } catch (_) {} }
   const handleFrame = (raw) => {
@@ -1058,7 +447,6 @@ function setupSSE() {
     } catch (_) {}
   };
 
-  // Try WebSocket first
   if ("WebSocket" in window) {
     try {
       const proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -1067,14 +455,9 @@ function setupSSE() {
       ws.onopen = () => { opened = true; };
       ws.onmessage = (ev) => handleFrame(ev.data);
       ws.onclose = (ev) => {
-        // If the WS never opened (server has no /market/ws, or upgrade
-        // blocked), fall back to SSE. If it disconnects later, attempt
-        // reconnect via WS again — the server will route around the
-        // dead connection.
         if (!opened) {
           fallbackToSSE();
         } else if (state.sse === ws) {
-          // Schedule reconnect with a small backoff.
           state.sse = null;
           setTimeout(setupSSE, 3000);
         }
@@ -1096,14 +479,6 @@ function setupSSE() {
   }
 }
 
-// Chat removed in this release — the AI value lives in the Monthly Review
-// (deterministic insights for everyone + Claude prose when API key set).
-// A floating ChatGPT-style box wasn't differentiated enough to keep.
-
-export function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
-
 // ---------- Bootstrapping ----------
 // Global error logging so future bugs surface in the UI instead of being silent.
 window.addEventListener("error", (ev) => {
@@ -1121,9 +496,6 @@ function setSidebarOpen(open) {
   sb.classList.toggle("open", open);
   bd?.classList.toggle("open", open);
   btn?.setAttribute("aria-expanded", String(open));
-  // Mark body so CSS can hide the chat FAB + lock .main scroll while the
-  // mobile sidebar is open (DOM placement means `.sidebar.open ~ .chat-fab`
-  // wouldn't match — we use a body class instead).
   document.body.classList.toggle("sidebar-open", open);
   const main = document.querySelector(".main");
   if (main) main.style.overflow = open ? "hidden" : "";
@@ -1131,27 +503,38 @@ function setSidebarOpen(open) {
 
 // Service Worker — caches the app shell so the app boots offline and
 // subsequent visits skip a full network round-trip. Only registers on
-// HTTPS (and localhost for dev); not registered on file:// or
-// http://example. Errors are silent — SW failure should never break
-// the app, just remove the offline ability.
+// HTTPS (and localhost for dev). Errors are silent.
+//
+// `controllerchange` reload: when a new SW activates (we bumped
+// CACHE_VERSION), the new SW takes control of this page mid-session. The
+// in-memory JS is still the OLD version though — that's the root cause
+// of "fixes shipped but bug persists" reports, because users keep running
+// stale code while the SW serves a fresh shell on next reload only. A
+// one-shot reload on controllerchange forces the page to pick up the new
+// JS immediately. Guarded so the very first SW install (no previous
+// controller) doesn't trigger a reload loop.
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
   if (location.protocol !== "https:" && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") return;
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController) return; // first install — no stale code to flush
+    console.log("[sw] new SW activated, reloading to pick up fresh JS");
+    window.location.reload();
+  });
   navigator.serviceWorker.register("/sw.js").catch((err) => {
     console.warn("[sw] registration failed:", err);
   });
 }
 
-// "Add to Home Screen" install prompt. Browsers fire `beforeinstallprompt`
+// "Add to Home Screen" install prompt. Browsers fire beforeinstallprompt
 // when the PWA criteria are met. We stash the event and show a one-time
-// toast inviting the user to install. Suppressed if they dismissed once
-// (we set a flag in localStorage).
+// toast inviting the user to install. Suppressed if they dismissed once.
 let _deferredInstallPrompt = null;
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault();
   if (localStorage.getItem("install_dismissed")) return;
   _deferredInstallPrompt = e;
-  // Only nudge once per session, after the user has clicked around a bit.
   setTimeout(() => {
     if (!_deferredInstallPrompt) return;
     const host = document.getElementById("toast-host");
@@ -1179,7 +562,7 @@ window.addEventListener("beforeinstallprompt", (e) => {
       _deferredInstallPrompt = null;
       el.remove();
     };
-  }, 30000); // 30s grace — only prompt after the user has stuck around
+  }, 30000); // 30s grace
 });
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -1187,19 +570,15 @@ document.addEventListener("DOMContentLoaded", () => {
   registerServiceWorker();
   // Pull any SWR entries persisted in IndexedDB into memory so the first
   // post-restart navigation skips the network on a still-fresh entry.
-  // Doesn't block the boot — fires in parallel with the rest.
-  hydrateSwrCache().catch(() => {});
+  import("/static/app/cache.js").then(m => m.hydrateSwrCache().catch(() => {}));
   document.getElementById("theme-toggle").onclick = () => setTheme(state.theme === "dark" ? "light" : "dark");
   document.getElementById("logout-btn").onclick = logout;
   document.getElementById("mobile-logout")?.addEventListener("click", logout);
-  // Hamburger nav on mobile
   document.getElementById("nav-toggle")?.addEventListener("click", () => {
     const sb = document.querySelector(".sidebar");
     setSidebarOpen(!sb?.classList.contains("open"));
   });
   document.getElementById("sidebar-backdrop")?.addEventListener("click", () => setSidebarOpen(false));
-  // Auto-close sidebar when the user picks a link OR clicks any control
-  // (theme toggle, logout) on mobile.
   const closeOnSidebarInteraction = (ev) => {
     if (ev.target.closest("a") || ev.target.closest("button")) setSidebarOpen(false);
   };

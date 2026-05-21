@@ -1,21 +1,36 @@
-import { API, cachedGet, seedCache, loadChartJs, skeleton, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, track, confirmModal, animateNumber } from "/static/app.js";
+// Dashboard view: orchestrates the hero stats, charts, tabbed panels,
+// and async card loaders. The actual rendering primitives live in
+// ./dashboard/*.js — this file decides what shows up, in what order, and
+// wires the tab/dismiss/expand handlers.
+import { API, cachedGet, seedCache, skeleton, state, money, pct, spinner, toast, escapeHtml, onViewCleanup, animateNumber } from "/static/app.js";
 import { t } from "/static/i18n.js";
+
+import {
+  buildAllocationChart,
+  buildMonthlyChart,
+  buildPortfolioChart,
+  loadHistoryAndBenchmark,
+} from "./dashboard/charts.js";
+import {
+  carbonCard,
+  carbonTopEmittersTable,
+  riskCard,
+  diversificationInline,
+} from "./dashboard/cards.js";
+import { emptyState, heroInsight, loadDemoData } from "./dashboard/insights.js";
+import {
+  loadDividendCalendar,
+  loadFireYears,
+  loadPerformance,
+  loadRealRisk,
+  loadStressTest,
+} from "./dashboard/sub_loaders.js";
 
 // Persist the active dashboard tab across renders (auto-refresh re-renders
 // every 60s; without this the user gets snapped back to "allocation").
 // Reset by `resetActiveTab()` on logout so the next user starts fresh.
 let activeTab = "allocation";
 export function resetActiveTab() { activeTab = "allocation"; }
-
-// Muted earth-tone palette to match the beige / taupe theme.
-const TYPE_COLORS = {
-  stock: "#8a7558",        // taupe
-  real_estate: "#6b7d5e",  // sage
-  crypto: "#b8945e",       // warm amber
-  bond: "#7a8b9a",         // muted slate
-  etf: "#9d7f8f",          // dusty mauve
-  startup: "#a56551",      // terracotta
-};
 
 export async function render(root) {
   // Destroy any previous Chart.js instances before redrawing — auto-refresh
@@ -24,16 +39,23 @@ export async function render(root) {
     try { state.charts[k]?.destroy?.(); } catch (_) {}
     delete state.charts[k];
   }
-  // Guard against the user navigating away mid-fetch. Single cleanup
-  // closure that captures both `cancelled` and `refreshTimer` — register
-  // it once so the second onViewCleanup() call below doesn't clobber the
-  // earlier one (the runtime keeps only the most recently registered fn).
+  // Two layers of cancellation. The `cancelled` closure is set by the
+  // view-cleanup that renderRoute() fires synchronously on navigation.
+  // The DOM-attached route token (set on view-root by renderRoute) is
+  // the belt-and-braces check: even if a stale async resolves BEFORE
+  // its cleanup runs (rare but observed), the token tells us "this
+  // render-root now belongs to a different route — abort the paint."
   let cancelled = false;
   let refreshTimer = null;
   onViewCleanup(() => {
     cancelled = true;
     if (refreshTimer) clearTimeout(refreshTimer);
   });
+  // Capture the renderRoute call's id. Any subsequent renderRoute (even
+  // dashboard → fire → dashboard, which would re-match dataset.route)
+  // bumps the id, so stale async work from this render bails cleanly.
+  const myRenderId = root.dataset.renderId;
+  const stillOwnsRoot = () => !cancelled && root.dataset.renderId === myRenderId;
 
   // Stale-while-revalidate: on every visit AFTER the first one in this
   // session, we already have a cached /dashboard/summary in sessionStorage,
@@ -50,12 +72,13 @@ export async function render(root) {
   const cacheKey = `swr:${tokenSuffix}:/dashboard/summary`;
   const hasCache = sessionStorage.getItem(cacheKey) !== null;
   if (!hasCache) {
+    if (!stillOwnsRoot()) return;
     root.innerHTML = skeleton("kpi");
     // Cold cache: prefetch everything in one shot so the cards don't each
     // wait their turn on the network.
     try {
       const bundle = await API.request("/dashboard/all");
-      if (cancelled) return;
+      if (!stillOwnsRoot()) return;
       seedCache("/dashboard/summary", bundle.summary);
       seedCache("/dashboard/performance", bundle.performance);
       seedCache("/dashboard/history?days=365&benchmark=^GSPC", bundle.history);
@@ -67,22 +90,20 @@ export async function render(root) {
   }
   try {
     data = await cachedGet("/dashboard/summary", (fresh) => {
-      // Fresh data arrived in the background; re-render with it. Only
-      // triggered when fresh != cached, so identical payloads don't repaint.
-      // Defense-in-depth: also check the URL — if the user navigated to
-      // another route during the bg fetch and the cleanup somehow didn't
-      // fire (Safari tab-switch edge case, etc.), don't replace their
-      // current view with the dashboard.
-      if (cancelled) return;
+      // Fresh data arrived in the background — re-render. Triple-guarded
+      // because this fires from a stale Promise chain that may have
+      // outlived navigation: cancelled closure, hash, AND the view-root's
+      // current route token must all still point at dashboard.
+      if (!stillOwnsRoot()) return;
       if (window.location.hash && window.location.hash !== "#/dashboard") return;
       render(root);
     });
   } catch (err) {
-    if (cancelled) return;
+    if (!stillOwnsRoot()) return;
     root.innerHTML = `<div class="alert-banner error">${escapeHtml(err.message)}</div>`;
     return;
   }
-  if (cancelled) return;
+  if (!stillOwnsRoot()) return;
 
   // Schedule the next live refresh — cleanup above clears it. We skip the
   // refresh entirely when the tab is hidden (mobile / background tab), so a
@@ -91,10 +112,10 @@ export async function render(root) {
   // after the user comes back to the tab and the visibilitychange listener
   // fires it.
   if (document.visibilityState === "visible") {
-    refreshTimer = setTimeout(() => { if (!cancelled) render(root); }, 60000);
+    refreshTimer = setTimeout(() => { if (stillOwnsRoot()) render(root); }, 60000);
   } else {
     const onVisible = () => {
-      if (document.visibilityState === "visible" && !cancelled) {
+      if (document.visibilityState === "visible" && stillOwnsRoot()) {
         document.removeEventListener("visibilitychange", onVisible);
         render(root);
       }
@@ -103,13 +124,13 @@ export async function render(root) {
     onViewCleanup(() => document.removeEventListener("visibilitychange", onVisible));
   }
   if (!data.total_invested && !data.current_value) {
+    if (!stillOwnsRoot()) return;
     root.innerHTML = emptyState();
     document.getElementById("dash-empty-add")?.addEventListener("click", () => location.hash = "#/investments");
     document.getElementById("dash-empty-seed")?.addEventListener("click", loadDemoData);
     return;
   }
 
-  const roiClass = data.total_roi_pct >= 0 ? "positive" : "negative";
   const alerts = (data.triggered_alerts || []).map(a => `
     <div class="alert-banner">
       <span>${t("alerts." + (a.type === "roi_below" ? "type_roi_below" : "type_drawdown_above"))} (${pct(a.threshold)})</span>
@@ -117,7 +138,6 @@ export async function render(root) {
     </div>`).join("");
 
   const bp = data.best_performer;
-  const bpRoiClass = bp ? (bp.roi_pct >= 0 ? "positive" : "negative") : "";
   const div = data.diversification;
 
   // ---- 4 hero KPIs at the top ----
@@ -125,6 +145,11 @@ export async function render(root) {
   const netWorthDeltaClass = netWorthDelta >= 0 ? "positive" : "negative";
   const netWorthDeltaSign = netWorthDelta >= 0 ? "+" : "";
 
+  // Last gate before the big DOM write — bail if anything navigated since
+  // the cachedGet await above (the loadFxRate / posthog awaits in bootApp
+  // run in parallel with this render, so a fast click between them can
+  // race past the earlier guards).
+  if (!stillOwnsRoot()) return;
   root.innerHTML = `
     ${alerts}
     ${heroInsight(data)}
@@ -276,641 +301,4 @@ export async function render(root) {
       btn.textContent = show ? "⌃" : "⌄";
     };
   }
-}
-
-async function loadFireYears(isCancelled) {
-  const yEl = document.getElementById("fire-years");
-  const sEl = document.getElementById("fire-sub");
-  if (!yEl || !sEl) return;
-  // If FX rate fetch failed for a non-USD user, the conversion would silently
-  // use 1.0 and give a misleading "years to FIRE". Surface that to the user
-  // instead — they should refresh after FX comes back.
-  if (state.fxFailed) {
-    yEl.textContent = "—";
-    sEl.textContent = t("dashboard.fx_failed");
-    return;
-  }
-  try {
-    const fx = state.fxRate || 1.0;
-    const expensesUsd = Math.round(2500 / fx);
-    const savingsUsd = Math.round(1500 / fx);
-    const data = await cachedGet(`/planning/fire?monthly_expenses=${expensesUsd}&monthly_savings=${savingsUsd}&expected_return_pct=7&target_multiplier=25`);
-    if (isCancelled()) return;
-    if (data.already_fire) {
-      yEl.textContent = "🎉";
-      sEl.textContent = t("dashboard.fire_already");
-    } else if (data.years_to_fire == null) {
-      yEl.textContent = "—";
-      sEl.textContent = t("dashboard.fire_unreachable");
-    } else {
-      yEl.textContent = data.years_to_fire.toFixed(1);
-      sEl.textContent = `${t("dashboard.fire_at_25x")} (${(data.progress_pct || 0).toFixed(0)}% ${t("dashboard.fire_progress")})`;
-    }
-  } catch (_) {
-    if (sEl) sEl.textContent = t("dashboard.fire_unreachable");
-  }
-}
-
-function diversificationInline(div) {
-  if (!div || div.score == null) return `<p style="color:var(--text-muted)">—</p>`;
-  const score = div.score;
-  const color = score >= 75 ? "var(--success)" : score >= 50 ? "var(--warning)" : "var(--danger)";
-  const topRows = (div.top_positions || []).slice(0, 5).map(p => `
-    <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
-      <span style="color:var(--text-muted)">${escapeHtml(p.name)}</span>
-      <strong>${p.weight_pct.toFixed(1)}%</strong>
-    </div>`).join("");
-  return `
-    <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px">
-      <div style="font-size:28px;color:${color};font-family:var(--font-serif)">${score.toFixed(0)}</div>
-      <div style="color:var(--text-muted);font-size:12px">/ 100</div>
-    </div>
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">${escapeHtml(div.message || "")}</div>
-    <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px">${t("dashboard.top_positions") || "Top positions"}</div>
-    ${topRows || `<div style="color:var(--text-muted);font-size:12px">—</div>`}
-  `;
-}
-
-function summaryCard(label, value, cls = "") {
-  return `<div class="summary-card"><div class="label">${label}</div><div class="value ${cls}">${value}</div></div>`;
-}
-
-function bestPerformerCard(label, name, roiText, roiClass) {
-  return `<div class="summary-card">
-    <div class="label">${label}</div>
-    <div class="value compact">${escapeHtml(name)}</div>
-    <div class="sub ${roiClass}" style="font-weight:500;font-size:13px;margin-top:4px">${roiText}</div>
-  </div>`;
-}
-
-function riskCard(div) {
-  const label = t("dashboard.risk_score");
-  // Initial placeholder — `loadRealRisk()` swaps in the real metrics
-  // (volatility, max drawdown, beta) once /dashboard/risk responds. Until
-  // then we show the concentration-based "risk_score" so the card isn't
-  // empty for the ~200ms it takes to compute.
-  const fallback = div?.risk_score;
-  if (fallback == null) {
-    return `<div class="summary-card" id="risk-card-host">
-      <div class="label">${label}</div>
-      <div class="value" id="risk-value" style="font-size:22px">—</div>
-      <div class="sub" id="risk-sub" style="font-size:11px;margin-top:6px;color:var(--text-muted)">${t("dashboard.risk_loading")}</div>
-    </div>`;
-  }
-  const clamped = Math.max(0, Math.min(100, fallback));
-  const tone = fallback <= 25 ? "var(--success)" : fallback <= 60 ? "var(--warning)" : "var(--danger)";
-  const tier = fallback <= 25 ? t("dashboard.risk_low")
-             : fallback <= 60 ? t("dashboard.risk_medium")
-             : t("dashboard.risk_high");
-  return `<div class="summary-card" id="risk-card-host">
-    <div class="label">${label}</div>
-    <div class="value" id="risk-value" style="color:${tone};display:flex;align-items:baseline;gap:6px">
-      ${fallback.toFixed(0)}<span style="font-size:12px;color:var(--text-muted);font-family:var(--font-sans)"> / 100</span>
-      <span id="risk-tier" style="font-size:12px;color:${tone};font-family:var(--font-sans);margin-left:4px">${tier}</span>
-    </div>
-    <div class="risk-gauge"><div class="marker" id="risk-marker" style="left:${clamped}%"></div></div>
-    <div class="risk-gauge-scale"><span>${t("dashboard.risk_low")}</span><span>${t("dashboard.risk_medium")}</span><span>${t("dashboard.risk_high")}</span></div>
-    <div class="sub" id="risk-sub" style="font-size:11px;margin-top:6px;color:var(--text-muted)">${t("dashboard.risk_loading")}</div>
-  </div>`;
-}
-
-async function loadRealRisk(isCancelled) {
-  try {
-    const data = await cachedGet("/dashboard/risk?days=180&benchmark=^GSPC");
-    if (isCancelled()) return;
-    if (data.score == null) return; // not enough snapshots yet — keep fallback
-    const tone = data.score <= 25 ? "var(--success)"
-               : data.score <= 60 ? "var(--warning)"
-               : "var(--danger)";
-    const tierKey = data.score <= 25 ? "dashboard.risk_low"
-                  : data.score <= 60 ? "dashboard.risk_medium"
-                  : "dashboard.risk_high";
-    const vEl = document.getElementById("risk-value");
-    const mEl = document.getElementById("risk-marker");
-    const tEl = document.getElementById("risk-tier");
-    const sEl = document.getElementById("risk-sub");
-    if (vEl) {
-      vEl.innerHTML = `${data.score.toFixed(0)}<span style="font-size:12px;color:var(--text-muted);font-family:var(--font-sans)"> / 100</span>` +
-        (tEl ? "" : `<span id="risk-tier" style="font-size:12px;color:${tone};font-family:var(--font-sans);margin-left:4px">${t(tierKey)}</span>`);
-      vEl.style.color = tone;
-      vEl.style.display = "flex";
-      vEl.style.alignItems = "baseline";
-      vEl.style.gap = "6px";
-    }
-    if (tEl) {
-      tEl.textContent = t(tierKey);
-      tEl.style.color = tone;
-    }
-    if (mEl) mEl.style.left = `${Math.max(0, Math.min(100, data.score))}%`;
-    if (sEl) {
-      const parts = [];
-      if (data.volatility_pct != null) parts.push(`${t("dashboard.risk_vol")}: ${data.volatility_pct.toFixed(1)}%`);
-      if (data.max_drawdown_pct != null) parts.push(`${t("dashboard.risk_dd")}: ${data.max_drawdown_pct.toFixed(1)}%`);
-      if (data.beta != null) parts.push(`β: ${data.beta.toFixed(2)}`);
-      sEl.textContent = parts.join(" · ") || `${data.n_days} ${t("dashboard.risk_days")}`;
-    }
-  } catch (e) {
-    const sEl = document.getElementById("risk-sub");
-    if (sEl) sEl.textContent = t("dashboard.risk_unavailable");
-  }
-}
-
-function diversificationCard(div) {
-  const label = t("dashboard.diversification");
-  if (!div || div.score == null) {
-    return summaryCard(label, "—");
-  }
-  const score = div.score;
-  const color = score >= 75 ? "var(--success)" : score >= 50 ? "var(--warning)" : "var(--danger)";
-  const id = `div-card-${Math.random().toString(36).slice(2, 8)}`;
-  const topRows = (div.top_positions || []).slice(0, 5).map(p => `
-    <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
-      <span style="color:var(--text-muted)">${escapeHtml(p.name)}</span>
-      <strong>${p.weight_pct.toFixed(1)}%</strong>
-    </div>`).join("");
-  const typeRows = Object.entries(div.type_distribution || {}).map(([k, v]) => `
-    <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
-      <span style="color:var(--text-muted)">${escapeHtml(t(`investments.types.${k}`) || k)}</span>
-      <strong>${v.toFixed(1)}%</strong>
-    </div>`).join("");
-  const sectorRows = Object.entries(div.sector_distribution || {}).map(([k, v]) => `
-    <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
-      <span style="color:var(--text-muted)">${escapeHtml(k)}</span>
-      <strong>${v.toFixed(1)}%</strong>
-    </div>`).join("");
-  const countryRows = Object.entries(div.country_distribution || {}).map(([k, v]) => `
-    <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
-      <span style="color:var(--text-muted)">${escapeHtml(k)}</span>
-      <strong>${v.toFixed(1)}%</strong>
-    </div>`).join("");
-  const riskFactors = (div.risk_factors || []).map(rf => `
-    <div style="font-size:12px;padding:3px 0;color:var(--danger)">• ${escapeHtml(rf)}</div>`).join("");
-  return `
-  <div class="summary-card div-card" id="${id}">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start">
-      <div class="label">${label}</div>
-      <button class="div-toggle" data-target="${id}" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:11px">⌄</button>
-    </div>
-    <div class="value" style="color:${color}">${score.toFixed(0)}<span style="font-size:14px;color:var(--text-muted);font-family:var(--font-sans)"> / 100</span></div>
-    <div class="sub" style="font-size:11px;margin-top:6px">${escapeHtml(div.message || "")}</div>
-    <div class="div-breakdown" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
-      ${riskFactors ? `<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px">${t("dashboard.risk_factors")}</div>${riskFactors}<div style="height:8px"></div>` : ""}
-      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:6px">Top positions</div>
-      ${topRows || '<div style="color:var(--text-muted);font-size:12px">—</div>'}
-      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin:10px 0 6px">By asset type</div>
-      ${typeRows || '<div style="color:var(--text-muted);font-size:12px">—</div>'}
-      ${sectorRows ? `<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin:10px 0 6px">By sector (stocks)</div>${sectorRows}` : ""}
-      ${countryRows ? `<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin:10px 0 6px">By country</div>${countryRows}` : ""}
-    </div>
-  </div>`;
-}
-
-// Permanent ranking shown directly below the carbon footprint card on
-// the Risk & Carbon tab. The same `breakdown` data was previously only
-// visible after clicking the chevron — now it's surfaced as a proper
-// table so users immediately see which holdings drive their footprint.
-function carbonTopEmittersTable(carbon) {
-  const breakdown = (carbon && carbon.breakdown) || [];
-  if (!breakdown.length) return "";
-  const total = carbon.total_tco2e_year || breakdown.reduce((s, b) => s + b.emissions_tco2e_year, 0) || 1;
-  const rows = breakdown.slice(0, 10).map((b, i) => {
-    const pct = (b.emissions_tco2e_year / total) * 100;
-    const sym = b.symbol ? `<span style="color:var(--text-muted);font-size:11px;margin-left:6px">${escapeHtml(b.symbol)}</span>` : "";
-    return `
-      <div class="emitter-row">
-        <div class="emitter-rank">${i + 1}</div>
-        <div class="emitter-name"><strong>${escapeHtml(b.name)}</strong>${sym}<div class="emitter-basis">${escapeHtml(b.basis)}</div></div>
-        <div class="emitter-bar-wrap"><div class="emitter-bar" style="width:${Math.min(100, pct).toFixed(1)}%"></div></div>
-        <div class="emitter-val">${b.emissions_tco2e_year.toFixed(2)} <span style="color:var(--text-muted);font-size:11px">tCO₂e</span></div>
-      </div>`;
-  }).join("");
-  return `
-    <div class="card" style="margin-top:14px;padding:18px 20px 20px">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px">
-        <h4 style="margin:0;font-size:14px">${t("dashboard.carbon_top_emitters")}</h4>
-        <span style="color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:0.08em;font-family:var(--font-mono)">${t("dashboard.carbon_top_emitters_count").replace("{n}", String(breakdown.length))}</span>
-      </div>
-      <div class="emitter-list">${rows}</div>
-    </div>`;
-}
-
-function carbonCard(carbon) {
-  const label = t("dashboard.carbon");
-  if (!carbon || carbon.total_tco2e_year == null) {
-    return summaryCard(label, "—");
-  }
-  const total = carbon.total_tco2e_year;
-  const eq = carbon.equivalents || {};
-  const color = total < 1 ? "var(--success)" : total < 5 ? "var(--warning)" : "var(--danger)";
-  const id = `carbon-card-${Math.random().toString(36).slice(2, 8)}`;
-  const breakdownRows = (carbon.breakdown || []).slice(0, 8).map(b => `
-    <div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0">
-      <span style="color:var(--text-muted)">${escapeHtml(b.name)} <span style="opacity:0.6">${escapeHtml(b.basis)}</span></span>
-      <strong>${b.emissions_tco2e_year.toFixed(2)} t</strong>
-    </div>`).join("");
-  return `
-  <div class="summary-card div-card" id="${id}">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start">
-      <div class="label">${label}</div>
-      <button class="div-toggle" data-target="${id}" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:11px">⌄</button>
-    </div>
-    <div class="value" style="color:${color}">${total.toFixed(1)}<span style="font-size:14px;color:var(--text-muted);font-family:var(--font-sans)"> tCO₂e/yr</span></div>
-    <div class="sub" style="font-size:11px;margin-top:6px">${escapeHtml(carbon.message || "")}</div>
-    <div class="div-breakdown" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
-      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin-bottom:8px">${t("dashboard.carbon_equivalents")}</div>
-      <div style="font-size:12px;padding:3px 0">🚗 ≈ ${(eq.car_km || 0).toLocaleString()} ${t("dashboard.carbon_car_km")}</div>
-      <div style="font-size:12px;padding:3px 0">✈️ ≈ ${eq.transatlantic_flights || 0} ${t("dashboard.carbon_flights")}</div>
-      <div style="font-size:12px;padding:3px 0">🇫🇷 ${eq.french_avg_pct || 0}% ${t("dashboard.carbon_french_avg")}</div>
-      ${breakdownRows ? `<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-muted);margin:12px 0 6px">${t("dashboard.carbon_top_emitters")}</div>${breakdownRows}` : ""}
-    </div>
-  </div>`;
-}
-
-// Hero "Hot Take" card — picks the single most punchy insight from the
-// portfolio summary and surfaces it at the top of the dashboard. The
-// signal is computed client-side from data already in the summary
-// payload — no extra round-trip, no LLM cost, works for everyone.
-// Insights are ordered by importance: concentration → big winner/loser
-// → asset class imbalance → crypto exposure → diversification → default.
-function heroInsight(data) {
-  const div = data.diversification || {};
-  const top = (div.top_positions || [])[0];
-  const byType = data.by_type || {};
-  const totalValue = data.current_value || 0;
-  if (!totalValue) return "";
-
-  let line = "", sub = "", tone = "neutral", icon = "✦";
-
-  // 1. Single-position concentration risk (≥40%)
-  if (top && top.weight_pct >= 40) {
-    line = t("dashboard.insight_concentration").replace("{name}", top.name).replace("{pct}", top.weight_pct.toFixed(0));
-    sub = t("dashboard.insight_concentration_sub");
-    tone = "warning"; icon = "⚠";
-  }
-  // 2. Big winner — best performer ≥50% gain
-  else if (data.best_performer && data.best_performer.roi_pct >= 50) {
-    line = t("dashboard.insight_winner").replace("{name}", data.best_performer.name).replace("{pct}", data.best_performer.roi_pct.toFixed(0));
-    sub = t("dashboard.insight_winner_sub");
-    tone = "positive"; icon = "▲";
-  }
-  // 3. Heavy crypto exposure (>25%)
-  else if (byType.crypto && (byType.crypto / totalValue) >= 0.25) {
-    const pctCrypto = ((byType.crypto / totalValue) * 100).toFixed(0);
-    line = t("dashboard.insight_crypto").replace("{pct}", pctCrypto);
-    sub = t("dashboard.insight_crypto_sub");
-    tone = "warning"; icon = "₿";
-  }
-  // 4. Asset class imbalance — one type >80%
-  else if (Object.values(byType).some(v => v / totalValue > 0.8)) {
-    const dominant = Object.entries(byType).find(([, v]) => v / totalValue > 0.8);
-    const pctDom = ((dominant[1] / totalValue) * 100).toFixed(0);
-    line = t("dashboard.insight_imbalance").replace("{type}", t(`investments.types.${dominant[0]}`)).replace("{pct}", pctDom);
-    sub = t("dashboard.insight_imbalance_sub");
-    tone = "warning"; icon = "⚖";
-  }
-  // 5. Poor diversification (<30)
-  else if (div.score != null && div.score < 30) {
-    line = t("dashboard.insight_diversification").replace("{score}", div.score.toFixed(0));
-    sub = t("dashboard.insight_diversification_sub");
-    tone = "warning"; icon = "◇";
-  }
-  // 6. Strong overall ROI (>20%)
-  else if (data.total_roi_pct >= 20) {
-    line = t("dashboard.insight_strong").replace("{pct}", data.total_roi_pct.toFixed(1));
-    sub = t("dashboard.insight_strong_sub");
-    tone = "positive"; icon = "▲";
-  }
-  // 7. Balanced & healthy (default for diversified positive portfolios)
-  else if (div.score >= 70 && data.total_roi_pct >= 0) {
-    line = t("dashboard.insight_balanced").replace("{score}", div.score.toFixed(0));
-    sub = t("dashboard.insight_balanced_sub");
-    tone = "positive"; icon = "✦";
-  }
-  // 8. Default — neutral
-  else {
-    line = t("dashboard.insight_default").replace("{count}", String((div.top_positions || []).length));
-    sub = t("dashboard.insight_default_sub");
-    tone = "neutral"; icon = "✦";
-  }
-
-  return `
-    <div class="hero-insight hero-${tone}">
-      <div class="hero-icon">${icon}</div>
-      <div class="hero-body">
-        <div class="hero-line">${escapeHtml(line)}</div>
-        <div class="hero-sub">${escapeHtml(sub)}</div>
-      </div>
-      <a class="hero-cta" href="#/review">${t("dashboard.open_review")} →</a>
-    </div>`;
-}
-
-function emptyState() {
-  return `
-    <div class="card empty-state">
-      <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="3">
-        <rect x="10" y="40" width="12" height="30" rx="2"/>
-        <rect x="34" y="25" width="12" height="45" rx="2"/>
-        <rect x="58" y="10" width="12" height="60" rx="2"/>
-      </svg>
-      <h3>${t("dashboard.no_investments_title")}</h3>
-      <p>${t("dashboard.no_investments_sub")}</p>
-      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px">
-        <button id="dash-empty-add" class="btn btn-primary">${t("dashboard.add_investment")}</button>
-        <button id="dash-empty-seed" class="btn btn-ghost">${t("dashboard.try_demo_data")}</button>
-      </div>
-      <p style="color:var(--text-muted);font-size:12px;margin-top:14px;max-width:420px;margin-left:auto;margin-right:auto">${t("dashboard.try_demo_hint")}</p>
-    </div>`;
-}
-
-async function loadDemoData() {
-  const btn = document.getElementById("dash-empty-seed");
-  if (!btn) return;
-  const ok = await confirmModal({
-    title: t("common.confirm") || "Confirm",
-    message: t("dashboard.try_demo_confirm"),
-    confirmText: t("common.continue") || "Continue",
-    cancelText: t("common.cancel") || "Cancel",
-    danger: true,
-  });
-  if (!ok) return;
-  btn.disabled = true;
-  btn.textContent = t("dashboard.try_demo_loading");
-  try {
-    await API.request("/investments/seed-demo", { method: "POST", body: { confirm_wipe: true } });
-    track("demo_seeded");
-    toast(t("dashboard.try_demo_done"), "success");
-    // Re-render the dashboard from scratch so the new data shows up.
-    setTimeout(() => location.reload(), 600);
-  } catch (e) {
-    btn.disabled = false;
-    btn.textContent = t("dashboard.try_demo_data");
-    toast(e.message || "Seed failed", "error");
-  }
-}
-
-async function loadDividendCalendar() {
-  const host = document.getElementById("dividend-calendar-body");
-  const summaryEl = document.getElementById("dividend-annual-summary");
-  if (!host) return;
-  try {
-    const data = await cachedGet("/dividends/calendar");
-    if (summaryEl && data.annual_income_estimate_usd) {
-      summaryEl.innerHTML = `${t("dashboard.dividend_estimate")}: <strong style="color:var(--text)">${money(data.annual_income_estimate_usd)}/yr</strong>`;
-    }
-    if (!data.upcoming || !data.upcoming.length) {
-      host.innerHTML = `<div style="color:var(--text-muted);font-size:13px">${t("dashboard.no_upcoming_dividends")}</div>`;
-      return;
-    }
-    host.innerHTML = `
-      <div class="table-wrap"><table class="data" style="font-size:12.5px">
-        <thead><tr>
-          <th>${t("dashboard.div_asset")}</th>
-          <th>${t("dashboard.div_next_ex")}</th>
-          <th style="text-align:right">${t("dashboard.div_yield")}</th>
-          <th style="text-align:right">${t("dashboard.div_next_payment")}</th>
-        </tr></thead>
-        <tbody>
-          ${data.upcoming.slice(0, 10).map(d => `<tr>
-            <td><strong>${escapeHtml(d.name)}</strong> <span style="color:var(--text-muted);font-size:11px">${escapeHtml(d.symbol)}</span></td>
-            <td>${d.next_ex_div || "—"}</td>
-            <td style="text-align:right">${d.annual_yield_pct != null ? d.annual_yield_pct.toFixed(2) + "%" : "—"}</td>
-            <td style="text-align:right">${d.estimated_next_payment_usd != null ? money(d.estimated_next_payment_usd) : "—"}</td>
-          </tr>`).join("")}
-        </tbody>
-      </table></div>`;
-  } catch (e) {
-    host.innerHTML = `<div class="alert-banner error" style="margin:0">${escapeHtml(e.message)}</div>`;
-  }
-}
-
-async function loadStressTest() {
-  const host = document.getElementById("stress-test-body");
-  if (!host) return;
-  try {
-    const data = await cachedGet("/planning/stress-test");
-    if (!data.scenarios || !data.scenarios.length) {
-      host.innerHTML = `<div style="color:var(--text-muted);font-size:13px">${t("dashboard.no_positions_for_stress")}</div>`;
-      return;
-    }
-    host.innerHTML = `
-      <div style="margin-bottom:8px;font-size:13px;color:var(--text-muted)">
-        ${t("dashboard.baseline")}: <strong style="color:var(--text)">${money(data.baseline)}</strong>
-      </div>
-      <div class="table-wrap"><table class="data" style="font-size:12.5px">
-        <thead><tr>
-          <th>${t("dashboard.scenario")}</th>
-          <th style="text-align:right">${t("dashboard.under_value")}</th>
-          <th style="text-align:right">${t("dashboard.loss")}</th>
-          <th style="text-align:right">${t("dashboard.impact")}</th>
-        </tr></thead>
-        <tbody>
-        ${data.scenarios.map(s => `
-          <tr>
-            <td><strong>${escapeHtml(s.label)}</strong><div style="color:var(--text-muted);font-size:11px">${escapeHtml(s.description)}</div></td>
-            <td style="text-align:right">${money(s.value)}</td>
-            <td style="text-align:right;color:${s.loss < 0 ? 'var(--danger)' : 'var(--text-muted)'}">${s.loss < 0 ? money(s.loss) : '—'}</td>
-            <td style="text-align:right">
-              <span class="badge ${s.loss_pct <= -25 ? 'red' : s.loss_pct <= -10 ? 'yellow' : 'gray'}" style="font-variant-numeric:tabular-nums">${s.loss_pct.toFixed(1)}%</span>
-            </td>
-          </tr>`).join("")}
-        </tbody>
-      </table></div>`;
-  } catch (e) {
-    host.innerHTML = `<div class="alert-banner error" style="margin:0">${escapeHtml(e.message)}</div>`;
-  }
-}
-
-async function buildPortfolioChart(points) {
-  const ctx = document.getElementById("chart-portfolio");
-  if (!ctx) return;
-  await loadChartJs();
-  if (!document.getElementById("chart-portfolio")) return; // user navigated away
-  state.charts.portfolio = new window.Chart(ctx, {
-    type: "line",
-    data: {
-      labels: points.map(p => p.date),
-      datasets: [{
-        label: t("dashboard.portfolio_over_time"),
-        data: points.map(p => p.value),
-        borderColor: "#8a7558",
-        backgroundColor: "rgba(138, 117, 88, 0.08)",
-        borderWidth: 1.5,
-        fill: true, tension: 0.3,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-      }],
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: false } },
-    },
-  });
-}
-
-async function loadPerformance(isCancelled) {
-  try {
-    const data = await cachedGet("/dashboard/performance");
-    if (isCancelled()) return;
-    const xirrEl = document.getElementById("perf-xirr");
-    const subEl = document.getElementById("perf-sub");
-    if (!xirrEl || !subEl) return;
-    if (data.xirr_pct != null) {
-      xirrEl.textContent = pct(data.xirr_pct);
-      xirrEl.classList.add(data.xirr_pct >= 0 ? "positive" : "negative");
-    } else {
-      xirrEl.textContent = "—";
-    }
-    // Sub-line: TWR + try to compute vs S&P 500 from the history endpoint.
-    const parts = [];
-    if (data.twr_pct != null) parts.push(`${t("dashboard.twr")}: ${pct(data.twr_pct)}`);
-    try {
-      const h = await cachedGet("/dashboard/history?days=365&benchmark=^GSPC");
-      if (!isCancelled() && h?.portfolio?.length > 1 && h.benchmark?.length > 0) {
-        const youEnd = h.portfolio[h.portfolio.length - 1].normalized;
-        const benchEnd = h.benchmark[h.benchmark.length - 1].normalized;
-        const diff = youEnd - benchEnd;
-        const sign = diff >= 0 ? "+" : "";
-        const cls = diff >= 0 ? "positive" : "negative";
-        parts.push(`<span class="${cls}">${sign}${diff.toFixed(1)} ${t("dashboard.vs_sp500")}</span>`);
-      }
-    } catch (_) {}
-    if (parts.length === 0) parts.push(t("dashboard.xirr_no_data"));
-    subEl.innerHTML = parts.join(" · ");
-  } catch (e) {
-    const subEl = document.getElementById("perf-sub");
-    if (subEl) subEl.textContent = t("dashboard.xirr_no_data");
-  }
-}
-
-async function loadHistoryAndBenchmark(isCancelled) {
-  let history;
-  try {
-    history = await cachedGet("/dashboard/history?days=365&benchmark=^GSPC");
-  } catch (e) {
-    return; // keep the interpolated chart already drawn
-  }
-  if (isCancelled()) return;
-  if (!history?.portfolio?.length || history.portfolio.length < 2) return;
-
-  // Re-draw the portfolio chart with the real snapshot series + S&P overlay.
-  const ctx = document.getElementById("chart-portfolio");
-  if (!ctx) return;
-  await loadChartJs();
-  if (!document.getElementById("chart-portfolio")) return; // navigated away
-  try { state.charts.portfolio?.destroy?.(); } catch (_) {}
-
-  // Both series use the snapshot dates as the x-axis; map benchmark by date.
-  const labels = history.portfolio.map(p => p.date);
-  const portfolioData = history.portfolio.map(p => p.normalized);
-  const benchByDate = {};
-  for (const b of history.benchmark || []) benchByDate[b.date] = b.normalized;
-  // Forward-fill benchmark on weekends/holidays for visual continuity.
-  let lastBench = null;
-  const benchmarkData = labels.map(d => {
-    if (benchByDate[d] != null) lastBench = benchByDate[d];
-    return lastBench;
-  });
-
-  state.charts.portfolio = new window.Chart(ctx, {
-    type: "line",
-    data: {
-      labels,
-      datasets: [
-        {
-          label: t("dashboard.your_portfolio"),
-          data: portfolioData,
-          borderColor: "#8a7558",
-          backgroundColor: "rgba(138, 117, 88, 0.08)",
-          borderWidth: 1.8, fill: true, tension: 0.3,
-          pointRadius: 0, pointHoverRadius: 4,
-        },
-        {
-          label: `${t("dashboard.benchmark")} (${history.benchmark_symbol})`,
-          data: benchmarkData,
-          borderColor: "#6b7d5e",
-          borderDash: [4, 4],
-          borderWidth: 1.3, fill: false, tension: 0.3,
-          pointRadius: 0, pointHoverRadius: 4,
-        },
-      ],
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { display: true, position: "bottom", labels: { font: { size: 11 }, boxWidth: 14 } },
-        tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)}` } },
-      },
-      scales: {
-        y: {
-          beginAtZero: false,
-          title: { display: true, text: t("dashboard.base_100"), font: { size: 10 }, color: "var(--text-muted)" },
-        },
-      },
-    },
-  });
-}
-
-async function buildAllocationChart(byType) {
-  const ctx = document.getElementById("chart-allocation");
-  if (!ctx) return;
-  await loadChartJs();
-  if (!document.getElementById("chart-allocation")) return;
-  try { state.charts.allocation?.destroy?.(); } catch (_) {}
-  // `rawLabels` keeps the raw type slug ("stock", "real_estate", …) for
-  // the click→filter handler; `labels` is the translated display label.
-  const rawLabels = Object.keys(byType);
-  const data = Object.values(byType);
-  ctx.style.cursor = "pointer";
-  state.charts.allocation = new window.Chart(ctx, {
-    type: "doughnut",
-    data: {
-      labels: rawLabels.map(l => t(`investments.types.${l}`)),
-      datasets: [{
-        data,
-        backgroundColor: rawLabels.map(l => TYPE_COLORS[l] || "#a89683"),
-        borderColor: "#faf7f2",
-        borderWidth: 2,
-      }],
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      cutout: "65%",
-      plugins: { legend: { position: "bottom", labels: { font: { size: 12 }, boxWidth: 10 } } },
-      onHover: (event, elements) => {
-        event.native.target.style.cursor = elements.length ? "pointer" : "default";
-      },
-      // Click on a slice → navigate to /#/investments with the slice's
-      // asset type pre-selected as the filter. sessionStorage is the
-      // hand-off because it's robust to hashchange + view module reload.
-      onClick: (event, elements) => {
-        if (!elements || !elements.length) return;
-        const slug = rawLabels[elements[0].index];
-        if (!slug) return;
-        try { sessionStorage.setItem("inv:pendingTypeFilter", slug); } catch (_) {}
-        location.hash = "#/investments";
-      },
-    },
-  });
-}
-
-async function buildMonthlyChart(rows) {
-  const ctx = document.getElementById("chart-monthly");
-  if (!ctx) return;
-  await loadChartJs();
-  if (!document.getElementById("chart-monthly")) return;
-  try { state.charts.monthly?.destroy?.(); } catch (_) {}
-  state.charts.monthly = new window.Chart(ctx, {
-    type: "bar",
-    data: {
-      labels: rows.map(r => r.month),
-      datasets: [{
-        label: t("dashboard.monthly_returns"),
-        data: rows.map(r => r.return_pct),
-        backgroundColor: rows.map(r => r.return_pct >= 0 ? "#6b7d5e" : "#a56551"),
-        borderRadius: 2,
-      }],
-    },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
-  });
 }

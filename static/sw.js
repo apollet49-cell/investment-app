@@ -10,7 +10,7 @@
  * Bump CACHE_VERSION whenever the shell changes shape. Old caches are
  * deleted on activate.
  */
-const CACHE_VERSION = "investapp-v8";
+const CACHE_VERSION = "investapp-v10";
 // Pre-cache only "/" (index.html) — it's the app entry and we want offline
 // support for the shell. NOT app.js / style.css / i18n.js: those are static
 // imports inside view modules (`import { loadChartJs } from "/static/app.js"`)
@@ -73,8 +73,6 @@ self.addEventListener("fetch", (event) => {
   // Dynamic endpoints — always go to the network. Listing all the
   // dynamic prefixes is more robust than trying to derive them from
   // /static/* because /config/public and /health aren't under /api.
-  // Chat / wallet / watchlist / markets / plans were removed in the
-  // surface-trim — kept here as harmless until the routers are deleted.
   const dynamicPrefixes = [
     "/auth/", "/dashboard/", "/investments/", "/transactions",
     "/market/", "/alerts", "/scenarios", "/exports/",
