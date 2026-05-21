@@ -40,3 +40,6 @@ sentry-sdk[fastapi]==2.18.0
 # Brotli is ~20% smaller than gzip for text payloads; brotli-asgi falls
 # back to GZip when the client doesn't advertise br support.
 brotli-asgi==1.4.0
+# In-memory rate limiting on auth endpoints. Suitable for the single-worker
+# uvicorn deployment; switch to a Redis backend if scaling out.
+slowapi==0.1.9

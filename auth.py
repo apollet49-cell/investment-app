@@ -1,19 +1,36 @@
-from __future__ import annotations
-
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jwt.exceptions import InvalidTokenError
 from passlib.context import CryptContext
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models import User
 from schemas import TokenResponse, UserLogin, UserOut, UserRegister
 from settings import settings
+
+# Per-IP in-memory rate limits on the three public auth endpoints. The
+# single-worker uvicorn deployment means in-memory counters are
+# authoritative; swap the storage URI for redis://… if scaling out.
+# Tests set INVESTAPP_DISABLE_RATE_LIMIT=1 so the auth_token fixture can
+# register one user per test without bumping into the 5/min ceiling. We
+# refuse to honour the disable flag when SENTRY_ENV=production so a
+# misconfigured prod env var can't accidentally open the gates.
+import logging as _logging
+import os as _os
+_disable_rl = _os.getenv("INVESTAPP_DISABLE_RATE_LIMIT") == "1"
+if _disable_rl and settings.SENTRY_ENV == "production":
+    _logging.getLogger("auth").warning(
+        "INVESTAPP_DISABLE_RATE_LIMIT=1 ignored — refusing to disable rate limiting in production."
+    )
+    _disable_rl = False
+limiter = Limiter(key_func=get_remote_address, enabled=not _disable_rl)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -72,7 +89,8 @@ async def get_current_user(
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
-async def register(payload: UserRegister, db: Session = Depends(get_db)) -> TokenResponse:
+@limiter.limit("5/minute")
+async def register(request: Request, payload: UserRegister, db: Session = Depends(get_db)) -> TokenResponse:
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=409, detail="email already registered")
     user = User(
@@ -88,7 +106,8 @@ async def register(payload: UserRegister, db: Session = Depends(get_db)) -> Toke
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(payload: UserLogin, db: Session = Depends(get_db)) -> TokenResponse:
+@limiter.limit("10/minute")
+async def login(request: Request, payload: UserLogin, db: Session = Depends(get_db)) -> TokenResponse:
     user = db.query(User).filter(User.email == payload.email).first()
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="invalid credentials")
@@ -96,7 +115,8 @@ async def login(payload: UserLogin, db: Session = Depends(get_db)) -> TokenRespo
 
 
 @router.post("/demo", response_model=TokenResponse, status_code=201)
-async def demo_login(db: Session = Depends(get_db)) -> TokenResponse:
+@limiter.limit("3/minute")
+async def demo_login(request: Request, db: Session = Depends(get_db)) -> TokenResponse:
     """Spin up a brand-new demo user with a pre-seeded portfolio. No
     sign-up required — the landing page CTA calls this and the visitor
     lands straight on a fully-populated dashboard. Each demo user is

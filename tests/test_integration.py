@@ -55,6 +55,46 @@ def test_login_wrong_password_returns_401(client):
     assert r.status_code == 401
 
 
+def test_security_headers_on_every_response(client):
+    """Sanity-check that the security headers middleware fires on every
+    request, not just authenticated ones. The CSP value is the load-bearing
+    one — losing it would silently re-open the JWT-in-localStorage XSS
+    exfiltration vector documented in ARCHITECTURE.md."""
+    for path in ("/", "/health", "/config/public"):
+        r = client.get(path)
+        h = r.headers
+        assert h.get("X-Content-Type-Options") == "nosniff", f"missing nosniff on {path}"
+        assert h.get("X-Frame-Options") == "DENY", f"missing X-Frame on {path}"
+        assert "strict-origin" in (h.get("Referrer-Policy") or ""), f"missing referrer policy on {path}"
+        csp = h.get("Content-Security-Policy") or ""
+        assert "default-src 'self'" in csp, f"CSP missing default-src on {path}"
+        assert "frame-ancestors 'none'" in csp, f"CSP missing frame-ancestors on {path}"
+
+
+def test_auth_rate_limit_fires(client):
+    """Verify slowapi caps /auth/register at 5/min per IP. The fixture
+    disables the limiter globally for the rest of the suite; here we
+    flip it back on, exhaust the budget, and confirm we get a 429."""
+    from auth import limiter
+    limiter.reset()
+    limiter.enabled = True
+    try:
+        for i in range(5):
+            r = client.post("/auth/register", json={
+                "email": f"rl-{uuid.uuid4().hex[:8]}@example.com",
+                "password": "secret123", "name": "RL",
+            })
+            assert r.status_code in (201, 409), f"call {i} unexpectedly returned {r.status_code}"
+        # 6th call within the same minute should be throttled.
+        r = client.post("/auth/register", json={
+            "email": _fresh_email(), "password": "secret123", "name": "RL",
+        })
+        assert r.status_code == 429, f"expected 429 got {r.status_code}: {r.text}"
+    finally:
+        limiter.enabled = False
+        limiter.reset()
+
+
 def test_demo_login_creates_user_with_seeded_portfolio(client):
     """POST /auth/demo should issue a fresh token + populate the user with
     sample investments so the dashboard isn't empty on first paint."""

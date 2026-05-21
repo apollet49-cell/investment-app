@@ -16,6 +16,14 @@ from pathlib import Path
 # slow, and would leak network from CI).
 os.environ.setdefault("INVESTAPP_DISABLE_SCHEDULER", "1")
 os.environ.setdefault("INVESTAPP_DISABLE_LIVE_REFRESH", "1")
+os.environ.setdefault("INVESTAPP_DISABLE_RATE_LIMIT", "1")
+# SENTRY_ENV defaults to "production" (settings.py), and auth.py refuses to
+# honour INVESTAPP_DISABLE_RATE_LIMIT in production. Without this line the
+# limiter stays ON during tests, and the suite only passes by luck of
+# execution order (test_auth_rate_limit_fires disabling it early). Mark the
+# env as test so the disable flag is honoured for the whole run regardless
+# of order / pytest-randomly / -xdist.
+os.environ.setdefault("SENTRY_ENV", "test")
 
 # Valid Fernet key (32 url-safe-base64-encoded bytes). Required by crypto.py.
 os.environ.setdefault("APP_ENCRYPTION_KEY", "x6bMRJR4jD9SMX7fSeomDbTkEfx-cyreg3IcDzG1rTE=")

@@ -56,11 +56,9 @@ from routers import (
     transactions as transactions_router,
 )
 from routers import calculator as calculator_router
-# Routers no longer wired: chatbot, markets (browser), plans (DCA),
-# wallet, watchlist. Files remain on disk but are unreachable until
-# explicitly re-included here. Removed to focus the product story on
-# the 9 surviving features that are actually finished.
-from auth import router as auth_router
+from auth import limiter as auth_limiter, router as auth_router
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 # app_settings imported above for Sentry; kept here as documentation.
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s | %(message)s")
@@ -208,17 +206,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# slowapi: hook the limiter from auth.py into the app so the @limiter.limit
+# decorators on /auth/{register,login,demo} actually fire, and 429 responses
+# are emitted instead of a bare 500.
+app.state.limiter = auth_limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # CORS — explicit allowlist (wildcard with credentials is invalid per spec).
 # Configure via the CORS_ALLOWED_ORIGINS env var on Render. An empty env value
-# falls back to localhost + the deployed origin so misconfig doesn't block
-# every cross-origin request.
-_DEFAULT_ORIGINS = [
-    "http://localhost:8000", "http://127.0.0.1:8000",
-    "https://investment-app-kud9.onrender.com",
-]
+# falls back to localhost so a misconfigured dev machine still works; prod
+# origins MUST be supplied via env.
 _allowed_origins = [o.strip() for o in app_settings.CORS_ALLOWED_ORIGINS.split(",") if o.strip()]
 if not _allowed_origins:
-    _allowed_origins = _DEFAULT_ORIGINS
+    _allowed_origins = ["http://localhost:8000", "http://127.0.0.1:8000"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
@@ -234,6 +234,48 @@ if _HAS_BROTLI:
     app.add_middleware(BrotliMiddleware, minimum_size=500)
 else:
     app.add_middleware(GZipMiddleware, minimum_size=500)
+
+
+# Security headers — set on every response. CSP is the headline: it stops
+# a stored XSS from exfiltrating localStorage (where the JWT lives) by
+# pinning script-src to self + the two CDN origins we actually use, and
+# pinning connect-src to self + analytics/error endpoints. 'unsafe-inline'
+# stays for script and style because the app inlines PostHog's init
+# snippet and uses style="..." attributes across views — tightening this
+# further would require a build step or per-render nonce.
+_IS_PROD = app_settings.SENTRY_ENV == "production"
+_CSP = "; ".join([
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://eu.i.posthog.com https://us.i.posthog.com",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https:",
+    "font-src 'self' data:",
+    # connect-src: API + WebSocket + analytics/error/exchange-rate endpoints
+    "connect-src 'self' ws: wss: https://eu.i.posthog.com https://us.i.posthog.com https://*.sentry.io https://*.ingest.sentry.io",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+])
+
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    # Clickjacking + content-sniffing + referrer leakage
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+    response.headers.setdefault("Content-Security-Policy", _CSP)
+    # HSTS only in production (over HTTPS) — sending it on a dev http://
+    # localhost would lock the browser into requiring HTTPS for localhost,
+    # breaking the dev workflow.
+    if _IS_PROD:
+        response.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains",
+        )
+    return response
 
 app.include_router(auth_router)
 app.include_router(investments_router.router)

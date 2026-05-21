@@ -22,11 +22,11 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite:///./app.db"
 
-    # Comma-separated list of allowed origins for CORS. Empty defaults to a
-    # local-dev whitelist (the app served by FastAPI itself). For prod, set
-    # to your deployed origin so credentials work correctly — wildcard "*"
+    # Comma-separated list of allowed origins for CORS. Set on Render to
+    # your deployed origin so credentials work correctly — wildcard "*"
     # with credentials is invalid per the CORS spec and browsers ignore it.
-    CORS_ALLOWED_ORIGINS: str = "http://localhost:8000,http://127.0.0.1:8000,https://investment-app-kud9.onrender.com"
+    # Empty falls back to the localhost dev pair (set in main.py).
+    CORS_ALLOWED_ORIGINS: str = "http://localhost:8000,http://127.0.0.1:8000"
 
     # PostHog product analytics — leave empty in dev. Set on Render to
     # capture page views + feature usage. Free tier ~1M events/month.
