@@ -46,11 +46,8 @@ class User(Base):
 
     investments: Mapped[list["Investment"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     scenarios: Mapped[list["Scenario"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    chat_messages: Mapped[list["ChatMessage"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     alerts: Mapped[list["Alert"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    watchlist: Mapped[list["WatchlistItem"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    dca_plans: Mapped[list["DCAPlan"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     snapshots: Mapped[list["PortfolioSnapshot"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
@@ -109,19 +106,6 @@ class Scenario(Base):
     user: Mapped["User"] = relationship(back_populates="scenarios")
 
 
-class ChatMessage(Base):
-    __tablename__ = "chat_messages"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
-    role: Mapped[str] = mapped_column(String(16), nullable=False)  # "user" or "assistant"
-    content: Mapped[str] = mapped_column(Text, nullable=False)
-    truncated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
-
-    user: Mapped["User"] = relationship(back_populates="chat_messages")
-
-
 class Alert(Base):
     __tablename__ = "alerts"
 
@@ -166,44 +150,6 @@ class Transaction(Base):
     user: Mapped["User"] = relationship(back_populates="transactions")
 
 
-DCA_FREQUENCIES = ("weekly", "biweekly", "monthly", "quarterly")
-
-
-class DCAPlan(Base):
-    """Scheduled Dollar Cost Averaging plan — recurring contribution into a
-    single asset. The app doesn't execute orders; it just tracks the plan
-    and visualises the trajectory so the user can see what their DCA setup
-    is doing over time."""
-    __tablename__ = "dca_plans"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    symbol: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    asset_type: Mapped[str] = mapped_column(String(16), nullable=False, default="etf")
-    amount: Mapped[float] = mapped_column(Float, nullable=False)
-    frequency: Mapped[str] = mapped_column(String(16), nullable=False, default="monthly")
-    day_of_month: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    start_date: Mapped[date] = mapped_column(Date, nullable=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
-
-    user: Mapped["User"] = relationship(back_populates="dca_plans")
-
-
-class WatchlistItem(Base):
-    __tablename__ = "watchlist"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
-    symbol: Mapped[str] = mapped_column(String(64), nullable=False)
-    asset_type: Mapped[str] = mapped_column(String(16), nullable=False)  # stock | etf | crypto
-    name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
-
-    user: Mapped["User"] = relationship(back_populates="watchlist")
-
-
 class PortfolioSnapshot(Base):
     """Daily snapshot of the user's portfolio. Captured by a scheduled job
     so the dashboard chart shows real historical value (not a linear
@@ -225,6 +171,12 @@ class PortfolioSnapshot(Base):
     snapshot_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     total_value: Mapped[float] = mapped_column(Float, nullable=False)
     total_invested: Mapped[float] = mapped_column(Float, nullable=False)
+    # USD→EUR rate at the moment of the snapshot. Lets the EUR chart show
+    # the historical value at the FX that actually applied — previously
+    # every historical point was re-converted at today's rate, which
+    # smeared FX moves into the portfolio curve. Nullable so older rows
+    # (and snapshots taken before the forex cache warmed up) still load.
+    fx_to_eur: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="snapshots")

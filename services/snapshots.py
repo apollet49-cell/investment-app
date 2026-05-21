@@ -23,11 +23,29 @@ from services.clock import today_utc
 log = logging.getLogger(__name__)
 
 
+def _cached_fx_to_eur() -> float | None:
+    """Read the USD→EUR rate from the in-memory forex cache without an
+    awaitable. The refresh_forex scheduler job warms this every 5 minutes,
+    so most snapshot calls land on a populated cache. Returns None when
+    cold (test runs, fresh boot) so callers can record an unknown FX
+    rather than fall back to a stale or guessed value."""
+    try:
+        from services.market_data import market_service
+        cached = market_service._forex_cache.get("USD_EUR")
+        if cached:
+            rate = cached.get("rate")
+            return float(rate) if rate else None
+    except Exception:
+        pass
+    return None
+
+
 def take_snapshot(db: Session, user: User, when: date | None = None) -> PortfolioSnapshot:
     when = when or today_utc()
     rows = db.query(Investment).filter(Investment.user_id == user.id).all()
     total_value = round(sum((r.current_value or 0) for r in rows), 2)
     total_invested = round(sum((r.amount_invested or 0) for r in rows), 2)
+    fx_to_eur = _cached_fx_to_eur() if when == today_utc() else None
     existing = (
         db.query(PortfolioSnapshot)
         .filter(PortfolioSnapshot.user_id == user.id, PortfolioSnapshot.snapshot_date == when)
@@ -36,6 +54,8 @@ def take_snapshot(db: Session, user: User, when: date | None = None) -> Portfoli
     if existing:
         existing.total_value = total_value
         existing.total_invested = total_invested
+        if fx_to_eur is not None:
+            existing.fx_to_eur = fx_to_eur
         db.commit()
         return existing
     snap = PortfolioSnapshot(
@@ -43,6 +63,7 @@ def take_snapshot(db: Session, user: User, when: date | None = None) -> Portfoli
         snapshot_date=when,
         total_value=total_value,
         total_invested=total_invested,
+        fx_to_eur=fx_to_eur,
     )
     db.add(snap)
     try:
@@ -62,6 +83,8 @@ def take_snapshot(db: Session, user: User, when: date | None = None) -> Portfoli
         )
         winner.total_value = total_value
         winner.total_invested = total_invested
+        if fx_to_eur is not None:
+            winner.fx_to_eur = fx_to_eur
         db.commit()
         return winner
 
@@ -83,27 +106,33 @@ def take_all_snapshots(session_factory) -> int:
     from sqlalchemy import text
     db: Session = session_factory()
     today = today_utc()
+    fx_to_eur = _cached_fx_to_eur()
     try:
         dialect = db.bind.dialect.name
         if dialect in ("postgresql", "sqlite"):
             # SQLite 3.24+ and Postgres share the ON CONFLICT DO UPDATE
             # form thanks to the uq_snapshot_user_date constraint.
+            # COALESCE keeps a previously-stored fx_to_eur instead of
+            # nulling it when this batch runs before the forex cache is
+            # warm (would lose history on a cold start).
             stmt = text("""
                 INSERT INTO portfolio_snapshots
-                  (user_id, snapshot_date, total_value, total_invested, created_at)
+                  (user_id, snapshot_date, total_value, total_invested, fx_to_eur, created_at)
                 SELECT
                   i.user_id,
                   :today AS snapshot_date,
                   ROUND(CAST(SUM(COALESCE(i.current_value, 0)) AS NUMERIC), 2) AS total_value,
                   ROUND(CAST(SUM(COALESCE(i.amount_invested, 0)) AS NUMERIC), 2) AS total_invested,
+                  :fx_to_eur AS fx_to_eur,
                   CURRENT_TIMESTAMP
                 FROM investments i
                 GROUP BY i.user_id
                 ON CONFLICT (user_id, snapshot_date) DO UPDATE
                 SET total_value = EXCLUDED.total_value,
-                    total_invested = EXCLUDED.total_invested
+                    total_invested = EXCLUDED.total_invested,
+                    fx_to_eur = COALESCE(EXCLUDED.fx_to_eur, portfolio_snapshots.fx_to_eur)
             """)
-            result = db.execute(stmt, {"today": today.isoformat()})
+            result = db.execute(stmt, {"today": today.isoformat(), "fx_to_eur": fx_to_eur})
             db.commit()
             return result.rowcount or 0
 

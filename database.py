@@ -88,6 +88,10 @@ def init_db() -> None:
         # transactions.user_id was added after the table — older deployed DBs
         # need this backfill to avoid every transaction query 500ing.
         ("transactions", "user_id", "ALTER TABLE transactions ADD COLUMN user_id INTEGER"),
+        # Historical FX so the EUR dashboard chart shows the rate that
+        # actually applied at each date (previously every point used the
+        # current rate, smearing FX moves into the curve).
+        ("portfolio_snapshots", "fx_to_eur", "ALTER TABLE portfolio_snapshots ADD COLUMN fx_to_eur FLOAT"),
     ]
     insp = inspect(engine)
     with engine.begin() as conn:

@@ -258,6 +258,11 @@ async def history(
             "date": s.snapshot_date.isoformat(),
             "value": round(s.total_value, 2),
             "normalized": round((s.total_value / base_value) * 100, 2) if base_value > 0 else 100,
+            # FX rate USD→EUR at the moment the snapshot was taken. Null
+            # for points written before the column existed or before the
+            # forex cache was warm — the frontend should fall back to the
+            # current rate in that case.
+            "fx_to_eur": s.fx_to_eur,
         }
         for s in snaps
     ]
