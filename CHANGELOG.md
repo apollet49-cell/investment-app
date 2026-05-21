@@ -72,14 +72,16 @@ All notable changes to this project. Most recent first.
 
 - Removed chat surface (FAB + panel + helpers). The AI value lives in
   the Monthly Review.
-- Unwired ghost routers (Watchlist, Markets browser, DCA Plans, Wallet,
-  Compare) from `main.py` and the SPA `ROUTES`. The files remain on
-  disk for `git rm` cleanup later.
+- Removed ghost routers from disk (Watchlist, Markets browser, DCA Plans,
+  Wallet, AI Chatbot). The corresponding models, schemas, JS views, CSS,
+  and the unused wallet modal in investments.js are gone. Orphan DB
+  tables (chat_messages, dca_plans, watchlist) are left in-place — drop
+  them manually if you want to reclaim the space.
 - Sidebar trimmed from 12 to 9 items.
 
 ### Tests
 
-- 72 → 85 tests, including: scenarios CRUD + simulate, planning/fire,
+- 72 → 91 tests, including: scenarios CRUD + simulate, planning/fire,
   stress-test, alerts CRUD + dismiss, transactions summary, SSE hub
   back-pressure, WebSocket connect, `/dashboard/all` bundle, `/auth/demo`
   cleanup pattern, PWA artefacts (`/sw.js`, `/manifest.json`).

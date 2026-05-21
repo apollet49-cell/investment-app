@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/apollet49-cell/investment-app/actions/workflows/ci.yml/badge.svg)](https://github.com/apollet49-cell/investment-app/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Tests](https://img.shields.io/badge/tests-85%20passed-success)
+![Tests](https://img.shields.io/badge/tests-91%20passed-success)
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 
 Live demo: [investment-app-kud9.onrender.com](https://investment-app-kud9.onrender.com)
@@ -57,7 +57,7 @@ The AI layer (Claude prose in `/dashboard/ai-review`) is *additive*: when a user
 
 1. **Pre-rendered server-side dashboard.** The landing is already SSR-ish (critical CSS inlined, hero content in the initial HTML), but the dashboard still hydrates from JSON. With more time I'd ship a real SSR for the first dashboard load — eliminates the 200ms gap between FCP and interactivity.
 2. **Multi-worker via Redis pub/sub.** The Service Worker layer and the APScheduler that fans out SSE/WebSocket broadcasts both assume a single uvicorn process. For real traffic I'd move broadcast state into Redis so each worker can publish/subscribe. The architecture doc has a section on this.
-3. **More tests on the broadcast path.** 81 tests cover math, auth, CRUD, scenarios, alerts, dashboard endpoints, and PWA — but the SSE/WebSocket fan-out and the APScheduler jobs are still observed-in-prod-only. The next 10 tests would target those paths with `httpx-ws` for the WS upgrade and a fake `SessionLocal` for the scheduler.
+3. **More tests on the broadcast path.** 91 tests cover math, auth, CRUD, scenarios, alerts, dashboard endpoints, and PWA — but the SSE/WebSocket fan-out and the APScheduler jobs are still observed-in-prod-only. The next 10 tests would target those paths with `httpx-ws` for the WS upgrade and a fake `SessionLocal` for the scheduler.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the four load-bearing decisions (no framework / USD internal / daily snapshots / idempotent ALTER) and three explicit trade-offs (JWT in localStorage / single uvicorn / float for money).
 
@@ -98,7 +98,7 @@ Render.com works out of the box. For a public deployment, **upgrade Postgres pas
 - **Backend.** FastAPI 0.115, SQLAlchemy 2.0, Pydantic 2.9, PyJWT 2.9 (replaced python-jose after CVE-2024-33663/33664), Fernet-encrypted per-user API keys, APScheduler, Brotli middleware, Sentry SDK.
 - **Frontend.** Vanilla ES modules, Chart.js + lightweight-charts (lazy-loaded), IndexedDB for cache persistence, Service Worker + manifest for PWA install, WebSocket with SSE fallback for live prices.
 - **Math.** Newton-Raphson XIRR, TWR from daily snapshots, beta-regression risk metrics, multi-source price verification with 3σ outlier rejection.
-- **Tests.** 81 pytest tests covering auth, CRUD, scenarios, calculator math, performance metrics, risk metrics, rebalancing, dashboard summary + history + risk, alerts, transactions, planning/fire, PWA artefacts, live-refresh FX normalisation.
+- **Tests.** 91 pytest tests covering auth, CRUD, scenarios, calculator math, performance metrics, risk metrics, rebalancing, dashboard summary + history + risk, alerts, transactions, planning/fire, PWA artefacts, live-refresh FX normalisation.
 
 ## File layout
 
@@ -113,7 +113,7 @@ investment_app/
 ├── crypto.py           # Fernet wrapper for per-user API keys
 ├── routers/            # dashboard, investments, scenarios, fire, tax, alerts, …
 ├── services/           # calculator, ai_service, market_data, risk, performance, …
-├── tests/              # 81 pytest tests
+├── tests/              # 91 pytest tests
 ├── ARCHITECTURE.md     # design decisions + trade-offs
 ├── setup.sh            # bootstrap script
 └── static/             # SPA: index.html, style.css, app.js, i18n.js, views/*.js
