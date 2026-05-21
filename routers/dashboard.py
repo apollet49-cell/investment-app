@@ -381,9 +381,18 @@ async def all_dashboard_data(
     from routers.dividends import calendar as div_calendar
     from services.fire import compute as compute_fire_svc
 
-    async def _safe(coro_factory):
+    async def _safe(coro_factory, timeout: float = 5.0):
+        # Hard per-sub-call ceiling. Without it, ONE slow sub-call (the
+        # dividends calendar fans out yfinance per holding — ~18s for a
+        # 20-position demo portfolio on a 1-vCPU box) blocks the whole
+        # bundle, and the dashboard sits on a spinner for ~30s after login.
+        # On timeout the key returns null; the view loads that card lazily
+        # via its standalone endpoint instead of blocking first paint.
         try:
-            return await coro_factory()
+            return await asyncio.wait_for(coro_factory(), timeout=timeout)
+        except asyncio.TimeoutError:
+            log.warning("dashboard/all sub-call exceeded %.1fs — returning null", timeout)
+            return None
         except Exception as e:
             log.warning("dashboard/all sub-call failed: %s", e)
             return None
@@ -405,7 +414,10 @@ async def all_dashboard_data(
             current=current, db=db,
         )),
         _safe(lambda: stress_endpoint(current=current, db=db)),
-        _safe(lambda: div_calendar(current=current, db=db)),
+        # Dividends is the slowest (yfinance per holding) and feeds a
+        # secondary tab — cap it tight so it never paces the bundle. The
+        # income tab fetches /dividends/calendar standalone when opened.
+        _safe(lambda: div_calendar(current=current, db=db), timeout=2.5),
     )
     keys = ["summary", "performance", "history", "risk", "fire", "stress", "dividends"]
     return dict(zip(keys, results))
