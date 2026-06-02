@@ -61,9 +61,39 @@ async def macro(indicator: str, country: str = Query("US")) -> dict:
     return data
 
 
+# Demo seeds (and any user copying crypto from CoinGecko URLs) store
+# crypto symbols as their CoinGecko ids: "bitcoin", "ethereum",
+# "solana"… yfinance only speaks tickers like "BTC-USD", so the chart
+# 404s on every crypto position until we translate. Curated map for the
+# common ones; everything else falls back to UPPER + "-USD" which is
+# what yfinance uses for the long tail.
+_COINGECKO_TO_YF = {
+    "bitcoin": "BTC-USD",  "ethereum": "ETH-USD", "solana": "SOL-USD",
+    "cardano": "ADA-USD",  "dogecoin": "DOGE-USD", "ripple": "XRP-USD",
+    "polkadot": "DOT-USD", "tron": "TRX-USD",     "litecoin": "LTC-USD",
+    "stellar": "XLM-USD",  "chainlink": "LINK-USD", "avalanche-2": "AVAX-USD",
+    "monero": "XMR-USD",   "tezos": "XTZ-USD",    "cosmos": "ATOM-USD",
+    "uniswap": "UNI-USD",  "filecoin": "FIL-USD", "internet-computer": "ICP-USD",
+    "near": "NEAR-USD",    "polygon": "MATIC-USD","aptos": "APT-USD",
+}
+
+
+def _yf_ticker(symbol: str) -> str:
+    """Translate frontend-supplied symbols to yfinance tickers when needed.
+    Stocks/ETFs (AAPL, ASML.AS) and already-formatted crypto (BTC-USD)
+    pass through unchanged. Lowercase-only-letters strings without a dot
+    or dash are treated as CoinGecko ids."""
+    if "-" in symbol or "." in symbol or not symbol.isalpha():
+        return symbol
+    if symbol != symbol.lower():
+        return symbol
+    return _COINGECKO_TO_YF.get(symbol, f"{symbol.upper()}-USD")
+
+
 @router.get("/historical/{symbol}")
 async def historical(symbol: str, period: str = Query("1y")) -> dict:
-    data = await market_service.get_historical(symbol, period)
+    ticker = _yf_ticker(symbol)
+    data = await market_service.get_historical(ticker, period)
     if not data:
         raise HTTPException(status_code=404, detail=f"no historical data for {symbol}")
     return {"symbol": symbol.upper(), "period": period, "candles": data}
