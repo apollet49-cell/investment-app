@@ -56,6 +56,7 @@ from routers import (
     transactions as transactions_router,
 )
 from routers import calculator as calculator_router
+from routers import chat as chat_router
 from auth import limiter as auth_limiter, router as auth_router
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
@@ -295,6 +296,7 @@ app.include_router(tax_router.router)
 app.include_router(planning_router.router)
 app.include_router(transactions_router.router)
 app.include_router(dividends_router.router)
+app.include_router(chat_router.router)
 
 
 @app.get("/health")

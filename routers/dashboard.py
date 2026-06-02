@@ -316,6 +316,7 @@ async def history(
 async def risk(
     days: int = Query(180, ge=30, le=3650),
     benchmark: str = Query("^GSPC"),
+    include_series: bool = Query(False, description="When true, also returns the daily portfolio value + drawdown series for an underwater chart."),
     current: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -326,7 +327,11 @@ async def risk(
 
     Requires at least 30 daily snapshots; otherwise returns
     `{score: null, reason: "insufficient_history"}` so the UI can fall
-    back to a "checking back in N days" message."""
+    back to a "checking back in N days" message.
+
+    When `include_series=true`, an extra `series` field returns the
+    full {date, value, drawdown_pct} sequence so the frontend can plot
+    an underwater chart without having to compute drawdowns itself."""
     cutoff = today_utc() - timedelta(days=days)
     snaps = (
         db.query(PortfolioSnapshot)
@@ -355,6 +360,25 @@ async def risk(
     metrics = compute_risk_metrics(portfolio_values, bench_values or None)
     metrics["benchmark_symbol"] = benchmark
     metrics["window_days"] = days
+
+    if include_series and snaps:
+        # Compute the running drawdown alongside the equity curve so the
+        # underwater chart is a single self-contained payload. peak is
+        # monotonic-increasing; drawdown_pct is negative (0 at a new peak).
+        series = []
+        peak = snaps[0].total_value or 0.0
+        for s in snaps:
+            v = s.total_value or 0.0
+            if v > peak:
+                peak = v
+            dd = ((v - peak) / peak * 100.0) if peak > 0 else 0.0
+            series.append({
+                "date": s.snapshot_date.isoformat(),
+                "value": round(v, 2),
+                "drawdown_pct": round(dd, 2),
+            })
+        metrics["series"] = series
+
     return metrics
 
 

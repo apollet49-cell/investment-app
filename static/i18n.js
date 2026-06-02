@@ -12,8 +12,10 @@ const en = {
   nav: {
     dashboard: "Dashboard", investments: "Investments", calculator: "Calculator",
     scenarios: "Scenarios", transactions: "Transactions", rebalance: "Rebalance",
-    reports: "Reports", tax: "Tax", fire: "FIRE", settings: "Settings",
+    reports: "Reports", tax: "Tax", fire: "FIRE", settings: "Settings", compare: "Compare", risk: "Risk",
   },
+  compare: { title: "Compare assets" },
+  risk: { title: "Risk" },
   transactions: {
     title: "Transactions",
     add: "Add transaction",
@@ -453,8 +455,10 @@ const fr = {
   nav: {
     dashboard: "Tableau de bord", investments: "Investissements", calculator: "Calculatrice",
     scenarios: "Scénarios", transactions: "Transactions", rebalance: "Rééquilibrage",
-    reports: "Rapports", tax: "Fiscalité", fire: "FIRE", settings: "Paramètres",
+    reports: "Rapports", tax: "Fiscalité", fire: "FIRE", settings: "Paramètres", compare: "Comparer", risk: "Risque",
   },
+  compare: { title: "Comparer 2 actifs" },
+  risk: { title: "Risque" },
   transactions: {
     title: "Transactions",
     add: "Ajouter une transaction",
@@ -893,8 +897,10 @@ const zh = {
   nav: {
     dashboard: "仪表盘", investments: "投资", calculator: "计算器",
     scenarios: "情景规划", transactions: "交易记录", rebalance: "再平衡",
-    reports: "报告", tax: "税务", fire: "FIRE", settings: "设置",
+    reports: "报告", tax: "税务", fire: "FIRE", settings: "设置", compare: "对比", risk: "风险",
   },
+  compare: { title: "对比资产" },
+  risk: { title: "风险" },
   transactions: {
     title: "交易记录",
     add: "添加交易",
