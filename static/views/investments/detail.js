@@ -107,18 +107,22 @@ async function renderMarketDetail(body, inv) {
   }
   await renderChart("1y");
 
-  // News (best-effort — the dedicated news endpoint was retired with the
-  // markets browser feature; this call falls through to the "no news"
-  // fallback below, which is the same UX as having nothing recent.)
+  // News from Google News RSS. We pass the company name as the search
+  // query when available — for MSFT that gives "Microsoft" results, way
+  // more on-topic than searching the ticker. Falls back to the symbol
+  // for crypto (where inv.name often matches inv.symbol).
   try {
-    const news = await API.request(`/market/asset/${encodeURIComponent(inv.symbol)}/news`);
-    const items = news?.items || news?.articles || news || [];
+    const query = inv.name || inv.symbol;
+    const news = await API.request(
+      `/market/news/${encodeURIComponent(inv.symbol)}?q=${encodeURIComponent(query)}`
+    );
+    const items = news?.items || [];
     const nbody = document.getElementById("detail-news-body");
     if (!items.length) { nbody.innerHTML = `<em>${t("investments.detail_no_news")}</em>`; return; }
-    nbody.innerHTML = items.slice(0, 6).map(n => `
-      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
-        <a href="${escapeHtml(n.url || n.link || '#')}" target="_blank" rel="noopener" style="color:var(--text);font-weight:500;text-decoration:none">${escapeHtml(n.title || n.headline || "—")}</a>
-        <div style="color:var(--text-muted);font-size:11px;margin-top:2px">${escapeHtml(n.publisher || n.source || "")} · ${escapeHtml((n.published_at || n.date || "").slice(0, 10))}</div>
+    nbody.innerHTML = items.slice(0, 12).map(n => `
+      <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+        <a href="${escapeHtml(n.url || '#')}" target="_blank" rel="noopener" style="color:var(--text);font-weight:500;text-decoration:none;line-height:1.4;display:block">${escapeHtml(n.title || "—")}</a>
+        <div style="color:var(--text-muted);font-size:11px;margin-top:4px;font-family:var(--font-mono,monospace)">${escapeHtml(n.publisher || "")} · ${escapeHtml((n.published_at || "").slice(0, 10))}</div>
       </div>`).join("");
   } catch (_) {
     const nbody = document.getElementById("detail-news-body");

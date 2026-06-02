@@ -99,6 +99,26 @@ async def historical(symbol: str, period: str = Query("1y")) -> dict:
     return {"symbol": symbol.upper(), "period": period, "candles": data}
 
 
+@router.get("/news/{symbol}")
+async def news(
+    symbol: str,
+    q: Optional[str] = Query(None, description="Optional search override (defaults to symbol)"),
+    lang: str = Query("fr", regex="^(fr|en)$"),
+    limit: int = Query(15, ge=1, le=30),
+) -> dict:
+    """Recent news from Google News for a symbol or free-form query.
+
+    The detail modal usually passes the company name as `q` (e.g.
+    `?q=Microsoft` for symbol `MSFT`) so the results stay on-topic.
+    Without `q`, the symbol itself is the search term — works for
+    crypto (bitcoin/ethereum/solana) and most well-known tickers.
+    Cached server-side ~10 min so repeat opens don't refetch."""
+    from services.news import get_news
+    query = (q or symbol).strip()
+    items = await get_news(query, limit=limit, lang=lang)
+    return {"query": query, "items": items}
+
+
 @router.get("/price-on/{symbol}")
 async def price_on(
     symbol: str,
