@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Not financial advice — InvestApp</title>
+<meta name="description" content="InvestApp is a personal portfolio tracker. It is not financial advice.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='8' y='8' width='84' height='84' rx='20' fill='%236b7d5e'/><rect x='26' y='60' width='11' height='22' rx='2' fill='%23faf7f2'/><rect x='44' y='46' width='11' height='36' rx='2' fill='%23faf7f2'/><rect x='62' y='28' width='11' height='54' rx='2' fill='%23faf7f2'/><path d='M31 58 L49 44 L67 26' stroke='%23faf7f2' stroke-width='3' fill='none' stroke-linecap='round'/></svg>">
+<style>
+  :root{
+    --bg:#08080a; --surface:#0e0e11; --surface-2:#15151a;
+    --text:#f5f5f0; --text-muted:#b8b8b3; --text-soft:#8c8c87;
+    --border:rgba(255,255,255,.08); --sage:#6b7d5e;
+    --f-sans:"Geist",-apple-system,system-ui,sans-serif;
+    --f-serif:"Instrument Serif",Georgia,serif;
+    --f-mono:"Geist Mono",ui-monospace,Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:var(--bg);color:var(--text);font-family:var(--f-sans);font-weight:300;line-height:1.6;font-size:17px;}
+  a{color:var(--sage);text-decoration:none;border-bottom:1px solid rgba(107,125,94,.3);transition:border-color .2s;}
+  a:hover{border-color:var(--sage);}
+  .nav{padding:24px 32px;border-bottom:1px solid var(--border);display:flex;align-items:center;}
+  .nav .brand{font-family:var(--f-serif);font-size:20px;color:var(--text);border:none;}
+  .nav .back{margin-left:auto;font-family:var(--f-mono);font-size:13px;color:var(--text-muted);border:none;}
+  .nav .back:hover{color:var(--sage);}
+  main{max-width:720px;margin:0 auto;padding:80px 32px 120px;}
+  .eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--sage);margin-bottom:24px;}
+  h1{font-family:var(--f-serif);font-weight:400;font-size:54px;line-height:1.05;letter-spacing:-.01em;margin-bottom:32px;color:var(--text);}
+  h1 em{font-style:italic;color:var(--sage);}
+  h2{font-family:var(--f-serif);font-weight:400;font-size:26px;margin:48px 0 16px;color:var(--text);}
+  p{margin-bottom:18px;color:var(--text-muted);max-width:64ch;}
+  strong{color:var(--text);font-weight:500;}
+  ul{list-style:none;margin:16px 0 24px;}
+  ul li{padding-left:24px;position:relative;margin-bottom:10px;color:var(--text-muted);}
+  ul li::before{content:"↳";position:absolute;left:0;color:var(--sage);font-family:var(--f-mono);}
+  .meta{margin-top:64px;padding-top:32px;border-top:1px solid var(--border);font-family:var(--f-mono);font-size:12px;color:var(--text-soft);letter-spacing:.06em;}
+  @media (max-width:640px){
+    h1{font-size:38px;}
+    main{padding:48px 22px 80px;}
+    .nav{padding:18px 22px;}
+  }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a class="brand" href="/">InvestApp</a>
+  <a class="back" href="/">← back to app</a>
+</nav>
+
+<main>
+  <div class="eyebrow">Fine print · 01</div>
+  <h1>Not <em>financial</em> advice.</h1>
+
+  <p><strong>InvestApp is a personal portfolio tracker.</strong> It computes returns, simulates tax scenarios, and surfaces patterns in your own data. It does not predict markets, does not recommend trades, and does not constitute financial, tax, or legal advice.</p>
+
+  <h2>What this tool actually does</h2>
+  <p>Aggregate the investments you manually enter or import. Compute deterministic metrics from them — XIRR, TWR, allocation, risk score — using public formulas you can audit in the source code. Compare your portfolio to a public benchmark (S&amp;P 500) and to French tax envelope rules (PEA, CTO, AV, PER) as defined by current French law at the time of writing.</p>
+
+  <h2>What this tool does not do</h2>
+  <ul>
+    <li>Predict future market moves.</li>
+    <li>Tell you what to buy, hold, or sell.</li>
+    <li>Replace a licensed financial advisor, fiscal counsel, or notary.</li>
+    <li>Guarantee accuracy of third-party data (Yahoo Finance, DVF, etc.).</li>
+    <li>Account for the totality of your fiscal situation — only the wrappers you assign.</li>
+  </ul>
+
+  <h2>Investment risk</h2>
+  <p>All investments carry risk of loss. Past performance — whether displayed in this app or anywhere else — does not predict future results. Currency fluctuations, tax law changes, and individual circumstances will all affect actual outcomes. Before acting on anything you see here, consult a licensed professional who knows your situation.</p>
+
+  <h2>Data accuracy</h2>
+  <p>Market prices are best-effort, fetched from public APIs (Yahoo Finance primarily, Alpha Vantage and ECB as fallbacks). Real-estate valuations rely on the public DVF database — accurate for transactions that closed, but only an estimator for what your property would sell for today. We surface confidence levels where we can. We do not warrant accuracy.</p>
+
+  <h2>Your responsibility</h2>
+  <p>You are responsible for the data you enter, for verifying the numbers shown match your real positions, and for any decision you make based on them. If something looks wrong, it probably is — open an issue on the source repository and we will fix it.</p>
+
+  <div class="meta">Last updated: May 2026 · MIT licensed · <a href="/sources">View data sources →</a></div>
+</main>
+</body>
+</html>

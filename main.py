@@ -346,6 +346,19 @@ async def manifest() -> FileResponse:
     return FileResponse(STATIC_DIR / "manifest.json", media_type="application/manifest+json")
 
 
+# Legal pages — clean URLs (`/disclaimer`, `/sources`) instead of
+# `/static/legal/*.html`. Standalone HTML files (their own minimal CSS),
+# don't go through the SPA shell.
+@app.get("/disclaimer")
+async def disclaimer_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "legal" / "disclaimer.html", media_type="text/html")
+
+
+@app.get("/sources")
+async def sources_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "legal" / "sources.html", media_type="text/html")
+
+
 # Mount static files (CSS/JS/SVG). index.html is served by `/` above.
 #
 # Cache strategy:

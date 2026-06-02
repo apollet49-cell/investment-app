@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Data sources — InvestApp</title>
+<meta name="description" content="The public data sources InvestApp uses: market prices, FX rates, real estate, regulatory framework.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='8' y='8' width='84' height='84' rx='20' fill='%236b7d5e'/><rect x='26' y='60' width='11' height='22' rx='2' fill='%23faf7f2'/><rect x='44' y='46' width='11' height='36' rx='2' fill='%23faf7f2'/><rect x='62' y='28' width='11' height='54' rx='2' fill='%23faf7f2'/><path d='M31 58 L49 44 L67 26' stroke='%23faf7f2' stroke-width='3' fill='none' stroke-linecap='round'/></svg>">
+<style>
+  :root{
+    --bg:#08080a; --surface:#0e0e11; --surface-2:#15151a;
+    --text:#f5f5f0; --text-muted:#b8b8b3; --text-soft:#8c8c87;
+    --border:rgba(255,255,255,.08); --sage:#6b7d5e;
+    --f-sans:"Geist",-apple-system,system-ui,sans-serif;
+    --f-serif:"Instrument Serif",Georgia,serif;
+    --f-mono:"Geist Mono",ui-monospace,Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:var(--bg);color:var(--text);font-family:var(--f-sans);font-weight:300;line-height:1.6;font-size:17px;}
+  a{color:var(--sage);text-decoration:none;border-bottom:1px solid rgba(107,125,94,.3);transition:border-color .2s;}
+  a:hover{border-color:var(--sage);}
+  .nav{padding:24px 32px;border-bottom:1px solid var(--border);display:flex;align-items:center;}
+  .nav .brand{font-family:var(--f-serif);font-size:20px;color:var(--text);border:none;}
+  .nav .back{margin-left:auto;font-family:var(--f-mono);font-size:13px;color:var(--text-muted);border:none;}
+  .nav .back:hover{color:var(--sage);}
+  main{max-width:780px;margin:0 auto;padding:80px 32px 120px;}
+  .eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--sage);margin-bottom:24px;}
+  h1{font-family:var(--f-serif);font-weight:400;font-size:54px;line-height:1.05;letter-spacing:-.01em;margin-bottom:24px;color:var(--text);}
+  h1 em{font-style:italic;color:var(--sage);}
+  .lede{font-size:18px;color:var(--text-muted);margin-bottom:48px;max-width:60ch;}
+  .src-grid{display:grid;gap:18px;margin-top:8px;}
+  .src{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:24px 26px;}
+  .src-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:8px;}
+  .src-name{font-family:var(--f-serif);font-size:22px;color:var(--text);}
+  .src-tag{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-soft);padding:4px 10px;border:1px solid var(--border);border-radius:999px;white-space:nowrap;}
+  .src-tag.live{color:var(--sage);border-color:rgba(107,125,94,.4);}
+  .src-desc{color:var(--text-muted);font-size:15px;margin-bottom:10px;}
+  .src-meta{font-family:var(--f-mono);font-size:12px;color:var(--text-soft);}
+  .src-meta a{font-family:var(--f-mono);}
+  h2{font-family:var(--f-serif);font-weight:400;font-size:26px;margin:64px 0 20px;color:var(--text);}
+  .meta{margin-top:64px;padding-top:32px;border-top:1px solid var(--border);font-family:var(--f-mono);font-size:12px;color:var(--text-soft);letter-spacing:.06em;}
+  @media (max-width:640px){
+    h1{font-size:38px;}
+    main{padding:48px 22px 80px;}
+    .nav{padding:18px 22px;}
+    .src-head{flex-direction:column;align-items:flex-start;gap:6px;}
+  }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a class="brand" href="/">InvestApp</a>
+  <a class="back" href="/">← back to app</a>
+</nav>
+
+<main>
+  <div class="eyebrow">Fine print · 02</div>
+  <h1>Where the <em>numbers</em> come from.</h1>
+  <p class="lede">Every figure in InvestApp can be traced to a public source. No proprietary feeds, no black-box "alternative data". If something looks wrong, you can audit it.</p>
+
+  <h2>Market data</h2>
+  <div class="src-grid">
+    <div class="src">
+      <div class="src-head">
+        <span class="src-name">Yahoo Finance</span>
+        <span class="src-tag live">Live, primary</span>
+      </div>
+      <div class="src-desc">Stock, ETF and crypto prices, historical OHLC, dividend history, company calendars. Accessed via the open <code>yfinance</code> Python client.</div>
+      <div class="src-meta"><a href="https://finance.yahoo.com" target="_blank" rel="noopener">finance.yahoo.com</a></div>
+    </div>
+    <div class="src">
+      <div class="src-head">
+        <span class="src-name">Alpha Vantage</span>
+        <span class="src-tag">Fallback</span>
+      </div>
+      <div class="src-desc">Used when a Yahoo Finance ticker fails or rate-limits. Free tier, 5 requests per minute.</div>
+      <div class="src-meta"><a href="https://www.alphavantage.co" target="_blank" rel="noopener">alphavantage.co</a></div>
+    </div>
+    <div class="src">
+      <div class="src-head">
+        <span class="src-name">European Central Bank</span>
+        <span class="src-tag">Forex</span>
+      </div>
+      <div class="src-desc">Reference exchange rates for EUR pairs. Daily fixings, published 16:00 CET.</div>
+      <div class="src-meta"><a href="https://www.ecb.europa.eu/stats/eurofxref/" target="_blank" rel="noopener">ecb.europa.eu/stats/eurofxref</a></div>
+    </div>
+    <div class="src">
+      <div class="src-head">
+        <span class="src-name">Open Exchange Rates</span>
+        <span class="src-tag">Forex backup</span>
+      </div>
+      <div class="src-desc">USD-based forex when ECB doesn't cover the pair. Free tier.</div>
+      <div class="src-meta"><a href="https://openexchangerates.org" target="_blank" rel="noopener">openexchangerates.org</a></div>
+    </div>
+  </div>
+
+  <h2>French real estate</h2>
+  <div class="src-grid">
+    <div class="src">
+      <div class="src-head">
+        <span class="src-name">DVF — Demandes de Valeurs Foncières</span>
+        <span class="src-tag live">Live, primary</span>
+      </div>
+      <div class="src-desc">Open dataset of every real-estate transaction registered in France since 2014. Source of the median €/m² used for valuation. Accessed via the <code>api.cquest.org/dvf</code> public endpoint with a ±25 % surface filter and a 90 % outlier trim.</div>
+      <div class="src-meta"><a href="https://www.data.gouv.fr/fr/datasets/demandes-de-valeurs-foncieres/" target="_blank" rel="noopener">data.gouv.fr/dvf</a></div>
+    </div>
+    <div class="src">
+      <div class="src-head">
+        <span class="src-name">INSEE — Institut national de la statistique</span>
+        <span class="src-tag">Reference</span>
+      </div>
+      <div class="src-desc">French statistics institute. Used as the reference for inflation deflators and population-level benchmarks in the FIRE projection.</div>
+      <div class="src-meta"><a href="https://www.insee.fr" target="_blank" rel="noopener">insee.fr</a></div>
+    </div>
+  </div>
+
+  <h2>Macro &amp; benchmark</h2>
+  <div class="src-grid">
+    <div class="src">
+      <div class="src-head">
+        <span class="src-name">FRED — Federal Reserve Economic Data</span>
+        <span class="src-tag">Reference</span>
+      </div>
+      <div class="src-desc">Risk-free rate (3-month T-bill) used in the Sharpe ratio computation. Updated daily.</div>
+      <div class="src-meta"><a href="https://fred.stlouisfed.org" target="_blank" rel="noopener">fred.stlouisfed.org</a></div>
+    </div>
+    <div class="src">
+      <div class="src-head">
+        <span class="src-name">S&amp;P 500 (^GSPC)</span>
+        <span class="src-tag">Benchmark</span>
+      </div>
+      <div class="src-desc">Default benchmark for the "are you beating the market" comparison. Historical price series via Yahoo Finance, normalised to 100 at the first snapshot.</div>
+      <div class="src-meta"><a href="https://finance.yahoo.com/quote/%5EGSPC" target="_blank" rel="noopener">finance.yahoo.com/quote/^GSPC</a></div>
+    </div>
+  </div>
+
+  <h2>Regulatory framework</h2>
+  <div class="src-grid">
+    <div class="src">
+      <div class="src-head">
+        <span class="src-name">AMF — Autorité des marchés financiers</span>
+        <span class="src-tag">Context</span>
+      </div>
+      <div class="src-desc">French financial regulator. Reference for the tax envelope rules implemented in the simulator (PEA, CTO, AV, PER). Their public guides on the fiscalité de l'épargne are the authoritative source for the rates used.</div>
+      <div class="src-meta"><a href="https://www.amf-france.org" target="_blank" rel="noopener">amf-france.org</a></div>
+    </div>
+  </div>
+
+  <h2>Optional AI layer</h2>
+  <div class="src-grid">
+    <div class="src">
+      <div class="src-head">
+        <span class="src-name">Anthropic Claude</span>
+        <span class="src-tag">Optional</span>
+      </div>
+      <div class="src-desc">Used to draft the prose section of the Monthly Review when the user supplies their own API key. The deterministic, rule-based review works without it.</div>
+      <div class="src-meta"><a href="https://www.anthropic.com" target="_blank" rel="noopener">anthropic.com</a></div>
+    </div>
+  </div>
+
+  <div class="meta">Last updated: May 2026 · <a href="/disclaimer">Read the disclaimer →</a></div>
+</main>
+</body>
+</html>
