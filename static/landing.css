@@ -134,6 +134,20 @@ body:has(#auth-screen.landing-v2:not(.hidden)) {
 @media (max-width: 720px) {
   #auth-screen.landing-v2 .lv-nav-links { display: none; }
   #auth-screen.landing-v2 .lv-nav-inner { grid-template-columns: auto auto 1fr; }
+  /* Mobile readability: the default muted greys (#8c8c87, #c8c8c2) are
+     fine on a large desktop screen but wash out on a phone in daylight.
+     Bump both toward white so descriptions, eyebrows, and menu copy stay
+     legible. Done by overriding the tokens — every consumer follows. */
+  #auth-screen.landing-v2 {
+    --lv-fg-2: #e2e2dd;
+    --lv-fg-3: #b8b8b3;
+  }
+  /* Menu description text is the most affected; nudge it a touch larger
+     too, otherwise 12.5px on a phone is rough. */
+  #auth-screen.landing-v2 .lv-menu-desc {
+    font-size: 13.5px;
+    color: var(--lv-fg-3);
+  }
 }
 
 /* ───────── Apple-style menu trigger + dropdown panel ───────── */
