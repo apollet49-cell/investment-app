@@ -69,6 +69,29 @@ async def historical(symbol: str, period: str = Query("1y")) -> dict:
     return {"symbol": symbol.upper(), "period": period, "candles": data}
 
 
+@router.get("/price-on/{symbol}")
+async def price_on(
+    symbol: str,
+    date: str = Query(..., description="ISO date YYYY-MM-DD"),
+    asset_type: str = Query("stock", description="stock | etf | crypto"),
+) -> dict:
+    """Historical price for a single symbol at a given date. Used by the
+    investments form: when the user picks an asset and a purchase date,
+    the back-end returns the actual price on (or the nearest trading day
+    to) that date, which becomes the basis for the implied quantity.
+    Re-added after the markets-browser router was retired."""
+    from datetime import date as date_cls
+    try:
+        target = date_cls.fromisoformat(date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid date — expected YYYY-MM-DD")
+    from services.market_universe import market_universe
+    result = await market_universe.get_price_on_date(symbol, target, asset_type)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"no price found for {symbol} on {date}")
+    return result
+
+
 @router.get("/search")
 async def search(q: str = Query(..., min_length=1)) -> dict:
     return {"results": await market_service.search_symbols(q)}

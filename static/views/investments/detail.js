@@ -15,7 +15,7 @@ export async function openDetailModal(invId) {
   if (!inv) return;
   const host = document.getElementById("detail-modal-host");
   const roiClass = (inv.roi_pct || 0) >= 0 ? "var(--success)" : "var(--danger)";
-  const roiSign = (inv.roi_pct || 0) >= 0 ? "+" : "";
+  // pct() already emits the sign, so don't prepend another one.
 
   host.innerHTML = `
     <div class="modal-overlay" id="detail-overlay">
@@ -34,7 +34,7 @@ export async function openDetailModal(invId) {
           <div class="summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:14px">
             <div class="summary-card"><div class="label">${t("investments.invested")}</div><div class="value" style="font-size:18px">${money(inv.amount_invested)}</div></div>
             <div class="summary-card"><div class="label">${t("investments.current")}</div><div class="value" style="font-size:18px">${money(inv.current_value)}</div></div>
-            <div class="summary-card"><div class="label">${t("investments.roi")}</div><div class="value" style="font-size:18px;color:${roiClass}">${roiSign}${pct(inv.roi_pct)}</div></div>
+            <div class="summary-card"><div class="label">${t("investments.roi")}</div><div class="value" style="font-size:18px;color:${roiClass}">${pct(inv.roi_pct)}</div></div>
             <div class="summary-card"><div class="label">${t("investments.purchase_date")}</div><div class="value" style="font-size:16px">${inv.purchase_date}</div></div>
           </div>
           <div id="detail-body"><div style="text-align:center;padding:24px">${spinner()}</div></div>
@@ -88,10 +88,14 @@ async function renderMarketDetail(body, inv) {
       btn.classList.toggle("btn-ghost", btn.dataset.p !== period);
     }
     try {
-      const at = inv.type === "etf" ? "etf" : (inv.type === "crypto" ? "crypto" : "stock");
-      const data = await API.request(`/markets/asset/${encodeURIComponent(inv.symbol)}?asset_type=${at}&period=${period}`);
+      // /market/historical returns { symbol, period, candles: [{date,open,high,low,close,volume}] }
+      // — the old /markets/asset endpoint (deleted with the markets browser
+      // feature) returned the same shape but with `time` (unix seconds)
+      // instead of `date`. Use date directly so we don't depend on the
+      // dropped router.
+      const data = await API.request(`/market/historical/${encodeURIComponent(inv.symbol)}?period=${period}`);
       const candles = data?.candles || [];
-      const series = candles.map(c => ({ date: new Date(c.time * 1000).toISOString().slice(0, 10), close: c.close }));
+      const series = candles.map(c => ({ date: c.date || (c.time ? new Date(c.time * 1000).toISOString().slice(0, 10) : ""), close: c.close }));
       drawDetailChart(series, inv);
     } catch (e) {
       const ctx = document.getElementById("detail-chart")?.parentElement;
@@ -103,9 +107,11 @@ async function renderMarketDetail(body, inv) {
   }
   await renderChart("1y");
 
-  // News (best-effort — fail silently)
+  // News (best-effort — the dedicated news endpoint was retired with the
+  // markets browser feature; this call falls through to the "no news"
+  // fallback below, which is the same UX as having nothing recent.)
   try {
-    const news = await API.request(`/markets/asset/${encodeURIComponent(inv.symbol)}/news`);
+    const news = await API.request(`/market/asset/${encodeURIComponent(inv.symbol)}/news`);
     const items = news?.items || news?.articles || news || [];
     const nbody = document.getElementById("detail-news-body");
     if (!items.length) { nbody.innerHTML = `<em>${t("investments.detail_no_news")}</em>`; return; }

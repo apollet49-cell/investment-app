@@ -59,7 +59,7 @@ export function openWhatIfModal(id) {
     if (!q || q.length < 2) { document.getElementById("whatif-results").innerHTML = ""; return; }
     whatifSearchTimer = setTimeout(async () => {
       try {
-        const data = await API.request(`/markets/search?q=${encodeURIComponent(q)}&limit=6`);
+        const data = await API.request(`/market/search?q=${encodeURIComponent(q)}&limit=6`);
         const out = document.getElementById("whatif-results");
         if (!data.results?.length) { out.innerHTML = `<div class="asset-empty">No match</div>`; return; }
         out.innerHTML = data.results.map(r => `

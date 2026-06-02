@@ -182,7 +182,7 @@ export async function fetchHistoricalPrice() {
 
   try {
     const data = await API.request(
-      `/markets/price-on/${encodeURIComponent(sym)}?date=${date}&asset_type=${at}`
+      `/market/price-on/${encodeURIComponent(sym)}?date=${date}&asset_type=${at}`
     );
     if (data?.price != null) {
       formState.historicalPrice = data.price;

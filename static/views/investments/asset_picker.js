@@ -25,7 +25,7 @@ async function searchAsset(q) {
   const results = document.getElementById("asset-results");
   results.innerHTML = `<div class="asset-loading">${spinner()}</div>`;
   try {
-    const data = await API.request(`/markets/search?q=${encodeURIComponent(q)}&limit=8`);
+    const data = await API.request(`/market/search?q=${encodeURIComponent(q)}&limit=8`);
     if (!data.results || !data.results.length) {
       results.innerHTML = `<div class="asset-empty">— or enter manually —</div>`;
       return;
