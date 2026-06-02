@@ -111,6 +111,13 @@ function wireLandingV2() {
     reveals.forEach((el) => el.classList.add("is-in"));
   }
 
+  // Hero chart range buttons (1M / 3M / YTD / 1Y / ALL): clicking swaps
+  // the SVG paths + legend percentages + the TWR floating card so the
+  // marketing chart "comes to life". Pure illustrative data — the landing
+  // has no authenticated user yet; the goal is to show the product feels
+  // interactive at first glance.
+  wireHeroRangeButtons();
+
   // Sign-in modal — form submit, close, switch register/login
   const overlay = document.getElementById("signin-modal-overlay");
   const form = document.getElementById("signin-form");
@@ -161,6 +168,75 @@ function wireLandingV2() {
       submitBtn.textContent = originalLabel;
     }
   };
+}
+
+// Illustrative datasets for the hero chart's 5 range buttons. Curves go
+// progressively higher (= portfolio beats benchmark over every window),
+// matching the landing's "honest XIRR" narrative. SVG viewBox is
+// "0 0 600 260" — y decreases upward, so smaller values = higher line.
+const HERO_RANGE_DATA = {
+  "1M": {
+    port:  "M0,190 C50,188 100,184 150,182 C200,180 250,184 300,180 C350,176 400,174 450,172 C500,168 550,166 600,162",
+    bench: "M0,188 C50,187 100,186 150,184 C200,183 250,182 300,182 C350,180 400,179 450,178 C500,176 550,174 600,172",
+    dotY: 162, portPct: "+ 2.3 %",  benchPct: "+ 1.4 %",  twrLabel: "TWR · 1M",  twrValue: "2.10",
+  },
+  "3M": {
+    port:  "M0,205 C50,200 100,192 150,188 C200,180 250,170 300,168 C350,158 400,150 450,140 C500,130 550,122 600,115",
+    bench: "M0,200 C50,198 100,194 150,189 C200,185 250,180 300,177 C350,170 400,165 450,160 C500,155 550,150 600,145",
+    dotY: 115, portPct: "+ 5.8 %",  benchPct: "+ 3.7 %",  twrLabel: "TWR · 3M",  twrValue: "5.40",
+  },
+  "YTD": {
+    port:  "M0,215 C50,208 100,198 150,186 C200,170 250,158 300,145 C350,128 400,115 450,100 C500,90 550,80 600,70",
+    bench: "M0,210 C50,205 100,196 150,186 C200,178 250,172 300,162 C350,150 400,140 450,130 C500,122 550,115 600,108",
+    dotY: 70,  portPct: "+ 9.5 %",  benchPct: "+ 6.2 %",  twrLabel: "TWR · YTD", twrValue: "8.90",
+  },
+  "1Y": {
+    port:  "M0,210 C40,205 80,195 120,180 C160,165 200,170 240,150 C280,130 320,140 360,108 C400,80 440,90 480,62 C520,38 560,46 600,28",
+    bench: "M0,180 C40,178 80,170 120,168 C160,166 200,160 240,158 C280,156 320,150 360,144 C400,138 440,130 480,128 C520,126 560,118 600,116",
+    dotY: 28,  portPct: "+ 18.4 %", benchPct: "+ 11.2 %", twrLabel: "TWR · 1Y",  twrValue: "12.81",
+  },
+  "ALL": {
+    port:  "M0,240 C50,232 100,218 150,200 C200,182 250,165 300,140 C350,118 400,95 450,72 C500,52 550,32 600,18",
+    bench: "M0,235 C50,228 100,218 150,205 C200,192 250,178 300,162 C350,148 400,132 450,118 C500,102 550,88 600,72",
+    dotY: 18,  portPct: "+ 47.1 %", benchPct: "+ 28.6 %", twrLabel: "TWR · ALL", twrValue: "37.20",
+  },
+};
+
+function wireHeroRangeButtons() {
+  const buttons = Array.from(document.querySelectorAll("#auth-screen .lv-r-btn"));
+  if (!buttons.length) return;
+  const portPath  = document.querySelector("#auth-screen .lv-line-port");
+  const benchPath = document.querySelector("#auth-screen .lv-line-bench");
+  const areaPath  = document.querySelector("#auth-screen .lv-line-area");
+  const dot       = document.querySelector("#auth-screen .lv-end-dot");
+  const pulse     = document.querySelector("#auth-screen .lv-end-pulse");
+  const legs      = document.querySelectorAll("#auth-screen .lv-leg");
+  const portPct   = legs[0]?.lastElementChild;
+  const benchPct  = legs[1]?.lastElementChild;
+  const twrLabel  = document.querySelector("#auth-screen .lv-float-twr .lv-fc-label");
+  const twrValue  = document.querySelector("#auth-screen .lv-float-twr .lv-fc-value");
+
+  const apply = (key) => {
+    const d = HERO_RANGE_DATA[key];
+    if (!d) return;
+    if (portPath)  portPath.setAttribute("d", d.port);
+    if (benchPath) benchPath.setAttribute("d", d.bench);
+    // Area = the portfolio line closed back down to the chart bottom.
+    if (areaPath)  areaPath.setAttribute("d", `${d.port} L600,260 L0,260 Z`);
+    if (dot)   dot.setAttribute("cy", String(d.dotY));
+    if (pulse) pulse.setAttribute("cy", String(d.dotY));
+    if (portPct)  portPct.textContent = d.portPct;
+    if (benchPct) benchPct.textContent = d.benchPct;
+    if (twrLabel) twrLabel.textContent = d.twrLabel;
+    if (twrValue) twrValue.innerHTML = `${d.twrValue} <span class="lv-pct">%</span>`;
+  };
+
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      buttons.forEach((b) => b.classList.toggle("is-active", b === btn));
+      apply(btn.textContent.trim());
+    });
+  });
 }
 
 function openSigninModal(mode = "login") {
