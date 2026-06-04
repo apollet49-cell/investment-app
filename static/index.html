@@ -1,14 +1,14 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>InvestApp — Le tracker FIRE que j'utilise vraiment</title>
-  <meta name="description" content="XIRR + TWR honnêtes vs S&P 500, enveloppes fiscales françaises (PEA, CTO, AV, PER) côte à côte, immobilier valorisé via la base DVF, et revue mensuelle augmentée par Claude. Construit parce que j'en avais marre de deviner mon XIRR." />
+  <title>InvestApp — A FIRE tracker I actually use</title>
+  <meta name="description" content="Honest XIRR + TWR vs S&P 500, French tax envelopes (PEA, CTO, AV, PER) side-by-side, real-estate from the DVF database, and a Claude-augmented monthly review. Built because I was tired of guessing my XIRR." />
   <!-- Open Graph / link previews on Slack, iMessage, Twitter -->
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="InvestApp — Construit parce que j'en avais marre de deviner mon XIRR" />
-  <meta property="og:description" content="Un tracker de portefeuille sans bullshit : XIRR honnête, vraies métriques de risque, enveloppes fiscales françaises et revue mensuelle augmentée par Claude." />
+  <meta property="og:title" content="InvestApp — Built because I was tired of guessing my XIRR" />
+  <meta property="og:description" content="A no-bullshit portfolio tracker with honest XIRR, real risk metrics, French tax envelopes, and a Claude-augmented monthly review." />
   <meta property="og:url" content="https://investment-app-kud9.onrender.com" />
   <meta property="og:image" content="https://investment-app-kud9.onrender.com/static/og-image.svg" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -52,7 +52,7 @@
       line-height: 1.45;
     }
   </style>
-  <link rel="stylesheet" href="/static/style.css?v=100" />
+  <link rel="stylesheet" href="/static/style.css?v=99" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='8' y='8' width='84' height='84' rx='20' fill='%236b7d5e'/><rect x='26' y='60' width='11' height='22' rx='2' fill='%23faf7f2'/><rect x='44' y='46' width='11' height='36' rx='2' fill='%23faf7f2'/><rect x='62' y='28' width='11' height='54' rx='2' fill='%23faf7f2'/><path d='M31 58 L49 44 L67 26' stroke='%23faf7f2' stroke-width='3' fill='none' stroke-linecap='round'/></svg>" />
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#6b7d5e" />
@@ -94,8 +94,8 @@
           <svg class="lv-menu-chevron" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M2 4 L6 8 L10 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <div class="lv-nav-cta">
-          <button class="lv-link-quiet" type="button" data-action="signin">Connexion</button>
-          <button class="lv-btn lv-btn-primary" type="button" data-action="demo">Essayer la démo</button>
+          <button class="lv-link-quiet" type="button" data-action="signin">Sign in</button>
+          <button class="lv-btn lv-btn-primary" type="button" data-action="demo">Try the demo</button>
         </div>
       </div>
 
@@ -106,29 +106,29 @@
           <a class="lv-menu-item" href="#lv-honest" data-menu-link>
             <div class="lv-menu-num lv-mono">01</div>
             <div class="lv-menu-body">
-              <div class="lv-menu-title">Rendements honnêtes</div>
-              <div class="lv-menu-desc">XIRR + TWR pondérés par chaque flux. Pas de ROI gonflé par votre dernier dépôt.</div>
+              <div class="lv-menu-title">Honest returns</div>
+              <div class="lv-menu-desc">XIRR + TWR weighted by every cashflow. No fake ROI inflated by your last deposit.</div>
             </div>
           </a>
           <a class="lv-menu-item" href="#lv-benchmark" data-menu-link>
             <div class="lv-menu-num lv-mono">02</div>
             <div class="lv-menu-body">
-              <div class="lv-menu-title">Comparatif S&amp;P</div>
-              <div class="lv-menu-desc">Battez-vous vraiment l'indice en euros ? Le chiffre, pas le ressenti.</div>
+              <div class="lv-menu-title">Benchmark vs S&amp;P</div>
+              <div class="lv-menu-desc">Are you actually beating the index in EUR? Get the number, not the vibe.</div>
             </div>
           </a>
           <a class="lv-menu-item" href="#lv-envelopes" data-menu-link>
             <div class="lv-menu-num lv-mono">03</div>
             <div class="lv-menu-body">
-              <div class="lv-menu-title">Enveloppes fiscales</div>
-              <div class="lv-menu-desc">PEA · CTO · AV · PER côte à côte, chiffres réels nets d'impôt, un écran.</div>
+              <div class="lv-menu-title">Tax envelopes</div>
+              <div class="lv-menu-desc">PEA · CTO · AV · PER side-by-side, real after-tax numbers, one screen.</div>
             </div>
           </a>
           <a class="lv-menu-item" href="#lv-review" data-menu-link>
             <div class="lv-menu-num lv-mono">04</div>
             <div class="lv-menu-body">
-              <div class="lv-menu-title">Revue mensuelle</div>
-              <div class="lv-menu-desc">Un conseiller senior lit votre portefeuille le 1er de chaque mois. Rédigé par Claude.</div>
+              <div class="lv-menu-title">Monthly review</div>
+              <div class="lv-menu-desc">A senior advisor reads your portfolio on the 1st of every month. Drafted by Claude.</div>
             </div>
           </a>
         </div>
@@ -142,18 +142,18 @@
     <section class="lv-hero">
       <div class="lv-hero-grid">
         <div class="lv-hero-copy">
-          <p class="lv-eyebrow"><span class="lv-dot" aria-hidden="true"></span> Le tracker FIRE que j'utilise vraiment</p>
-          <h1 class="lv-display">Construit parce que j'en avais marre de <em>deviner</em> mon XIRR.</h1>
-          <p class="lv-lede">Tous les trackers que j'ai testés mentaient sur les rendements&nbsp;— moyennés post-dépôt&nbsp;— ignoraient mes enveloppes fiscales, ou m'obligeaient à comparer le graphique à vue d'œil au S&amp;P. J'ai donc construit le mien.</p>
+          <p class="lv-eyebrow"><span class="lv-dot" aria-hidden="true"></span> A FIRE tracker I actually use</p>
+          <h1 class="lv-display">Built because I was tired of <em>guessing</em> my XIRR.</h1>
+          <p class="lv-lede">Every portfolio tracker I tried either lied about returns&nbsp;— averaging post-deposit&nbsp;— ignored my French tax envelopes, or made me eyeball the chart vs the S&amp;P. So I built one that doesn't.</p>
           <div class="lv-hero-actions">
-            <button class="lv-btn lv-btn-primary lv-btn-lg" type="button" data-action="demo">Essayer la démo — sans inscription<span class="lv-arr" aria-hidden="true">→</span></button>
-            <a class="lv-btn lv-btn-ghost lv-btn-lg" href="#lv-honest">Comment ça marche</a>
+            <button class="lv-btn lv-btn-primary lv-btn-lg" type="button" data-action="demo">Try the demo — no signup<span class="lv-arr" aria-hidden="true">→</span></button>
+            <a class="lv-btn lv-btn-ghost lv-btn-lg" href="#lv-honest">How it works</a>
           </div>
           <ul class="lv-hero-bullets">
-            <li><span class="lv-b-num">01</span> XIRR + TWR honnêtes vs S&amp;P 500</li>
-            <li><span class="lv-b-num">02</span> PEA · CTO · AV · PER côte à côte</li>
-            <li><span class="lv-b-num">03</span> Immobilier valorisé via la DVF</li>
-            <li><span class="lv-b-num">04</span> Revue mensuelle augmentée par Claude</li>
+            <li><span class="lv-b-num">01</span> Honest XIRR + TWR vs S&amp;P 500</li>
+            <li><span class="lv-b-num">02</span> PEA · CTO · AV · PER side-by-side</li>
+            <li><span class="lv-b-num">03</span> Real-estate priced from DVF</li>
+            <li><span class="lv-b-num">04</span> Claude-augmented monthly review</li>
           </ul>
         </div>
 
@@ -162,11 +162,11 @@
             <div class="lv-chart-head">
               <div class="lv-chart-tag">
                 <span class="lv-pill lv-pill-live"><span class="lv-pill-dot"></span> Live</span>
-                <span class="lv-mono lv-small lv-muted">PORTEFEUILLE · EUR</span>
+                <span class="lv-mono lv-small lv-muted">PORTFOLIO · EUR</span>
               </div>
               <div class="lv-chart-value">
-                <span class="lv-value-now lv-mono">184&thinsp;392<span class="lv-cents">,04</span> €</span>
-                <span class="lv-value-delta lv-up lv-mono">+ 1&thinsp;204 € <span class="lv-muted">aujourd'hui</span></span>
+                <span class="lv-value-now lv-mono">€ 184&thinsp;392<span class="lv-cents">.04</span></span>
+                <span class="lv-value-delta lv-up lv-mono">+ €&thinsp;1,204 <span class="lv-muted">today</span></span>
               </div>
             </div>
             <svg class="lv-chart-svg" viewBox="0 0 600 260" preserveAspectRatio="none">
@@ -187,33 +187,33 @@
               <circle class="lv-end-pulse" cx="600" cy="28" r="5" fill="var(--lv-accent)"/>
             </svg>
             <div class="lv-chart-foot">
-              <div class="lv-leg"><span class="lv-swatch lv-swatch-accent"></span><span class="lv-mono lv-small">PORTEFEUILLE</span><span class="lv-mono lv-small lv-accent">+ 18,4 %</span></div>
-              <div class="lv-leg"><span class="lv-swatch lv-swatch-bench"></span><span class="lv-mono lv-small">S&amp;P 500</span><span class="lv-mono lv-small lv-muted">+ 11,2 %</span></div>
+              <div class="lv-leg"><span class="lv-swatch lv-swatch-accent"></span><span class="lv-mono lv-small">PORTFOLIO</span><span class="lv-mono lv-small lv-accent">+ 18.4 %</span></div>
+              <div class="lv-leg"><span class="lv-swatch lv-swatch-bench"></span><span class="lv-mono lv-small">S&amp;P 500</span><span class="lv-mono lv-small lv-muted">+ 11.2 %</span></div>
               <div class="lv-range">
                 <button class="lv-r-btn" type="button">1M</button>
                 <button class="lv-r-btn" type="button">3M</button>
                 <button class="lv-r-btn" type="button">YTD</button>
-                <button class="lv-r-btn is-active" type="button">1A</button>
-                <button class="lv-r-btn" type="button">TOUT</button>
+                <button class="lv-r-btn is-active" type="button">1Y</button>
+                <button class="lv-r-btn" type="button">ALL</button>
               </div>
             </div>
           </div>
 
           <div class="lv-float-card lv-float-xirr">
-            <div class="lv-fc-label lv-mono">XIRR · ANNUALISÉ</div>
-            <div class="lv-fc-value lv-mono">7,24 <span class="lv-pct">%</span></div>
-            <div class="lv-fc-sub lv-mono">honnête · post-dépôts</div>
+            <div class="lv-fc-label lv-mono">XIRR · ANNUALIZED</div>
+            <div class="lv-fc-value lv-mono">7.24 <span class="lv-pct">%</span></div>
+            <div class="lv-fc-sub lv-mono">honest · post-deposits</div>
           </div>
           <div class="lv-float-card lv-float-twr">
-            <div class="lv-fc-label lv-mono">TWR · 1A</div>
-            <div class="lv-fc-value lv-mono">12,81 <span class="lv-pct">%</span></div>
-            <div class="lv-fc-sub lv-mono">temps-pondéré</div>
+            <div class="lv-fc-label lv-mono">TWR · 1Y</div>
+            <div class="lv-fc-value lv-mono">12.81 <span class="lv-pct">%</span></div>
+            <div class="lv-fc-sub lv-mono">time-weighted</div>
           </div>
         </div>
       </div>
 
       <div class="lv-hero-rule">
-        <span class="lv-mono lv-small lv-muted">Pour ceux qui font FIRE à la française, sans bruit</span>
+        <span class="lv-mono lv-small lv-muted">Trusted by quiet people doing FIRE the boring way</span>
         <div class="lv-logos">
           <span class="lv-logo-pill lv-mono">PEA</span>
           <span class="lv-logo-pill lv-mono">CTO</span>
@@ -228,29 +228,29 @@
     <!-- ───────── THE LIE ───────── -->
     <section class="lv-lie" id="lv-honest">
       <div class="lv-container">
-        <p class="lv-eyebrow"><span class="lv-num">01</span> Le mensonge de la plupart des trackers</p>
-        <h2 class="lv-big">Votre ancien tracker affiche <span class="lv-num-big lv-bad">+ 18 %</span>.<br/>Votre <em>vrai</em> XIRR est <span class="lv-num-big lv-good">+ 7,2 %</span>.</h2>
-        <p class="lv-lede lv-max-65">Quand vous déposez 10 000 € hier et que le marché s'envole aujourd'hui, le ROI naïf vous flatte. Le XIRR pondère chaque flux par le jour où il a atterri. C'est le seul chiffre qui survit au contact du réel.</p>
+        <p class="lv-eyebrow"><span class="lv-num">01</span> The lie most trackers tell you</p>
+        <h2 class="lv-big">Your old tracker says <span class="lv-num-big lv-bad">+ 18 %</span>.<br/>Your <em>actual</em> XIRR is <span class="lv-num-big lv-good">+ 7.2 %</span>.</h2>
+        <p class="lv-lede lv-max-65">When you deposit €10k yesterday and the market rips today, naive ROI flatters you. XIRR weights every cashflow by the day it landed. It's the only number that survives contact with reality.</p>
         <div class="lv-compare">
           <div class="lv-cmp lv-cmp-bad">
-            <div class="lv-cmp-tag lv-mono">CE QUE LA PLUPART AFFICHENT</div>
-            <div class="lv-cmp-num lv-mono">+ 18,4 <span class="lv-pct">%</span></div>
+            <div class="lv-cmp-tag lv-mono">WHAT MOST APPS SHOW</div>
+            <div class="lv-cmp-num lv-mono">+ 18.4 <span class="lv-pct">%</span></div>
             <ul class="lv-cmp-list">
-              <li><s>Rendement moyen sur solde</s></li>
-              <li><s>Gonflé par les dépôts récents</s></li>
-              <li><s>Aucune comparaison au S&amp;P</s></li>
-              <li><s>Joli. Ne veut rien dire.</s></li>
+              <li><s>Average return on balance</s></li>
+              <li><s>Inflated by recent deposits</s></li>
+              <li><s>No comparison to S&amp;P</s></li>
+              <li><s>Looks great. Means nothing.</s></li>
             </ul>
           </div>
           <div class="lv-cmp-arrow lv-mono" aria-hidden="true">→</div>
           <div class="lv-cmp lv-cmp-good">
-            <div class="lv-cmp-tag lv-mono">CE QU'INVESTAPP AFFICHE</div>
-            <div class="lv-cmp-num lv-mono">+ 7,24 <span class="lv-pct">%</span></div>
+            <div class="lv-cmp-tag lv-mono">WHAT INVESTAPP SHOWS</div>
+            <div class="lv-cmp-num lv-mono">+ 7.24 <span class="lv-pct">%</span></div>
             <ul class="lv-cmp-list">
-              <li>XIRR — pondéré par flux</li>
-              <li>TWR — neutralise le timing</li>
-              <li>Δ vs S&amp;P 500 en EUR</li>
-              <li>Honnête. Parfois douloureux.</li>
+              <li>XIRR — cashflow-weighted</li>
+              <li>TWR — strips out timing</li>
+              <li>Δ vs S&amp;P 500 in EUR</li>
+              <li>Honest. Sometimes painful.</li>
             </ul>
           </div>
         </div>
@@ -261,8 +261,8 @@
     <section class="lv-bench" id="lv-benchmark">
       <div class="lv-container">
         <div class="lv-sec-head">
-          <p class="lv-eyebrow"><span class="lv-num">02</span> Face à l'indice, en EUR, sans trucage</p>
-          <h2 class="lv-big">Battre le S&amp;P est dur. <em>Savoir</em> si vous y arrivez ne devrait pas l'être.</h2>
+          <p class="lv-eyebrow"><span class="lv-num">02</span> Vs the index, in EUR, no fudging</p>
+          <h2 class="lv-big">Beating the S&amp;P is hard. <em>Knowing</em> whether you do shouldn't be.</h2>
         </div>
         <div class="lv-bench-card" id="lv-bench-card" data-tab="xirr">
           <div class="lv-bench-controls">
@@ -271,7 +271,7 @@
               <button class="lv-bc-tab" type="button" data-bench-tab="twr">TWR vs S&amp;P</button>
               <button class="lv-bc-tab" type="button" data-bench-tab="delta">Δ in basis points</button>
             </div>
-            <div class="lv-bc-range lv-mono lv-small"><span>2019</span><span class="lv-muted">·</span><span>AUJOURD'HUI</span></div>
+            <div class="lv-bc-range lv-mono lv-small"><span>2019</span><span class="lv-muted">·</span><span>TODAY</span></div>
           </div>
           <svg class="lv-bench-svg" viewBox="0 0 1200 420" preserveAspectRatio="none">
             <defs>
@@ -295,12 +295,12 @@
             <!-- Benchmark line + label (hidden in delta view) -->
             <g id="lv-bench-benchmark-group">
               <path id="lv-bench-benchmark-line" d="M80,330 C160,320 240,300 320,270 C400,250 480,260 560,210 C640,180 720,220 800,180 C880,160 960,170 1040,140 C1120,120 1160,130 1180,118" fill="none" stroke="currentColor" stroke-opacity="0.4" stroke-width="2" stroke-dasharray="4 5"/>
-              <text id="lv-bench-benchmark-label" x="1185" y="115" class="lv-mono lv-small lv-bench-label lv-muted" text-anchor="end">S&amp;P 500 · +9,4%/an</text>
+              <text id="lv-bench-benchmark-label" x="1185" y="115" class="lv-mono lv-small lv-bench-label lv-muted" text-anchor="end">S&amp;P 500 · +9.4%/yr</text>
             </g>
             <!-- Portfolio area + line + label -->
             <path id="lv-bench-portfolio-area" d="M80,340 C160,325 240,290 320,260 C400,235 480,250 560,180 C640,150 720,180 800,128 C880,90 960,110 1040,72 C1120,40 1160,55 1180,40 L1180,420 L80,420 Z" fill="url(#lvBenchFill)"/>
             <path id="lv-bench-portfolio-line" d="M80,340 C160,325 240,290 320,260 C400,235 480,250 560,180 C640,150 720,180 800,128 C880,90 960,110 1040,72 C1120,40 1160,55 1180,40" fill="none" stroke="var(--lv-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-            <text id="lv-bench-portfolio-label" x="1185" y="35" class="lv-mono lv-small lv-bench-label lv-accent" text-anchor="end">Votre portefeuille · +12,1%/an</text>
+            <text id="lv-bench-portfolio-label" x="1185" y="35" class="lv-mono lv-small lv-bench-label lv-accent" text-anchor="end">Your portfolio · +12.1%/yr</text>
             <g class="lv-axis lv-mono">
               <text x="80" y="405">2019</text><text x="300" y="405">2020</text><text x="520" y="405">2021</text><text x="740" y="405">2022</text><text x="960" y="405">2023</text><text x="1180" y="405" text-anchor="end">NOW</text>
             </g>
@@ -321,9 +321,9 @@
     <section class="lv-envelopes" id="lv-envelopes">
       <div class="lv-container">
         <div class="lv-sec-head">
-          <p class="lv-eyebrow"><span class="lv-num">03</span> Les enveloppes fiscales, enfin lisibles</p>
-          <h2 class="lv-big">PEA. CTO. Assurance‑Vie. PER.<br/><em>Même écran. Même date. Vrais chiffres nets d'impôt.</em></h2>
-          <p class="lv-lede lv-max-65">Simulez la même allocation de 50 000 € sur les quatre enveloppes et voyez net d'impôt, net de PFU, net de PS en un clic. Pas de tableur. Plus jamais « ça dépend ».</p>
+          <p class="lv-eyebrow"><span class="lv-num">03</span> French tax envelopes, finally legible</p>
+          <h2 class="lv-big">PEA. CTO. Assurance‑Vie. PER.<br/><em>Same screen. Same date. Real after-tax numbers.</em></h2>
+          <p class="lv-lede lv-max-65">Simulate the same €50k allocation across all four wrappers and see net-of-tax, net-of-PFU, net-of-PS in one tap. No spreadsheets. No more « ça dépend ».</p>
         </div>
         <div class="lv-env-grid">
           <article class="lv-env lv-env-pea">
@@ -376,8 +376,8 @@
           </article>
         </div>
         <div class="lv-env-rail">
-          <p class="lv-mono lv-small lv-muted">SIMULATION · 50 000 € ALLOUÉS À PARTS ÉGALES · HORIZON 8 ANS</p>
-          <p class="lv-mono lv-small">Le PEA gagne · Δ vs CTO = <span class="lv-accent">+ 4 218 €</span> après impôt</p>
+          <p class="lv-mono lv-small lv-muted">SIMULATION · 50 000 € ALLOCATED EQUALLY · HORIZON 8 ANS</p>
+          <p class="lv-mono lv-small">PEA wins · Δ vs CTO = <span class="lv-accent">+ 4 218 €</span> after tax</p>
         </div>
       </div>
     </section>
@@ -386,13 +386,13 @@
     <section class="lv-dvf">
       <div class="lv-container lv-split">
         <div class="lv-split-copy">
-          <p class="lv-eyebrow"><span class="lv-num">04</span> L'immobilier valorisé par l'État</p>
-          <h2 class="lv-big">Votre appartement vaut ce que dit la <em>DVF</em>.</h2>
-          <p class="lv-lede lv-max-58">On interroge la base officielle Demandes de Valeurs Foncières — toutes les transactions notariées françaises depuis 2014 — et on valorise votre bien rue par rue. Pas une estimation Zillow. Pas d'arrondi de l'agent.</p>
+          <p class="lv-eyebrow"><span class="lv-num">04</span> Real estate priced by the state</p>
+          <h2 class="lv-big">Your apartment is worth what the <em>DVF</em> says it's worth.</h2>
+          <p class="lv-lede lv-max-58">We hit the official Demandes de Valeurs Foncières database — every notarized French transaction since 2014 — and value your property block-by-block. No Zillow guess. No agent's rounding up.</p>
           <ul class="lv-dvf-bullets">
-            <li><strong>↳</strong> 19,4 M transactions indexées</li>
-            <li><strong>↳</strong> Re-valorisation auto chaque trimestre</li>
-            <li><strong>↳</strong> Rendement calculé sur vos vraies charges</li>
+            <li><strong>↳</strong> 19.4M transactions indexed</li>
+            <li><strong>↳</strong> Auto-revaluation every quarter</li>
+            <li><strong>↳</strong> Yield calculated against your real charges</li>
           </ul>
         </div>
         <div class="lv-split-vis">
@@ -405,9 +405,9 @@
               <span class="lv-pill lv-pill-mute lv-mono">DVF · Q2 2026</span>
             </div>
             <div class="lv-dvf-val lv-mono">
-              <div><div class="lv-dvf-l">VALEUR</div><div class="lv-dvf-v">812 400 € <span class="lv-up lv-small">+ 3,1%</span></div></div>
+              <div><div class="lv-dvf-l">VALUE</div><div class="lv-dvf-v">812 400 € <span class="lv-up lv-small">+ 3.1%</span></div></div>
               <div><div class="lv-dvf-l">€/m²</div><div class="lv-dvf-v">13 100</div></div>
-              <div><div class="lv-dvf-l">RENDEMENT NET</div><div class="lv-dvf-v lv-accent">2,84 %</div></div>
+              <div><div class="lv-dvf-l">NET YIELD</div><div class="lv-dvf-v lv-accent">2.84 %</div></div>
             </div>
             <div class="lv-dvf-heat" aria-hidden="true">
               <div class="lv-hg">
@@ -433,26 +433,26 @@
     <section class="lv-review" id="lv-review">
       <div class="lv-container">
         <div class="lv-sec-head lv-center">
-          <p class="lv-eyebrow lv-center"><span class="lv-num">05</span> Revue mensuelle, écrite pour vous</p>
-          <h2 class="lv-big">Un conseiller senior lit votre portefeuille.<br/>Chaque premier du mois.</h2>
-          <p class="lv-lede lv-max-65 lv-center">Claude lit vos 30 derniers jours de flux, les pondère face à la macro, et vous écrit une revue d'une page : ce que vous avez bien fait, ce qui a dérivé, et ce qu'il faut faire ensuite. Pas un chatbot. Un briefing.</p>
+          <p class="lv-eyebrow lv-center"><span class="lv-num">05</span> Monthly review, written for you</p>
+          <h2 class="lv-big">A senior advisor reads your portfolio.<br/>Every first of the month.</h2>
+          <p class="lv-lede lv-max-65 lv-center">Claude reads your last 30 days of cashflows, weights them against macro, and writes you a one-page review with what you got right, what drifted, and what to do next. Not a chatbot. A briefing.</p>
         </div>
         <div class="lv-review-card">
           <div class="lv-rc-head">
-            <div class="lv-rc-meta"><span class="lv-mono lv-small lv-muted">REVUE · MAI 2026</span><h3 class="lv-rc-title">Vous avez arrêté de vendre par panique. C'est le titre.</h3></div>
-            <span class="lv-pill lv-pill-accent lv-mono">RÉDIGÉ PAR CLAUDE</span>
+            <div class="lv-rc-meta"><span class="lv-mono lv-small lv-muted">REVIEW · MAI 2026</span><h3 class="lv-rc-title">You stopped panic-selling. That's the headline.</h3></div>
+            <span class="lv-pill lv-pill-accent lv-mono">CLAUDE · DRAFTED</span>
           </div>
           <div class="lv-rc-body">
-            <p class="lv-rc-p">Trois choses ressortent ce mois-ci. <strong>Un —</strong> votre XIRR clôture à <span class="lv-mono lv-accent">+ 7,24%</span>, battant le S&amp;P de <span class="lv-mono">+ 0,6 pts</span> en EUR. Pas parce que vous avez choisi les gagnants, mais parce que vous n'avez pas vendu ASML le 14 quand tout le monde l'a fait.</p>
-            <p class="lv-rc-p"><strong>Deux —</strong> votre PEA est à <span class="lv-mono">28%</span> du plafond. À ce rythme vous le remplissez au <span class="lv-mono">T4 2027</span>. Commencez à penser au débordement vers AV ou PER dès maintenant, pas après.</p>
-            <p class="lv-rc-p"><strong>Trois —</strong> l'appartement Turenne a été revalorisé de <span class="lv-mono">+ 3,1%</span> au T2 DVF. Votre part immobilière dépasse 38% du patrimoine net. La diversification dérive. Un rééquilibrage mérite un coup d'œil — pas urgent, mais à surveiller.</p>
-            <p class="lv-rc-p lv-rc-sign">— Prochaine revue le <span class="lv-mono">1 juin 2026, 07:00</span>.</p>
+            <p class="lv-rc-p">Three things stood out this month. <strong>One —</strong> your XIRR closed at <span class="lv-mono lv-accent">+ 7.24%</span>, beating the S&amp;P by <span class="lv-mono">+ 0.6 pts</span> in EUR. Not because you picked winners, but because you didn't sell ASML on the 14th when everyone else did.</p>
+            <p class="lv-rc-p"><strong>Two —</strong> your PEA is now <span class="lv-mono">28%</span> of the plafond. At your current pace you fill it in <span class="lv-mono">Q4 2027</span>. Start thinking about the overflow into AV or PER now, not then.</p>
+            <p class="lv-rc-p"><strong>Three —</strong> the Turenne apartment revalued <span class="lv-mono">+ 3.1%</span> on Q2 DVF. Your real-estate share crossed 38% of net worth. Diversification is drifting. Worth a rebalance look — not urgent, but on the radar.</p>
+            <p class="lv-rc-p lv-rc-sign">— Next review drops <span class="lv-mono">1 juin 2026, 07:00</span>.</p>
           </div>
           <div class="lv-rc-foot">
             <div class="lv-rc-actions">
-              <button class="lv-btn lv-btn-ghost lv-btn-sm" type="button" data-action="demo">Lire dans l'app</button>
+              <button class="lv-btn lv-btn-ghost lv-btn-sm" type="button" data-action="demo">Read in app</button>
             </div>
-            <div class="lv-rc-actions lv-mono lv-small lv-muted"><span>1 482 mots</span><span>·</span><span>4 min de lecture</span></div>
+            <div class="lv-rc-actions lv-mono lv-small lv-muted"><span>1 482 words</span><span>·</span><span>4 min read</span></div>
           </div>
         </div>
       </div>
@@ -462,10 +462,10 @@
     <section class="lv-stats">
       <div class="lv-container">
         <div class="lv-stat-row">
-          <div class="lv-stat"><div class="lv-s-num lv-mono">19,4<span class="lv-s-unit">M</span></div><div class="lv-s-l">transactions DVF indexées</div></div>
-          <div class="lv-stat"><div class="lv-s-num lv-mono">4</div><div class="lv-s-l">enveloppes fiscales, un seul écran</div></div>
-          <div class="lv-stat"><div class="lv-s-num lv-mono">2&thinsp;471</div><div class="lv-s-l">jours de suivi des flux</div></div>
-          <div class="lv-stat"><div class="lv-s-num lv-mono">0<span class="lv-s-unit">€</span></div><div class="lv-s-l">coût pour tester la démo</div></div>
+          <div class="lv-stat"><div class="lv-s-num lv-mono">19.4<span class="lv-s-unit">M</span></div><div class="lv-s-l">DVF transactions indexed</div></div>
+          <div class="lv-stat"><div class="lv-s-num lv-mono">4</div><div class="lv-s-l">French tax wrappers, one screen</div></div>
+          <div class="lv-stat"><div class="lv-s-num lv-mono">2&thinsp;471</div><div class="lv-s-l">Days of cashflow tracking</div></div>
+          <div class="lv-stat"><div class="lv-s-num lv-mono">0<span class="lv-s-unit">€</span></div><div class="lv-s-l">Cost to try the demo</div></div>
         </div>
       </div>
     </section>
@@ -473,12 +473,12 @@
     <!-- ───────── CTA ───────── -->
     <section class="lv-cta">
       <div class="lv-container lv-center">
-        <p class="lv-eyebrow lv-center"><span class="lv-dot"></span> Une dernière chose</p>
-        <h2 class="lv-display lv-cta-h">Vous n'avez pas besoin d'un graphique de&nbsp;plus.<br/>Vous avez besoin d'<em>un seul chiffre honnête</em>.</h2>
-        <p class="lv-lede lv-max-65 lv-center">Essayez la démo. Sans inscription. Sans carte. Votre vrai portefeuille, votre vrai XIRR, en cinq minutes.</p>
+        <p class="lv-eyebrow lv-center"><span class="lv-dot"></span> One more thing</p>
+        <h2 class="lv-display lv-cta-h">You don't need another&nbsp;chart.<br/>You need <em>one honest number</em>.</h2>
+        <p class="lv-lede lv-max-65 lv-center">Try the demo. No signup. No card. Your real portfolio, your real XIRR, in five minutes.</p>
         <div class="lv-cta-actions">
-          <button class="lv-btn lv-btn-primary lv-btn-lg" type="button" data-action="demo">Essayer la démo<span class="lv-arr">→</span></button>
-          <button class="lv-btn lv-btn-ghost lv-btn-lg" type="button" data-action="signin">Connexion</button>
+          <button class="lv-btn lv-btn-primary lv-btn-lg" type="button" data-action="demo">Try the demo<span class="lv-arr">→</span></button>
+          <button class="lv-btn lv-btn-ghost lv-btn-lg" type="button" data-action="signin">Sign in</button>
         </div>
       </div>
     </section>
@@ -491,10 +491,10 @@
             <span class="lv-brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M3 18 L9 11 L13 14 L21 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="21" cy="5" r="1.6" fill="currentColor"/></svg></span>
             <span class="lv-brand-text">InvestApp</span>
           </a>
-          <p class="lv-foot-tag">Le tracker FIRE que j'utilise vraiment.<br/>Construit à Paris. Indépendant. Sans VC.</p>
+          <p class="lv-foot-tag">A FIRE tracker I actually use.<br/>Built in Paris. Independent. No VC.</p>
         </div>
-        <div><div class="lv-foot-h">PRODUIT</div><ul><li><a href="#lv-honest">XIRR honnête</a></li><li><a href="#lv-benchmark">Comparatif S&amp;P</a></li><li><a href="#lv-envelopes">Enveloppes fiscales</a></li><li><a href="#lv-review">Revue mensuelle</a></li></ul></div>
-        <div><div class="lv-foot-h">MENTIONS LÉGALES</div><ul><li><a href="/disclaimer">Pas un conseil financier</a></li><li><a href="/sources">Sources (AMF, DVF, INSEE)</a></li></ul></div>
+        <div><div class="lv-foot-h">PRODUCT</div><ul><li><a href="#lv-honest">Honest XIRR</a></li><li><a href="#lv-benchmark">S&amp;P benchmark</a></li><li><a href="#lv-envelopes">Tax envelopes</a></li><li><a href="#lv-review">Monthly review</a></li></ul></div>
+        <div><div class="lv-foot-h">FINE PRINT</div><ul><li><a href="/disclaimer">Not financial advice</a></li><li><a href="/sources">Sources (AMF, DVF, INSEE)</a></li></ul></div>
       </div>
       <div class="lv-container lv-foot-rule">
         <span class="lv-mono lv-small lv-muted">© 2026 InvestApp · Not financial advice · Past performance, etc.</span>
@@ -507,22 +507,22 @@
   <div class="signin-modal-overlay" id="signin-modal-overlay">
     <div class="signin-modal-card-wrapper">
       <div class="signin-modal" role="dialog" aria-modal="true" aria-labelledby="signin-h">
-        <button class="signin-close" type="button" aria-label="Fermer" data-action="signin-close">✕</button>
-        <h2 id="signin-h">Connexion</h2>
-        <p>Bienvenue dans votre espace d'investissement.</p>
+        <button class="signin-close" type="button" aria-label="Close" data-action="signin-close">✕</button>
+        <h2 id="signin-h">Sign in</h2>
+        <p>Welcome back to your investment workspace.</p>
         <form id="signin-form">
           <div class="field">
             <label for="signin-email">Email</label>
             <input id="signin-email" name="email" type="email" required autocomplete="email" />
           </div>
           <div class="field">
-            <label for="signin-pw">Mot de passe</label>
+            <label for="signin-pw">Password</label>
             <input id="signin-pw" name="password" type="password" minlength="6" required autocomplete="current-password" />
           </div>
-          <button class="signin-btn" type="submit">Se connecter</button>
+          <button class="signin-btn" type="submit">Sign in</button>
           <div class="signin-error" id="signin-error"></div>
         </form>
-        <div class="signin-switch">Pas encore de compte ? <a data-action="signin-register">S'inscrire</a></div>
+        <div class="signin-switch">No account yet? <a data-action="signin-register">Register</a></div>
       </div>
     </div>
   </div>
@@ -568,7 +568,7 @@
     <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
   </div>
 
-  <script type="module" src="/static/app.js?v=100"></script>
+  <script type="module" src="/static/app.js?v=99"></script>
 
   <!-- Landing-page interactivity: the XIRR / TWR / Δ bps tabs on the
        benchmark demo. Swaps the SVG paths + labels in place so the demo
@@ -588,8 +588,8 @@
         portfolioLine:  'M80,340 C160,325 240,290 320,260 C400,235 480,250 560,180 C640,150 720,180 800,128 C880,90 960,110 1040,72 C1120,40 1160,55 1180,40',
         portfolioArea:  'M80,340 C160,325 240,290 320,260 C400,235 480,250 560,180 C640,150 720,180 800,128 C880,90 960,110 1040,72 C1120,40 1160,55 1180,40 L1180,420 L80,420 Z',
         benchmarkLine:  'M80,330 C160,320 240,300 320,270 C400,250 480,260 560,210 C640,180 720,220 800,180 C880,160 960,170 1040,140 C1120,120 1160,130 1180,118',
-        portfolioText:  'Votre portefeuille · +12,1%/an',
-        benchmarkText:  'S&P 500 · +9,4%/an',
+        portfolioText:  'Your portfolio · +12.1%/yr',
+        benchmarkText:  'S&P 500 · +9.4%/yr',
         showBenchmark:  true,
         yAxis: ['+30%','+20%','+10%','0%'],
         portfolioColor: 'var(--lv-accent)',
@@ -600,8 +600,8 @@
         portfolioLine:  'M80,342 C160,328 240,292 320,265 C400,238 480,255 560,188 C640,158 720,188 800,138 C880,100 960,118 1040,82 C1120,52 1160,62 1180,52',
         portfolioArea:  'M80,342 C160,328 240,292 320,265 C400,238 480,255 560,188 C640,158 720,188 800,138 C880,100 960,118 1040,82 C1120,52 1160,62 1180,52 L1180,420 L80,420 Z',
         benchmarkLine:  'M80,332 C160,322 240,302 320,272 C400,252 480,262 560,212 C640,182 720,222 800,182 C880,162 960,172 1040,142 C1120,122 1160,132 1180,120',
-        portfolioText:  'Votre portefeuille · +11,8%/an (TWR)',
-        benchmarkText:  'S&P 500 · +9,4%/an',
+        portfolioText:  'Your portfolio · +11.8%/yr (TWR)',
+        benchmarkText:  'S&P 500 · +9.4%/yr',
         showBenchmark:  true,
         yAxis: ['+30%','+20%','+10%','0%'],
         portfolioColor: 'var(--lv-accent)',
@@ -613,7 +613,7 @@
         portfolioLine:  'M80,350 C160,348 240,340 320,330 C400,318 480,310 560,280 C640,260 720,250 800,220 C880,190 960,170 1040,140 C1120,115 1160,98 1180,90',
         portfolioArea:  'M80,350 C160,348 240,340 320,330 C400,318 480,310 560,280 C640,260 720,250 800,220 C880,190 960,170 1040,140 C1120,115 1160,98 1180,90 L1180,350 L80,350 Z',
         benchmarkLine:  '',
-        portfolioText:  'Portefeuille − S&P · +270 bps',
+        portfolioText:  'Portfolio − S&P · +270 bps',
         benchmarkText:  '',
         showBenchmark:  false,
         yAxis: ['+300 bps','+200 bps','+100 bps','0 bps'],

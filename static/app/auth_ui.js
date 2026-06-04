@@ -47,7 +47,7 @@ function wireLandingV2() {
       }
       const original = btn.dataset.originalLabel;
       btn.disabled = true;
-      btn.innerHTML = `Préparation de la démo…`;
+      btn.innerHTML = `Setting up your demo…`;
       try {
         const data = await API.request("/auth/demo", { method: "POST" });
         state.token = data.access_token;
@@ -278,17 +278,17 @@ function closeSigninModal() {
 
 function renderSigninModeUI() {
   const isLogin = _signinMode === "login";
-  document.getElementById("signin-h").textContent = isLogin ? "Connexion" : "Créer un compte";
+  document.getElementById("signin-h").textContent = isLogin ? "Sign in" : "Create your account";
   const subP = document.querySelector(".signin-modal p");
   if (subP) subP.textContent = isLogin
-    ? "Bienvenue dans votre espace d'investissement."
-    : "Obtenez un espace privé pour votre portefeuille.";
-  document.querySelector(".signin-btn").textContent = isLogin ? "Se connecter" : "Créer le compte";
+    ? "Welcome back to your investment workspace."
+    : "Get a private workspace for your portfolio.";
+  document.querySelector(".signin-btn").textContent = isLogin ? "Sign in" : "Create account";
   const switchEl = document.querySelector(".signin-switch");
   if (switchEl) {
     switchEl.innerHTML = isLogin
-      ? 'Pas encore de compte ? <a data-action="signin-register">S\'inscrire</a>'
-      : 'Déjà un compte ? <a data-action="signin-register">Se connecter</a>';
+      ? 'No account yet? <a data-action="signin-register">Register</a>'
+      : 'Already have an account? <a data-action="signin-register">Sign in</a>';
     switchEl.querySelector('[data-action="signin-register"]').addEventListener("click", (ev) => {
       ev.preventDefault();
       _signinMode = _signinMode === "login" ? "register" : "login";
