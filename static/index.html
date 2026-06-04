@@ -52,7 +52,7 @@
       line-height: 1.45;
     }
   </style>
-  <link rel="stylesheet" href="/static/style.css?v=95" />
+  <link rel="stylesheet" href="/static/style.css?v=96" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='8' y='8' width='84' height='84' rx='20' fill='%236b7d5e'/><rect x='26' y='60' width='11' height='22' rx='2' fill='%23faf7f2'/><rect x='44' y='46' width='11' height='36' rx='2' fill='%23faf7f2'/><rect x='62' y='28' width='11' height='54' rx='2' fill='%23faf7f2'/><path d='M31 58 L49 44 L67 26' stroke='%23faf7f2' stroke-width='3' fill='none' stroke-linecap='round'/></svg>" />
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#6b7d5e" />
@@ -262,14 +262,14 @@
       <div class="lv-container">
         <div class="lv-sec-head">
           <p class="lv-eyebrow"><span class="lv-num">02</span> Vs the index, in EUR, no fudging</p>
-          <h2 class="lv-big">Beating the S&amp;P is hard. <em>Knowing</em> whether you are shouldn't be.</h2>
+          <h2 class="lv-big">Beating the S&amp;P is hard. <em>Knowing</em> whether you do shouldn't be.</h2>
         </div>
-        <div class="lv-bench-card">
+        <div class="lv-bench-card" id="lv-bench-card" data-tab="xirr">
           <div class="lv-bench-controls">
             <div class="lv-bc-tabs">
-              <button class="lv-bc-tab is-active" type="button">XIRR vs S&amp;P</button>
-              <button class="lv-bc-tab" type="button">TWR vs S&amp;P</button>
-              <button class="lv-bc-tab" type="button">Δ in basis points</button>
+              <button class="lv-bc-tab is-active" type="button" data-bench-tab="xirr">XIRR vs S&amp;P</button>
+              <button class="lv-bc-tab" type="button" data-bench-tab="twr">TWR vs S&amp;P</button>
+              <button class="lv-bc-tab" type="button" data-bench-tab="delta">Δ in basis points</button>
             </div>
             <div class="lv-bc-range lv-mono lv-small"><span>2019</span><span class="lv-muted">·</span><span>TODAY</span></div>
           </div>
@@ -279,19 +279,28 @@
                 <stop offset="0%" stop-color="var(--lv-accent)" stop-opacity="0.18"/>
                 <stop offset="100%" stop-color="var(--lv-accent)" stop-opacity="0"/>
               </linearGradient>
+              <linearGradient id="lvBenchFillNeg" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stop-color="#a85a4e" stop-opacity="0.18"/>
+                <stop offset="100%" stop-color="#a85a4e" stop-opacity="0"/>
+              </linearGradient>
               <pattern id="lvGrid2" width="100" height="60" patternUnits="userSpaceOnUse">
                 <path d="M 100 0 L 0 0 0 60" fill="none" stroke="currentColor" stroke-opacity="0.05"/>
               </pattern>
             </defs>
             <rect width="1200" height="420" fill="url(#lvGrid2)"/>
-            <g class="lv-axis lv-mono">
+            <!-- Y-axis labels: change between % and bps based on tab -->
+            <g class="lv-axis lv-mono" id="lv-bench-yaxis">
               <text x="20" y="80">+30%</text><text x="20" y="170">+20%</text><text x="20" y="260">+10%</text><text x="20" y="350">0%</text>
             </g>
-            <path d="M80,330 C160,320 240,300 320,270 C400,250 480,260 560,210 C640,180 720,220 800,180 C880,160 960,170 1040,140 C1120,120 1160,130 1180,118" fill="none" stroke="currentColor" stroke-opacity="0.4" stroke-width="2" stroke-dasharray="4 5"/>
-            <text x="1185" y="115" class="lv-mono lv-small lv-bench-label lv-muted" text-anchor="end">S&amp;P 500 · +9.4%/yr</text>
-            <path d="M80,340 C160,325 240,290 320,260 C400,235 480,250 560,180 C640,150 720,180 800,128 C880,90 960,110 1040,72 C1120,40 1160,55 1180,40 L1180,420 L80,420 Z" fill="url(#lvBenchFill)"/>
-            <path d="M80,340 C160,325 240,290 320,260 C400,235 480,250 560,180 C640,150 720,180 800,128 C880,90 960,110 1040,72 C1120,40 1160,55 1180,40" fill="none" stroke="var(--lv-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-            <text x="1185" y="35" class="lv-mono lv-small lv-bench-label lv-accent" text-anchor="end">Your portfolio · +12.1%/yr</text>
+            <!-- Benchmark line + label (hidden in delta view) -->
+            <g id="lv-bench-benchmark-group">
+              <path id="lv-bench-benchmark-line" d="M80,330 C160,320 240,300 320,270 C400,250 480,260 560,210 C640,180 720,220 800,180 C880,160 960,170 1040,140 C1120,120 1160,130 1180,118" fill="none" stroke="currentColor" stroke-opacity="0.4" stroke-width="2" stroke-dasharray="4 5"/>
+              <text id="lv-bench-benchmark-label" x="1185" y="115" class="lv-mono lv-small lv-bench-label lv-muted" text-anchor="end">S&amp;P 500 · +9.4%/yr</text>
+            </g>
+            <!-- Portfolio area + line + label -->
+            <path id="lv-bench-portfolio-area" d="M80,340 C160,325 240,290 320,260 C400,235 480,250 560,180 C640,150 720,180 800,128 C880,90 960,110 1040,72 C1120,40 1160,55 1180,40 L1180,420 L80,420 Z" fill="url(#lvBenchFill)"/>
+            <path id="lv-bench-portfolio-line" d="M80,340 C160,325 240,290 320,260 C400,235 480,250 560,180 C640,150 720,180 800,128 C880,90 960,110 1040,72 C1120,40 1160,55 1180,40" fill="none" stroke="var(--lv-accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            <text id="lv-bench-portfolio-label" x="1185" y="35" class="lv-mono lv-small lv-bench-label lv-accent" text-anchor="end">Your portfolio · +12.1%/yr</text>
             <g class="lv-axis lv-mono">
               <text x="80" y="405">2019</text><text x="300" y="405">2020</text><text x="520" y="405">2021</text><text x="740" y="405">2022</text><text x="960" y="405">2023</text><text x="1180" y="405" text-anchor="end">NOW</text>
             </g>
@@ -559,6 +568,100 @@
     <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
   </div>
 
-  <script type="module" src="/static/app.js?v=95"></script>
+  <script type="module" src="/static/app.js?v=96"></script>
+
+  <!-- Landing-page interactivity: the XIRR / TWR / Δ bps tabs on the
+       benchmark demo. Swaps the SVG paths + labels in place so the demo
+       feels alive. Kept inline (small, no module needed) so it ships
+       even if the main bundle errors out. -->
+  <script>
+  (function () {
+    var card = document.getElementById('lv-bench-card');
+    if (!card) return;
+    var tabs = card.querySelectorAll('[data-bench-tab]');
+
+    // Pre-computed SVG paths for each tab. Same viewBox (1200×420), so
+    // we just swap d-attributes; CSS handles colors.
+    var STATES = {
+      // XIRR vs S&P: portfolio strong uptrend, S&P milder uptrend
+      xirr: {
+        portfolioLine:  'M80,340 C160,325 240,290 320,260 C400,235 480,250 560,180 C640,150 720,180 800,128 C880,90 960,110 1040,72 C1120,40 1160,55 1180,40',
+        portfolioArea:  'M80,340 C160,325 240,290 320,260 C400,235 480,250 560,180 C640,150 720,180 800,128 C880,90 960,110 1040,72 C1120,40 1160,55 1180,40 L1180,420 L80,420 Z',
+        benchmarkLine:  'M80,330 C160,320 240,300 320,270 C400,250 480,260 560,210 C640,180 720,220 800,180 C880,160 960,170 1040,140 C1120,120 1160,130 1180,118',
+        portfolioText:  'Your portfolio · +12.1%/yr',
+        benchmarkText:  'S&P 500 · +9.4%/yr',
+        showBenchmark:  true,
+        yAxis: ['+30%','+20%','+10%','0%'],
+        portfolioColor: 'var(--lv-accent)',
+        areaFill:       'url(#lvBenchFill)'
+      },
+      // TWR vs S&P: similar shape but slightly different end-of-year CAGR
+      twr: {
+        portfolioLine:  'M80,342 C160,328 240,292 320,265 C400,238 480,255 560,188 C640,158 720,188 800,138 C880,100 960,118 1040,82 C1120,52 1160,62 1180,52',
+        portfolioArea:  'M80,342 C160,328 240,292 320,265 C400,238 480,255 560,188 C640,158 720,188 800,138 C880,100 960,118 1040,82 C1120,52 1160,62 1180,52 L1180,420 L80,420 Z',
+        benchmarkLine:  'M80,332 C160,322 240,302 320,272 C400,252 480,262 560,212 C640,182 720,222 800,182 C880,162 960,172 1040,142 C1120,122 1160,132 1180,120',
+        portfolioText:  'Your portfolio · +11.8%/yr (TWR)',
+        benchmarkText:  'S&P 500 · +9.4%/yr',
+        showBenchmark:  true,
+        yAxis: ['+30%','+20%','+10%','0%'],
+        portfolioColor: 'var(--lv-accent)',
+        areaFill:       'url(#lvBenchFill)'
+      },
+      // Δ in basis points: ONE line growing from 0 to ~+270 bps. Crosses 0 = parity.
+      // The y-axis here is in bps (0 at bottom 350px line, +300 bps at top 80px line).
+      delta: {
+        portfolioLine:  'M80,350 C160,348 240,340 320,330 C400,318 480,310 560,280 C640,260 720,250 800,220 C880,190 960,170 1040,140 C1120,115 1160,98 1180,90',
+        portfolioArea:  'M80,350 C160,348 240,340 320,330 C400,318 480,310 560,280 C640,260 720,250 800,220 C880,190 960,170 1040,140 C1120,115 1160,98 1180,90 L1180,350 L80,350 Z',
+        benchmarkLine:  '',
+        portfolioText:  'Portfolio − S&P · +270 bps',
+        benchmarkText:  '',
+        showBenchmark:  false,
+        yAxis: ['+300 bps','+200 bps','+100 bps','0 bps'],
+        portfolioColor: 'var(--lv-accent)',
+        areaFill:       'url(#lvBenchFill)'
+      }
+    };
+
+    function applyState(key) {
+      var s = STATES[key];
+      if (!s) return;
+      card.setAttribute('data-tab', key);
+
+      var portfolioLine  = document.getElementById('lv-bench-portfolio-line');
+      var portfolioArea  = document.getElementById('lv-bench-portfolio-area');
+      var portfolioLabel = document.getElementById('lv-bench-portfolio-label');
+      var benchGroup     = document.getElementById('lv-bench-benchmark-group');
+      var benchLine      = document.getElementById('lv-bench-benchmark-line');
+      var benchLabel     = document.getElementById('lv-bench-benchmark-label');
+      var yAxis          = document.getElementById('lv-bench-yaxis');
+
+      if (portfolioLine)  portfolioLine.setAttribute('d', s.portfolioLine);
+      if (portfolioArea)  portfolioArea.setAttribute('d', s.portfolioArea);
+      if (portfolioLabel) portfolioLabel.textContent = s.portfolioText;
+      if (benchGroup)     benchGroup.style.display = s.showBenchmark ? '' : 'none';
+      if (benchLine && s.showBenchmark)  benchLine.setAttribute('d', s.benchmarkLine);
+      if (benchLabel && s.showBenchmark) benchLabel.textContent = s.benchmarkText;
+
+      // Y-axis labels — swap %, bps as needed
+      if (yAxis && s.yAxis && s.yAxis.length === 4) {
+        var labels = yAxis.querySelectorAll('text');
+        for (var i = 0; i < labels.length && i < 4; i++) {
+          labels[i].textContent = s.yAxis[i];
+        }
+      }
+    }
+
+    tabs.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var key = btn.getAttribute('data-bench-tab');
+        if (!key || !STATES[key]) return;
+        // Toggle active class
+        tabs.forEach(function (b) { b.classList.remove('is-active'); });
+        btn.classList.add('is-active');
+        applyState(key);
+      });
+    });
+  })();
+  </script>
 </body>
 </html>
