@@ -16,6 +16,19 @@ export function showAuth() {
   // overflow:hidden when active for the fixed sidebar layout).
   document.body.style.overflow = "";
   wireLandingV2();
+  // After a logout the demo CTAs can still be in their disabled
+  // "Setting up your demo…" state from the previous session — they're
+  // never reset on success because bootApp() is called before any cleanup.
+  // Heal them here so a second demo attempt works without a page reload.
+  resetDemoCtas();
+}
+
+function resetDemoCtas() {
+  document.querySelectorAll('[data-action="demo"]').forEach((btn) => {
+    btn.disabled = false;
+    const original = btn.dataset.originalLabel;
+    if (original) btn.innerHTML = original;
+  });
 }
 
 function wireLandingV2() {
@@ -23,11 +36,16 @@ function wireLandingV2() {
   _landingWired = true;
 
   // Demo CTAs — every button/link with data-action="demo" triggers
-  // POST /auth/demo and boots straight into the app.
+  // POST /auth/demo and boots straight into the app. The original label
+  // is stashed in data-original-label on first click so showAuth() can
+  // restore it when the user comes back to the landing after a logout.
   document.querySelectorAll('[data-action="demo"]').forEach((btn) => {
     btn.addEventListener("click", async (ev) => {
       ev.preventDefault();
-      const original = btn.innerHTML;
+      if (!btn.dataset.originalLabel) {
+        btn.dataset.originalLabel = btn.innerHTML;
+      }
+      const original = btn.dataset.originalLabel;
       btn.disabled = true;
       btn.innerHTML = `Setting up your demo…`;
       try {
@@ -36,6 +54,12 @@ function wireLandingV2() {
         state.user = data.user;
         localStorage.setItem("token", state.token);
         track("demo_login");
+        // Reset the button state BEFORE bootApp() — bootApp may take a
+        // moment to fan out its initial fetches, and we don't want the
+        // landing button (still in the DOM behind the app shell) frozen
+        // in "Setting up your demo…" if the user later returns to it.
+        btn.disabled = false;
+        btn.innerHTML = original;
         bootApp().catch(err => toast(err.message || "Something went wrong", "error"));
       } catch (err) {
         btn.disabled = false;
