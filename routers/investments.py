@@ -156,6 +156,156 @@ async def update_investment(
     return _to_out(inv)
 
 
+@router.post("/{inv_id}/repair-cost-basis")
+async def repair_cost_basis(
+    inv_id: int,
+    current: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Recompute purchase_price + quantity for a single investment using the
+    fixed price-on-date pipeline (pence → pound → USD).
+
+    Why this exists: positions created BEFORE the LSE currency fix stored
+    a broken purchase_price (raw pence treated as USD). Their quantity was
+    therefore 100× too small, and the row permanently looked like a -97%
+    loss. Deleting and re-adding works but loses the audit trail; this
+    endpoint patches in place.
+
+    It only touches `quantity` and (implicitly via current_value refresh
+    the live value). `amount_invested` is what the user said they spent,
+    so we trust it. The new quantity = amount_invested / new_purchase_price,
+    both in USD."""
+    from services.market_universe import market_universe
+
+    inv = db.get(Investment, inv_id)
+    if not inv or inv.user_id != current.id:
+        raise HTTPException(status_code=404, detail="investment not found")
+
+    if not inv.symbol or not inv.purchase_date or not inv.amount_invested:
+        raise HTTPException(
+            status_code=400,
+            detail="cannot repair: missing symbol, purchase_date or amount_invested",
+        )
+
+    asset_type = inv.type if inv.type in ("stock", "etf", "crypto") else "stock"
+    hist = await market_universe.get_price_on_date(inv.symbol, inv.purchase_date, asset_type)
+    if not hist or not hist.get("price") or hist["price"] <= 0:
+        raise HTTPException(
+            status_code=404,
+            detail=f"no historical price for {inv.symbol} on {inv.purchase_date}",
+        )
+
+    new_purchase_price_usd = float(hist["price"])
+    old_quantity = inv.quantity
+    new_quantity = inv.amount_invested / new_purchase_price_usd
+    inv.quantity = new_quantity
+
+    # Refresh the live current value so the row reflects the fix immediately.
+    updates = await refresh_current_values([inv])
+    new_current_value = updates.get(inv.id)
+    if new_current_value is not None:
+        inv.current_value = new_current_value
+
+    db.commit()
+    db.refresh(inv)
+
+    return {
+        "status": "repaired",
+        "symbol": inv.symbol,
+        "purchase_date": inv.purchase_date.isoformat() if inv.purchase_date else None,
+        "native_currency": hist.get("native_currency"),
+        "old_quantity": old_quantity,
+        "new_quantity": new_quantity,
+        "new_purchase_price_usd": new_purchase_price_usd,
+        "new_current_value": inv.current_value,
+        "investment": _to_out(inv).model_dump(),
+    }
+
+
+@router.post("/repair-all-cost-basis")
+async def repair_all_cost_basis(
+    current: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Bulk-repair every tradable position that's likely affected by the
+    LSE/non-USD currency bug. Detection heuristic: symbol ends in a
+    non-USD-market suffix (.L .PA .AS .DE .SW .MI .HK .T .TO .AX .BR .MC
+    .ST .HE .OL .VI .LS .NS .BO etc.). For each, recompute the cost basis
+    in USD via the fixed price-on-date pipeline. Returns a per-position
+    report so the user sees what changed.
+
+    Positions that fail (delisted, no historical data for that date,
+    network timeout) are listed under `failed` with a reason — the others
+    still get repaired."""
+    from services.market_universe import market_universe
+
+    NON_USD_SUFFIXES = (
+        ".L", ".PA", ".AS", ".DE", ".SW", ".MI", ".HK", ".T", ".TO",
+        ".AX", ".BR", ".MC", ".ST", ".HE", ".OL", ".VI", ".LS",
+        ".NS", ".BO", ".SI", ".KQ", ".KS", ".SS", ".SZ", ".TW",
+    )
+
+    rows = (
+        db.query(Investment)
+        .filter(Investment.user_id == current.id, Investment.type.in_(["stock", "etf", "crypto"]))
+        .all()
+    )
+    candidates = [
+        r for r in rows
+        if r.symbol and r.purchase_date and r.amount_invested
+        and (r.symbol.upper().endswith(NON_USD_SUFFIXES) or r.type == "crypto" or _looks_broken(r))
+    ]
+
+    repaired = []
+    failed = []
+    for inv in candidates:
+        try:
+            asset_type = inv.type if inv.type in ("stock", "etf", "crypto") else "stock"
+            hist = await market_universe.get_price_on_date(inv.symbol, inv.purchase_date, asset_type)
+            if not hist or not hist.get("price") or hist["price"] <= 0:
+                failed.append({"symbol": inv.symbol, "reason": "no historical price"})
+                continue
+            new_price = float(hist["price"])
+            old_qty = inv.quantity
+            inv.quantity = inv.amount_invested / new_price
+            updates = await refresh_current_values([inv])
+            if inv.id in updates:
+                inv.current_value = updates[inv.id]
+            repaired.append({
+                "symbol": inv.symbol,
+                "name": inv.name,
+                "native_currency": hist.get("native_currency"),
+                "old_quantity": old_qty,
+                "new_quantity": inv.quantity,
+                "new_purchase_price_usd": new_price,
+                "new_current_value": inv.current_value,
+            })
+        except Exception as e:
+            failed.append({"symbol": inv.symbol, "reason": str(e)[:120]})
+
+    db.commit()
+    return {
+        "checked": len(candidates),
+        "repaired": repaired,
+        "failed": failed,
+        "skipped_count": len(rows) - len(candidates),
+    }
+
+
+def _looks_broken(inv: Investment) -> bool:
+    """Heuristic: amount_invested vs current_value implies a > 90 % loss
+    on a position younger than 2 years. Rare for a real fundamentals-bad
+    investment; very common for the currency-mislabel bug."""
+    if not inv.amount_invested or not inv.current_value:
+        return False
+    if not inv.purchase_date:
+        return False
+    ratio = inv.current_value / inv.amount_invested
+    from datetime import date as _date
+    age_years = (_date.today() - inv.purchase_date).days / 365.0
+    return ratio < 0.1 and age_years < 2
+
+
 @router.delete("/{inv_id}")
 async def delete_investment(
     inv_id: int,

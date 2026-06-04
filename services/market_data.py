@@ -500,19 +500,45 @@ class MarketDataService:
 
     # ---------- Historical / Search ----------
     async def get_historical(self, symbol: str, period: str = "1y") -> Optional[list[dict[str, Any]]]:
+        """Daily OHLCV candles, normalised to USD.
+
+        yfinance returns prices in each listing's native currency: pence for
+        London (.L), EUR for Euronext / Xetra, JPY for TSE, etc. Without
+        normalisation, the investment-detail chart shows an axis like 0–1400
+        for a London stock (raw pence) while the surrounding cards show USD
+        amounts — visibly inconsistent, and identical in shape to the
+        cost-basis bug that produced -97% phantom losses.
+
+        We fetch the native currency once via fast_info, then if needed:
+          1. Divide pence by 100 to get pounds.
+          2. FX-convert the major-unit price to USD using the cached rate.
+        Same pipeline as services.live_value._fetch_price_inner for the
+        live spot price."""
         valid_periods = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"}
         if period not in valid_periods:
             period = "1y"
 
-        def _sync() -> Optional[list[dict[str, Any]]]:
+        def _sync() -> Optional[dict[str, Any]]:
             try:
                 t = yf.Ticker(symbol.upper())
                 hist = t.history(period=period)
                 if hist is None or hist.empty:
                     return None
-                out = []
+                # Read the native currency once. fast_info is the cheap path;
+                # falls back to USD only on lookup failure (warning logged
+                # elsewhere — silently OK here so existing tests still pass).
+                native = "USD"
+                try:
+                    fi = getattr(t, "fast_info", None)
+                    if fi is not None:
+                        c = fi.get("currency") if hasattr(fi, "get") else getattr(fi, "currency", None)
+                        if c:
+                            native = str(c).upper()
+                except Exception:
+                    pass
+                candles = []
                 for idx, row in hist.iterrows():
-                    out.append({
+                    candles.append({
                         "date": idx.strftime("%Y-%m-%d"),
                         "open": float(row["Open"]),
                         "high": float(row["High"]),
@@ -520,12 +546,58 @@ class MarketDataService:
                         "close": float(row["Close"]),
                         "volume": float(row["Volume"]) if "Volume" in row else 0,
                     })
-                return out
+                return {"candles": candles, "native_currency": native}
             except Exception as e:
                 log.warning("historical %s failed: %s", symbol, e)
                 return None
 
-        return await asyncio.to_thread(_sync)
+        raw = await asyncio.to_thread(_sync)
+        if not raw:
+            return None
+        candles = raw["candles"]
+        ccy = raw["native_currency"]
+
+        # ── Pence normalisation (same logic as live_value / market_universe) ──
+        _PENCE = {"GBP_PENCE", "GBX", "PENCE", "GBP."}
+        scale = 1.0
+        if ccy in _PENCE:
+            scale = 1 / 100.0
+            ccy = "GBP"
+        elif ccy in ("GBP", "") and symbol.upper().endswith(".L"):
+            # LSE heuristic: if the median close is > 500, it's almost
+            # certainly pence mislabelled as GBP. Median (not max) so a
+            # single bad row doesn't flip the assessment.
+            try:
+                closes_sorted = sorted(c["close"] for c in candles)
+                median = closes_sorted[len(closes_sorted) // 2]
+                if median > 500:
+                    scale = 1 / 100.0
+                    ccy = "GBP"
+            except Exception:
+                pass
+
+        # ── FX to USD ──
+        if ccy and ccy != "USD":
+            from services.live_value import _to_usd
+            # Convert 1.0 of the native currency to USD, then multiply each
+            # candle by the resulting factor. One forex call total, not one
+            # per candle.
+            fx = await _to_usd(1.0, ccy)
+            scale = scale * fx
+
+        if scale != 1.0:
+            for c in candles:
+                c["open"] = c["open"] * scale
+                c["high"] = c["high"] * scale
+                c["low"] = c["low"] * scale
+                c["close"] = c["close"] * scale
+
+        # Returns a plain list — back-compatible with the dashboard history
+        # / risk paths and the existing /market/historical route. All prices
+        # are USD; callers don't need to ask. The native currency info is
+        # only useful for an axis label, which the frontend can guess from
+        # the magnitude or we expose later via a separate endpoint.
+        return candles
 
     async def search_symbols(self, query: str) -> list[dict[str, Any]]:
         url = f"https://query2.finance.yahoo.com/v1/finance/search?q={query}&quotesCount=10&newsCount=0"

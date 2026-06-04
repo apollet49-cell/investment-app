@@ -2,7 +2,7 @@
 // the add / edit / what-if / detail modals. The actual modal contents
 // live in ./investments/*.js — this file decides what shows up in the
 // table and wires the buttons.
-import { API, cachedGet, downloadAuth, escapeHtml, money, onViewCleanup, pct, skeleton, state } from "/static/app.js";
+import { API, cachedGet, downloadAuth, escapeHtml, money, onViewCleanup, pct, skeleton, state, toast } from "/static/app.js";
 import { t } from "/static/i18n.js";
 
 import { TYPES, badgeClass, tableState } from "./investments/state.js";
@@ -71,6 +71,7 @@ export async function render(root) {
       <label class="btn btn-ghost" for="csv-input">${t("investments.import_csv")}</label>
       <input id="csv-input" type="file" accept=".csv" hidden />
       <button class="btn btn-ghost" id="btn-export-csv" type="button">${t("investments.export_csv")}</button>
+      <button class="btn btn-ghost" id="btn-repair-fx" type="button" title="Recompute cost basis for foreign-currency positions (LSE pence, EUR, JPY...). Fixes positions created before the currency normalisation fix.">↻ Repair FX</button>
     </div>
     <div class="card">
       ${tableState.cache.length ? renderTable(tableState.cache) : emptyState()}
@@ -84,6 +85,39 @@ export async function render(root) {
   document.getElementById("inv-search").oninput = (e) => { tableState.filterText = e.target.value.toLowerCase(); refresh(root); };
   document.getElementById("inv-type-filter").onchange = (e) => { tableState.filterType = e.target.value; refresh(root); };
   document.getElementById("btn-export-csv").onclick = () => downloadAuth("/exports/csv");
+  document.getElementById("btn-repair-fx").onclick = async () => {
+    // One-shot bulk fix for positions whose cost basis was stored in the
+    // wrong currency (LSE pence treated as USD, etc.). Calls the backend
+    // repair endpoint, reports the per-position summary, then reloads the
+    // table so the corrected values flow in.
+    const btn = document.getElementById("btn-repair-fx");
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Repairing…";
+    try {
+      const r = await API.request("/investments/repair-all-cost-basis", { method: "POST" });
+      const nFixed = (r.repaired || []).length;
+      const nFailed = (r.failed || []).length;
+      if (nFixed === 0 && nFailed === 0) {
+        toast("Nothing to repair — all positions look healthy.", "info");
+      } else {
+        toast(`Repaired ${nFixed} position${nFixed === 1 ? "" : "s"}` +
+              (nFailed ? `, ${nFailed} could not be fixed (see console).` : "."),
+              nFailed ? "error" : "success");
+        if (nFailed) console.warn("Repair failures:", r.failed);
+        if (nFixed) console.info("Repaired positions:", r.repaired);
+      }
+      // Reload table so the new values land in the UI.
+      const data = await API.request("/investments/");
+      tableState.cache = data;
+      refresh(root);
+    } catch (e) {
+      toast(e.message || "Repair failed", "error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  };
   attachRowHandlers(root);
 
   // Auto-refresh every 60s so live market prices flow into the table
