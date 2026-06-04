@@ -41,7 +41,13 @@ def _now() -> str:
 
 def _yf_price_on_date_sync(symbol: str, target_date: date) -> Optional[dict]:
     """Get the close price for a symbol on a specific date (or nearest prior
-    trading day for weekends / holidays). Returns None on failure."""
+    trading day for weekends / holidays). Returns None on failure.
+
+    The returned `currency` is the native quote currency from yfinance
+    (USD for US stocks, GBp/pence for LSE listings, EUR for Euronext,
+    JPY for TSE, etc.) — NOT pre-normalised. The async wrapper
+    `get_price_on_date` does the pence→pound→USD conversion, because that
+    last step requires an async FX rate lookup."""
     try:
         t = yf.Ticker(symbol)
         # Fetch a small window around target so we catch the nearest trading day.
@@ -58,10 +64,31 @@ def _yf_price_on_date_sync(symbol: str, target_date: date) -> Optional[dict]:
             valid = h
         last = valid.iloc[-1]
         actual_date = valid.index[-1].date().isoformat()
+
+        # Native currency for the listing. yfinance's fast_info exposes it
+        # without a slow .info call. Defaults to USD only if the lookup
+        # itself fails — that's safer than blindly hardcoding USD, which
+        # was the root cause of the "RR.L at $1.2M shows -97%" bug:
+        # LSE stocks return prices in pence but the consumer assumed
+        # dollars, producing quantities 100× too small.
+        native_ccy = "USD"
+        try:
+            fi = getattr(t, "fast_info", None)
+            if fi is not None:
+                c = None
+                if hasattr(fi, "get"):
+                    c = fi.get("currency") or fi.get("quoteType")
+                else:
+                    c = getattr(fi, "currency", None)
+                if c:
+                    native_ccy = str(c).upper()
+        except Exception:
+            pass
+
         return {
             "symbol": symbol,
             "price": float(last["Close"]),
-            "currency": "USD",
+            "currency": native_ccy,
             "date_requested": target_date.isoformat(),
             "date_actual": actual_date,
             "source": "yfinance",
@@ -364,14 +391,57 @@ class MarketUniverseService:
 
     # ---------- Historical point-in-time price ----------
     async def get_price_on_date(self, symbol: str, target_date: date, asset_type: str = "stock") -> Optional[dict]:
-        """Resolve the price of an asset on a specific date.
+        """Resolve the price of an asset on a specific date, normalised to USD.
 
         - Crypto (CoinGecko id like 'bitcoin'): /coins/{id}/history?date=DD-MM-YYYY
-        - Anything else (yfinance ticker, includes BTC-USD style): yfinance history
+          → already in USD.
+        - Anything else (yfinance ticker, includes BTC-USD style): fetch native
+          price + currency, then normalise pence→pounds for LSE listings, then
+          FX-convert to USD. Without this, a $1.2M position in RR.L gets a
+          quantity computed from raw pence (treated as USD), and the row
+          permanently looks like a -97% loss because live values are correctly
+          in pounds while purchase math used pence.
         """
         if asset_type == "crypto" and "-" not in symbol:
             return await self._coingecko_price_on(symbol.lower(), target_date)
-        return await asyncio.to_thread(_yf_price_on_date_sync, symbol, target_date)
+
+        raw = await asyncio.to_thread(_yf_price_on_date_sync, symbol, target_date)
+        if not raw or raw.get("price") is None:
+            return raw
+
+        # Currency normalisation, same logic as services.live_value._fetch_price_inner.
+        # Pence-currency tags vary by yfinance version (GBp / GBX / "PENCE"
+        # / sometimes empty for .L listings with a high price).
+        price = float(raw["price"])
+        ccy = (raw.get("currency") or "").upper()
+        _PENCE = {"GBP_PENCE", "GBX", "PENCE", "GBP."}
+        # Some yfinance builds use lowercase "GBp" — already upper-cased above,
+        # so this catches the legitimate pence variants. Note GBP is NOT in
+        # this set: real pounds shouldn't be divided by 100.
+        if ccy in _PENCE:
+            price = price / 100.0
+            ccy = "GBP"
+        elif ccy in ("GBP", "") and symbol.upper().endswith(".L") and price > 500:
+            # LSE fallback: prices above 500 in "GBP" are almost certainly pence
+            # mislabelled by an older yfinance. £500/share would be exceptional
+            # (only ~5 LSE constituents trade above that), so the false-positive
+            # rate is negligible.
+            price = price / 100.0
+            ccy = "GBP"
+
+        # FX-convert to USD. Reuse the live_value helper so we get the same
+        # FX cache + fallback behaviour. Import here (not at module top) to
+        # avoid a circular import (live_value → market_data → ...).
+        if ccy and ccy != "USD":
+            from services.live_value import _to_usd
+            price = await _to_usd(price, ccy)
+
+        return {
+            **raw,
+            "price": float(price),
+            "currency": "USD",
+            "native_currency": (raw.get("currency") or "USD").upper(),
+        }
 
     async def _coingecko_price_on(self, coin_id: str, target_date: date) -> Optional[dict]:
         cg_date = target_date.strftime("%d-%m-%Y")
