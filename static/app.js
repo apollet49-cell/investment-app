@@ -165,7 +165,7 @@ export function escapeHtml(s) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "94";
+const VIEW_VERSION = "95";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -181,6 +181,7 @@ const ROUTES = [
   { hash: "#/review", titleKey: "review.title", load: () => import(v("/static/views/review.js")) },
   { hash: "#/compare", titleKey: "compare.title", load: () => import(v("/static/views/compare.js")) },
   { hash: "#/risk", titleKey: "risk.title", load: () => import(v("/static/views/risk.js")) },
+  { hash: "#/performance", titleKey: "performance.title", load: () => import(v("/static/views/performance.js")) },
 ];
 
 // Inline SVG icons (Feather/Lucide style, 1.5px stroke, currentColor so they
@@ -193,6 +194,7 @@ const ICONS = {
   scenarios:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="15 7 21 7 21 13"/></svg>`,
   compare:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18 L9 8 L14 14 L21 4"/><path d="M3 19 H21"/><circle cx="9" cy="8" r="1.4" fill="currentColor"/><circle cx="14" cy="14" r="1.4" fill="currentColor"/></svg>`,
   risk:        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 L7 12 L9 6 L13 18 L15 10 L17 14 L21 14"/></svg>`,
+  performance: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 C 7 13, 10 14, 13 9, 17 4, 21 6"/><path d="M3 19 C 8 17, 12 16, 16 14, 18 12, 21 13" stroke-dasharray="2,2"/></svg>`,
   reports:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="14 3 14 9 20 9"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>`,
   tax:         `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><circle cx="7" cy="7" r="2"/><circle cx="17" cy="17" r="2"/><path d="M3 3 H21 V21 H3 Z" stroke-dasharray="2,3"/></svg>`,
   fire:        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 14a4 4 0 0 0 8 0c0-2-1-3.5-3-5 0 2-1 3-2 3.5 0-1.5-1-2.5-1-2.5-1 1-2 2.5-2 4z"/><path d="M12 2c0 3-2 4-2 6"/></svg>`,
@@ -219,6 +221,7 @@ const SIDEBAR_LINKS = [
   { hash: "#/scenarios",   icon: "scenarios",   labelKey: "nav.scenarios" },
   { hash: "#/compare",     icon: "compare",     labelKey: "nav.compare" },
   { hash: "#/risk",        icon: "risk",        labelKey: "nav.risk" },
+  { hash: "#/performance", icon: "performance", labelKey: "nav.performance", badge: "NEW" },
   { hash: "#/rebalance",   icon: "rebalance",   labelKey: "nav.rebalance" },
   { hash: "#/reports",     icon: "reports",     labelKey: "nav.reports" },
 ];
