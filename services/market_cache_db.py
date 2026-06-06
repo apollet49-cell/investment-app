@@ -34,6 +34,12 @@ DEFAULT_TTL_SECONDS = {
     "stock": 60,
     "crypto": 60,
     "forex": 300,
+    # "fx" is the same data as "forex" but routed through the new explicit
+    # FX cache layer in market_data.py with a much longer TTL. The FX
+    # rates used for portfolio display barely move within a day — 24h is
+    # plenty for our use case and keeps OpenExchangeRates well under its
+    # 1000 req/month free quota.
+    "fx": 86400,
     "indices": 30,
     "macro": 3600,
     "historical": 1800,  # 30min — historical data doesn't change intra-day

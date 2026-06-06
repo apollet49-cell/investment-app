@@ -173,7 +173,12 @@ async def lifespan(app: FastAPI):
             log.exception("market cache purge failed: %s", e)
 
     app.state.scheduler.add_job(refresh_portfolios, "interval", seconds=60, id="portfolios", max_instances=1)
-    app.state.scheduler.add_job(refresh_forex, "interval", seconds=300, id="forex", max_instances=1)
+    # FX refresh runs ONCE a day, not every 5 min. We were burning ~11k
+    # OpenExchangeRates requests per month on a 1000 req/month free quota
+    # because the 5-min scheduler tick matched the cache TTL exactly. ECB
+    # is now the primary source (free + unlimited), so the daily tick is
+    # really just a warm-up — most requests are served from cache anyway.
+    app.state.scheduler.add_job(refresh_forex, "interval", hours=24, id="forex", max_instances=1)
     app.state.scheduler.add_job(refresh_indices, "interval", seconds=900, id="indices", max_instances=1)
     app.state.scheduler.add_job(refresh_macro, "interval", seconds=3600, id="macro", max_instances=1)
     app.state.scheduler.add_job(purge_market_cache, "interval", hours=1, id="market_cache_purge", max_instances=1)

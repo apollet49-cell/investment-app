@@ -59,7 +59,12 @@ class MarketDataService:
         # TTL caches per spec
         self._stock_cache: TTLCache = TTLCache(maxsize=512, ttl=60)
         self._crypto_cache: TTLCache = TTLCache(maxsize=512, ttl=60)
-        self._forex_cache: TTLCache = TTLCache(maxsize=128, ttl=300)
+        # FX rates barely move at the resolution our app needs (display
+        # values rounded to 2 decimals). 6h TTL keeps OpenExchangeRates
+        # well under its 1000 req/month free quota: prior 5-min TTL combined
+        # with the 5-min scheduler tick was burning ~11k requests per month
+        # on the same 4 base pairs.
+        self._forex_cache: TTLCache = TTLCache(maxsize=128, ttl=21600)
         self._indices_cache: TTLCache = TTLCache(maxsize=32, ttl=30)
         self._macro_cache: TTLCache = TTLCache(maxsize=128, ttl=3600)
 
@@ -273,6 +278,9 @@ class MarketDataService:
     async def get_forex_rate(self, from_currency: str, to_currency: str) -> Optional[dict[str, Any]]:
         from_c = from_currency.upper()
         to_c = to_currency.upper()
+        if from_c == to_c:
+            # Trivial identity — don't waste a request on EUR→EUR.
+            return {"pair": f"{from_c}{to_c}", "rate": 1.0, "source": "identity"}
         key = f"{from_c}_{to_c}"
         async with self._lk_forex:
             if key in self._forex_cache:
@@ -280,15 +288,38 @@ class MarketDataService:
                 return self._forex_cache[key]
             self._cache_misses += 1
 
-        result = await self._forex_oxr(from_c, to_c)
-        if result is None and "EUR" in (from_c, to_c):
+        # Postgres slow-path cache — survives Fly cold starts so the first
+        # request after a wake-up doesn't always pay a fresh OXR hit. 24h
+        # TTL is fine for a personal-finance tracker.
+        import asyncio as _asyncio
+        from services import market_cache_db
+        db_hit = await _asyncio.to_thread(market_cache_db.get, "fx", key)
+        if db_hit is not None:
+            async with self._lk_forex:
+                self._forex_cache[key] = db_hit
+            return db_hit
+
+        # Source order matters for cost — ECB and yfinance are free and
+        # unlimited; OpenExchangeRates is capped at 1000 req/month on the
+        # free tier. Try the free sources first.
+        result = None
+        if "EUR" in (from_c, to_c):
+            # ECB publishes daily EUR-base reference rates — free, unlimited,
+            # and accurate enough for portfolio display. ~30 major currencies.
             result = await self._forex_ecb(from_c, to_c)
         if result is None:
+            # yfinance forex (USDEUR=X) — free, unlimited, covers nearly
+            # every pair. Lower precision than central-bank rates but fine.
             result = await self._forex_yfinance(from_c, to_c)
+        if result is None:
+            # Last-resort hit on the metered OpenExchangeRates API.
+            result = await self._forex_oxr(from_c, to_c)
 
         if result is not None:
             async with self._lk_forex:
                 self._forex_cache[key] = result
+            # Persist to DB cache for the next cold start.
+            _asyncio.create_task(_asyncio.to_thread(market_cache_db.put, "fx", key, result, ttl_seconds=86400))
         return result
 
     async def _forex_oxr(self, from_c: str, to_c: str) -> Optional[dict[str, Any]]:
