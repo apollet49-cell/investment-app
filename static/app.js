@@ -165,7 +165,7 @@ export function escapeHtml(s) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "100";
+const VIEW_VERSION = "101";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -263,8 +263,18 @@ let _routeSeq = 0;
 const _preloadedModules = new Map();
 
 async function renderRoute() {
-  if (!state.token || !state.user) {
+  // No token at all = truly logged out → show the landing.
+  if (!state.token) {
     showAuth();
+    return;
+  }
+  // Token is set but the boot hasn't finished resolving the user yet —
+  // a hashchange that fires here (e.g. from a #lv-* anchor click that
+  // happened in the previous landing session) must NOT bounce back to
+  // the landing. Silently defer; renderRoute will be re-invoked at the
+  // end of bootApp() once state.user is ready.
+  if (!state.user) {
+    console.warn("[renderRoute] deferred — boot in progress");
     return;
   }
   const hash = window.location.hash || "#/dashboard";

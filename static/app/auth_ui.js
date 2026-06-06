@@ -9,6 +9,18 @@ let _signinMode = "login";
 let _landingWired = false;
 
 export function showAuth() {
+  // Defense in depth against the landing-page rollback bug. Any stray
+  // event handler that calls showAuth() while the user is still
+  // authenticated (typical scenarios we've hit in prod: a hashchange to
+  // an #lv-* anchor while boot is in progress, an async render finishing
+  // after navigation, a third-party script wakeup) must NOT hide the
+  // dashboard. Only logout() is allowed to roll back the screen, and it
+  // clears state.token + state.user FIRST before calling showAuth().
+  if (state.token && state.user) {
+    console.warn("[showAuth] ignored — user is authenticated. " +
+                 "Use logout() to switch screens.");
+    return;
+  }
   document.getElementById("app-shell").classList.add("hidden");
   const authScreen = document.getElementById("auth-screen");
   authScreen.classList.remove("hidden");
