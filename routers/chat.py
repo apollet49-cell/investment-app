@@ -16,6 +16,7 @@ Loop bounded at 6 tool-use rounds to defend against runaway chains.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Optional
 
@@ -34,8 +35,15 @@ log = logging.getLogger("chat")
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-MAX_TOOL_ROUNDS = 6
+MAX_TOOL_ROUNDS = 4
 MAX_TOKENS_PER_TURN = 1500
+# Hard ceiling on the total chat handler runtime. Fly's default proxy
+# timeout is 60s and our tool calls (live yfinance hits, etc.) can each
+# take 1-5s. 4 rounds × ~10s/round gives us slack while still letting
+# Claude do real reasoning. Per-call deadline is the half — keeps a
+# single slow Anthropic round from eating the whole budget.
+MAX_TOTAL_SECONDS = 50
+MAX_PER_CALL_SECONDS = 25
 
 
 # ─────────────────────────── REQUEST / RESPONSE ───────────────────────────
@@ -306,14 +314,29 @@ async def ask(
     tools_used: list[ToolCallRecord] = []
     stop_reason: Optional[str] = None
 
+    import time as _time
+    started = _time.monotonic()
     try:
         for _round in range(MAX_TOOL_ROUNDS):
-            resp = client.messages.create(
-                model=settings.ANTHROPIC_MODEL,
-                max_tokens=MAX_TOKENS_PER_TURN,
-                system=_system_prompt(),
-                tools=TOOLS,
-                messages=messages,
+            # Total-runtime safety net — Fly's proxy will RST the
+            # connection at 60s with no body, which is the "HTTP 500 with
+            # no detail" the chat panel renders as "Server-side error" for
+            # the user. Bail one round before that with a clean message.
+            if _time.monotonic() - started > MAX_TOTAL_SECONDS:
+                raise HTTPException(
+                    status_code=504,
+                    detail="Chat took too long. Try a more specific question or split it in two.",
+                )
+            resp = await asyncio.wait_for(
+                asyncio.to_thread(
+                    client.messages.create,
+                    model=settings.ANTHROPIC_MODEL,
+                    max_tokens=MAX_TOKENS_PER_TURN,
+                    system=_system_prompt(),
+                    tools=TOOLS,
+                    messages=messages,
+                ),
+                timeout=MAX_PER_CALL_SECONDS,
             )
             stop_reason = resp.stop_reason
 
@@ -362,6 +385,11 @@ async def ask(
     except APIError as e:
         log.exception("Anthropic API error: %s", e)
         raise HTTPException(status_code=502, detail="AI service is temporarily unavailable.")
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail="Anthropic took too long on one of the tool rounds. Try a simpler question.",
+        )
     except HTTPException:
         # Already-shaped HTTP errors (from _resolve_key etc.) pass through.
         raise
