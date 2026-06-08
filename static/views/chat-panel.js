@@ -98,27 +98,55 @@ function send(text) {
   pushUser(text);
   waiting = true;
   const typing = pushAssistantTyping();
-  // Send the LAST N messages as history (cap to keep payload small).
-  const hist = history.slice(-12, -1)  // exclude the typing placeholder + the new user msg
-    .filter(m => !m._typing)
+  // Build the history payload BEFORE pushing the typing placeholder would
+  // have polluted it. Three things must be excluded:
+  //   - the typing placeholder (last item, role=assistant, _typing=true)
+  //   - the user message we just pushed (second-to-last) — sent separately
+  //     in `message`, so including it here duplicates it and the API throws
+  //     400 on two consecutive `user` roles
+  //   - any prior assistant bubble that's actually an error/system tag
+  //     (those start with "⚠" — we use `_systemError` to mark them
+  //     unambiguously)
+  // Keep it to the last 10 real-conversation turns.
+  const hist = history
+    .slice(0, -2)              // drop the typing placeholder + current user msg
+    .filter(m => !m._typing && !m._systemError && (m.role === "user" || m.role === "assistant"))
+    .slice(-10)                // keep the last 10 of what remains
     .map(({ role, content }) => ({ role, content }));
+
   API.request("/chat/ask", {
     method: "POST",
     body: { message: text, history: hist },
   }).then((res) => {
     typing.remove();
-    history.pop();  // pop the typing placeholder from state
+    history.pop();             // remove the typing placeholder from state
     pushAssistant(res?.reply || "(pas de réponse)", res?.tools_used);
   }).catch((err) => {
     typing.remove();
     history.pop();
-    const msg = err?.message || "Erreur réseau.";
-    if (msg.includes("No Anthropic API key")) {
-      pushAssistant("⚠ Aucune clé Anthropic configurée. Ajoute-la dans **Settings** pour activer le chat.");
-    } else {
-      pushAssistant("⚠ " + msg);
-    }
+    showErrorBubble(err);
   }).finally(() => { waiting = false; });
+}
+
+function showErrorBubble(err) {
+  // Render an error bubble that is NOT considered part of the conversation
+  // history. Without the _systemError flag, a follow-up message would ship
+  // this back to the API and either look weird in the model's context or
+  // (worse) get echoed back.
+  let body;
+  const msg = err?.message || "";
+  if (msg.includes("No Anthropic API key") || msg.includes("anthropic key")) {
+    body = "⚠ Aucune clé Anthropic configurée pour ce compte.\n\n" +
+           "Pour activer le chat sur ce déploiement, l'admin doit poser le secret " +
+           "côté serveur :\n\n" +
+           "`fly secrets set ANTHROPIC_API_KEY=sk-ant-...`\n\n" +
+           "Ou bien ajoute ta propre clé dans **Settings → Clé API Anthropic**.";
+  } else if (!msg) {
+    body = "⚠ Erreur réseau. Vérifie ta connexion et réessaie.";
+  } else {
+    body = "⚠ " + msg;
+  }
+  pushAssistant(body, null, /*isSystemError*/ true);
 }
 
 // ─── message rendering ───────────────────────────────────────────────
@@ -133,8 +161,12 @@ function pushUser(text) {
   msgs.scrollTop = msgs.scrollHeight;
 }
 
-function pushAssistant(text, toolsUsed) {
-  history.push({ role: "assistant", content: text });
+function pushAssistant(text, toolsUsed, isSystemError) {
+  // System-error bubbles are visible to the user but flagged so the next
+  // turn's history filter drops them — they're not real model output.
+  const entry = { role: "assistant", content: text };
+  if (isSystemError) entry._systemError = true;
+  history.push(entry);
   const msgs = document.querySelector("#chat-msgs");
   const wrap = document.createElement("div");
   wrap.style.cssText = "align-self:flex-start; max-width:92%;";
