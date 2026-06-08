@@ -384,7 +384,25 @@ async def ask(
         raise HTTPException(status_code=429, detail="Anthropic rate limit hit. Try again in a moment.")
     except APIError as e:
         log.exception("Anthropic API error: %s", e)
-        raise HTTPException(status_code=502, detail="AI service is temporarily unavailable.")
+        # Surface the actual Anthropic error message instead of a generic
+        # "AI service unavailable" — the user can't act on the generic one,
+        # but a specific message like "credit balance is too low" is
+        # immediately actionable.
+        err_text = str(e).lower()
+        if "credit balance" in err_text or "billing" in err_text:
+            raise HTTPException(
+                status_code=402,  # Payment Required — semantically right
+                detail="Anthropic account out of credit. Top up at https://console.anthropic.com/settings/billing then retry.",
+            )
+        if "invalid_request_error" in err_text:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Anthropic API rejected the request: {str(e)[:300]}",
+            )
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI service error: {type(e).__name__}: {str(e)[:200]}",
+        )
     except asyncio.TimeoutError:
         raise HTTPException(
             status_code=504,

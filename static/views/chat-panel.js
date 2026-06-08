@@ -145,6 +145,11 @@ function showErrorBubble(err) {
            "Détail : `" + msg.replace("[network] ", "") + "`";
   } else if (msg.includes("rate limit")) {
     body = "⚠ **Quota Anthropic atteint.** Attends quelques secondes et réessaie.";
+  } else if (msg.includes("out of credit") || msg.includes("credit balance") || msg.includes("HTTP 402")) {
+    body = "⚠ **Compte Anthropic sans crédit.**\n\n" +
+           "Va sur **console.anthropic.com/settings/billing** pour recharger, puis recommence.\n\n" +
+           "(C'est ton compte Anthropic perso, pas un bug de l'app — la clé fonctionne, " +
+           "mais l'API refuse les requêtes tant que le solde est à zéro.)";
   } else if (msg.includes("rejected") || msg.includes("invalid_api_key")) {
     body = "⚠ **Clé Anthropic rejetée.** Mets-la à jour dans **Settings**.";
   } else if (msg.includes("HTTP 50") || msg.includes("temporarily unavailable")) {
