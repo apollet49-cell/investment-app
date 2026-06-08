@@ -186,7 +186,7 @@ export function escapeHtml(s) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "105";
+const VIEW_VERSION = "106";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },
@@ -452,11 +452,11 @@ export async function bootApp() {
   renderRoute();
   setupSSE();
   prewarmCache();
-  // Mount the floating "ask InvestAI" chat panel into the app shell. The
-  // module sets up a single FAB + panel pair the first time; subsequent
-  // logouts/logins on the same page no-op safely. Loaded lazily so the
-  // landing doesn't carry its weight.
-  import(v("/static/views/chat-panel.js")).then(m => m.mountChatPanel?.()).catch(() => {});
+  // Chat panel mount — disabled in prod until an Anthropic key with
+  // credit is wired up. The router (/chat/ask) still ships; just the FAB
+  // is hidden so a demo viewer doesn't see a broken UI. Re-enable by
+  // uncommenting once the key is funded.
+  // import(v("/static/views/chat-panel.js")).then(m => m.mountChatPanel?.()).catch(() => {});
   // Preload every view module in the background after the first render so
   // subsequent navigations skip the dynamic-import wait.
   const preload = () => {
