@@ -18,6 +18,15 @@ python-dotenv==1.0.1
 # cryptography kept current (OpenSSL 3.x). 44.0.1 covers known issues.
 cryptography==44.0.1
 anthropic==0.39.0
+# Pin httpx below 0.28 — that release removed the `proxies` kwarg from
+# Client.__init__, and anthropic 0.39.0 still passes it. Without this
+# pin, `Anthropic(api_key=...)` raises
+#     TypeError: Client.__init__() got an unexpected keyword argument 'proxies'
+# the first time the /chat/ask endpoint is hit, which surfaces in the
+# UI as a 500 with empty body ("HTTP 500 (HTTP 500)" in the chat panel).
+# Upgrading to anthropic >= 0.42 would also fix it, but is a bigger
+# change to validate before a demo.
+httpx>=0.25,<0.28
 reportlab==4.2.5
 # Pillow replaces matplotlib for the PDF charts — saves ~50MB on disk
 # and ~3s of import time on Render's cold start. Pulled transitively
