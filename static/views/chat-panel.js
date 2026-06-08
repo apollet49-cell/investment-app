@@ -136,13 +136,22 @@ function showErrorBubble(err) {
   let body;
   const msg = err?.message || "";
   if (msg.includes("No Anthropic API key") || msg.includes("anthropic key")) {
-    body = "⚠ Aucune clé Anthropic configurée pour ce compte.\n\n" +
-           "Pour activer le chat sur ce déploiement, l'admin doit poser le secret " +
-           "côté serveur :\n\n" +
+    body = "⚠ **Aucune clé Anthropic configurée pour ce compte.**\n\n" +
+           "Pour activer le chat sur ce déploiement, l'admin pose le secret côté serveur :\n\n" +
            "`fly secrets set ANTHROPIC_API_KEY=sk-ant-...`\n\n" +
-           "Ou bien ajoute ta propre clé dans **Settings → Clé API Anthropic**.";
+           "Ou ajoute ta propre clé dans **Settings → Clé API Anthropic**.";
+  } else if (msg.startsWith("[network]")) {
+    body = "⚠ **Pas de connexion au serveur.** Vérifie ton wifi puis réessaie.\n\n" +
+           "Détail : `" + msg.replace("[network] ", "") + "`";
+  } else if (msg.includes("rate limit")) {
+    body = "⚠ **Quota Anthropic atteint.** Attends quelques secondes et réessaie.";
+  } else if (msg.includes("rejected") || msg.includes("invalid_api_key")) {
+    body = "⚠ **Clé Anthropic rejetée.** Mets-la à jour dans **Settings**.";
+  } else if (msg.includes("HTTP 50") || msg.includes("temporarily unavailable")) {
+    body = "⚠ **Erreur côté serveur.**\n\n`" + msg + "`\n\n" +
+           "Ouvre la console (Cmd+Option+J) si ça persiste, ou check `fly logs`.";
   } else if (!msg) {
-    body = "⚠ Erreur réseau. Vérifie ta connexion et réessaie.";
+    body = "⚠ Erreur inconnue (message vide). Ouvre la console pour le détail.";
   } else {
     body = "⚠ " + msg;
   }

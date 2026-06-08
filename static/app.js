@@ -32,15 +32,36 @@ const API = {
     const body = opts.body && !(opts.body instanceof FormData) && typeof opts.body !== "string"
       ? JSON.stringify(opts.body)
       : opts.body;
-    const res = await fetch(this.base + path, { ...opts, headers, body });
+
+    // Wrap fetch() so a network failure (DNS, offline, CORS preflight
+    // reject) produces a message tagged "[network]" instead of the
+    // browser-engine-specific "Failed to fetch" / "Load failed" / "" that
+    // the chat panel would render as a useless "Erreur réseau" bubble.
+    let res;
+    try {
+      res = await fetch(this.base + path, { ...opts, headers, body });
+    } catch (netErr) {
+      const m = netErr?.message || "connection failed";
+      throw new Error(`[network] ${m}`);
+    }
+
     if (res.status === 401) {
       logout();
       throw new Error("session expired");
     }
     if (!res.ok) {
-      let detail = res.statusText;
-      try { detail = (await res.json()).detail || detail; } catch (_) {}
-      throw new Error(detail);
+      // Try hard to extract a meaningful server-side detail. If everything
+      // fails (empty body, non-JSON, etc.) we still want a message that
+      // includes the HTTP status so a 502 doesn't get rendered as nothing.
+      let detail = "";
+      try {
+        const data = await res.json();
+        detail = data?.detail || JSON.stringify(data).slice(0, 200);
+      } catch (_) {
+        try { detail = (await res.text()).slice(0, 200); } catch (_) {}
+      }
+      if (!detail) detail = res.statusText || `HTTP ${res.status}`;
+      throw new Error(`${detail} (HTTP ${res.status})`);
     }
     if (res.status === 204) return null;
     const ct = res.headers.get("content-type") || "";
@@ -165,7 +186,7 @@ export function escapeHtml(s) {
 // Bump VIEW_VERSION whenever any /static/views/*.js changes so users on a
 // stale tab pick up the new module on next route change. Match the value
 // to ?v=N on app.js / style.css in index.html.
-const VIEW_VERSION = "102";
+const VIEW_VERSION = "103";
 const v = (path) => `${path}?v=${VIEW_VERSION}`;
 const ROUTES = [
   { hash: "#/dashboard", titleKey: "dashboard.title", load: () => import(v("/static/views/dashboard.js")) },

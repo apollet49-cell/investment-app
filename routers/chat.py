@@ -362,6 +362,20 @@ async def ask(
     except APIError as e:
         log.exception("Anthropic API error: %s", e)
         raise HTTPException(status_code=502, detail="AI service is temporarily unavailable.")
+    except HTTPException:
+        # Already-shaped HTTP errors (from _resolve_key etc.) pass through.
+        raise
+    except Exception as e:
+        # Catch-all so an unexpected exception in a tool handler (e.g. a
+        # KeyError on a freshly-seeded demo account, a SQLAlchemy edge case)
+        # surfaces as a clean 500 with an actionable detail instead of a
+        # generic Internal Server Error with empty body that the frontend
+        # then renders as "Network error". Full traceback in the server log.
+        log.exception("Unexpected error in /chat/ask: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Chat failed: {type(e).__name__}: {str(e)[:200] or 'unknown error'}",
+        )
 
 
 def _stringify(value: Any) -> str:
